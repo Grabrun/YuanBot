@@ -1,0 +1,48 @@
+# YuanBot 默认配置
+
+app_name: "YuanBot"
+version: "0.1.0"
+debug: false
+log_level: "INFO"
+
+# AI 提供商配置
+ai_provider:
+  provider_id: "openai"
+  default_model: "gpt-4o"
+  # api_key: 通过环境变量 YUAN_AI_OPENAI_API_KEY 设置
+
+# 消息通道配置
+channels:
+  - platform: "telegram"
+    enabled: true
+    config:
+      bot_token: "YOUR_BOT_TOKEN_HERE"
+  - platform: "web"
+    enabled: true
+    config: {}
+
+# 记忆系统配置
+memory:
+  vector_db: "qdrant"
+  vector_db_url: "http://localhost:6333"
+  db_url: "postgresql://yuanbot:yuanbot@localhost:5432/yuanbot"
+  redis_url: "redis://localhost:6379/0"
+  graph_db: "neo4j"
+  graph_db_url: "bolt://localhost:7687"
+  max_working_memory_turns: 20
+  episodic_memory_max_age_days: 90
+  forget_curve_half_life_days: 14
+  consolidation_threshold: 3
+
+# 主动交互配置
+proactive:
+  enabled: true
+  greeting_enabled: true
+  frequency: "medium"
+  quiet_hours_start: 23
+  quiet_hours_end: 8
+  max_per_day: 5
+  event_triggers_enabled: true
+
+# Agent 人设
+persona_id: "default"
