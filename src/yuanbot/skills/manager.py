@@ -8,11 +8,9 @@
 
 from __future__ import annotations
 
-from typing import Any
-
 import structlog
 
-from yuanbot.core.interfaces import SkillModule, SkillMetadata
+from yuanbot.core.interfaces import SkillMetadata, SkillModule
 
 logger = structlog.get_logger(__name__)
 
@@ -45,7 +43,7 @@ class SkillManager:
         query: str | None = None,
     ) -> list[SkillMetadata]:
         """语义匹配 Skills（阶段二：指令层）
-        
+
         根据能力域和查询语义匹配最相关的 Skills。
         """
         matched = []

@@ -38,7 +38,7 @@ class ToolManager:
         names: list[str] | None = None,
     ) -> list[ToolDefinition]:
         """获取工具定义列表
-        
+
         如果指定 names，只返回指定工具的定义；
         否则返回所有已注册工具的定义。
         """

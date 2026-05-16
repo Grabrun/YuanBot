@@ -9,7 +9,6 @@
 
 from __future__ import annotations
 
-import asyncio
 from datetime import datetime
 from typing import Any
 
@@ -32,9 +31,9 @@ logger = structlog.get_logger(__name__)
 
 class OrchestratorEngine:
     """编排引擎 - YuanBot 的大脑
-    
+
     处理流水线：
-    UserMessage → 意图识别 → 情感分析 → 记忆检索 → 上下文组装 → 
+    UserMessage → 意图识别 → 情感分析 → 记忆检索 → 上下文组装 →
     LLM 推理 → 响应生成 → 记忆更新 → BotResponse
     """
 
@@ -187,10 +186,14 @@ class OrchestratorEngine:
 
         for node in working_memory:
             content = node.content
-            if content.startswith("[用户]"):
-                messages.append(Message(role="user", content=content[4:].strip()))
+            if content.startswith("[用户] "):
+                messages.append(Message(role="user", content=content[5:]))
+            elif content.startswith("[AI] "):
+                messages.append(Message(role="assistant", content=content[5:]))
+            elif content.startswith("[用户]"):
+                messages.append(Message(role="user", content=content[4:].lstrip()))
             elif content.startswith("[AI]"):
-                messages.append(Message(role="assistant", content=content[4:].strip()))
+                messages.append(Message(role="assistant", content=content[4:].lstrip()))
 
         return messages
 
@@ -200,12 +203,11 @@ class OrchestratorEngine:
 
     async def _analyze_emotion(self, text: str) -> str:
         """情感分析（简化版，基于关键词匹配）
-        
+
         后续版本将独立为 EmotionEngine，使用专门的情感分析模型。
         """
         positive_words = ["开心", "高兴", "喜欢", "爱", "棒", "好", "哈哈", "嘿嘿", "太好了"]
         negative_words = ["难过", "伤心", "烦", "讨厌", "累", "压力", "焦虑", "不好", "糟糕"]
-        neutral_words = ["嗯", "哦", "好的", "知道了"]
 
         text_lower = text.lower()
 

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import argparse
-import asyncio
 import sys
 
 import structlog
@@ -76,7 +75,6 @@ def main() -> None:
 def _run_serve(config_path: str | None, port: int) -> None:
     """启动服务"""
     import uvicorn
-    from yuanbot.config import load_config
 
     config = load_config(config_path)
 

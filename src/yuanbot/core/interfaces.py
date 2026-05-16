@@ -7,19 +7,18 @@ from collections.abc import AsyncIterator, Awaitable, Callable
 from typing import Any
 
 from yuanbot.core.types import (
+    BotResponse,
     ChannelConfig,
     ChatChunk,
     ChatResponse,
     ContentType,
     Message,
     MessageContent,
-    BotResponse,
     SendResult,
     ToolDefinition,
     ToolResult,
     UserMessage,
 )
-
 
 # ──────────────────────────────────────────────
 # AI 提供商适配器接口
@@ -27,7 +26,7 @@ from yuanbot.core.types import (
 
 class AIProviderAdapter(ABC):
     """AI 提供商适配器统一接口
-    
+
     所有 LLM 提供商（OpenAI、Claude、DeepSeek、Ollama 等）
     都必须实现此接口，实现零供应商锁定。
     """
@@ -90,7 +89,7 @@ class AIProviderAdapter(ABC):
 
 class ChannelAdapter(ABC):
     """消息通道适配器统一接口
-    
+
     每种消息平台（Telegram/微信/Discord 等）实现此接口，
     将平台差异统一标准化为 UserMessage / BotResponse。
     """
@@ -173,7 +172,7 @@ class SkillMetadata(ABC):
 
 class SkillModule(ABC):
     """Skill 模块接口
-    
+
     Skills 是可复用的工作流程与知识模块（偏向"软能力"），
     封装了特定场景的完整处理逻辑与专业知识。
     """
@@ -204,7 +203,7 @@ class SkillModule(ABC):
 
 class ToolModule(ABC):
     """Tool 模块接口
-    
+
     Tools 是可调用的外部功能接口（偏向"硬能力"），
     是对外部 API、系统功能的标准化封装。
     """
@@ -235,7 +234,7 @@ class ToolModule(ABC):
 
 class PersonaProfile(ABC):
     """Agent 人设配置接口
-    
+
     决定 AI 角色的人格特质、行为模式、语言风格。
     是 Skills/Tools 动态加载决策的主体。
     """

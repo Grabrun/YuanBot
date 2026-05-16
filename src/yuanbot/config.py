@@ -7,8 +7,8 @@ from pathlib import Path
 from typing import Any
 
 import yaml
-from pydantic import BaseModel, Field
 from dotenv import load_dotenv
+from pydantic import BaseModel, Field
 
 
 class AIProviderConfig(BaseModel):
@@ -90,7 +90,7 @@ def load_config(
     env_file: str | Path | None = None,
 ) -> YuanBotConfig:
     """加载配置
-    
+
     优先级：环境变量 > 配置文件 > 默认值
     """
     # 加载 .env 文件
@@ -122,9 +122,22 @@ def _load_env_overrides() -> dict[str, Any]:
     if provider := os.getenv("YUAN_AI_PROVIDER"):
         overrides.setdefault("ai_provider", {})["provider_id"] = provider
 
+    if api_key := os.getenv("YUAN_AI_API_KEY"):
+        overrides.setdefault("ai_provider", {})["api_key"] = api_key
+
+    if base_url := os.getenv("YUAN_AI_BASE_URL"):
+        overrides.setdefault("ai_provider", {})["base_url"] = base_url
+
+    if model := os.getenv("YUAN_AI_MODEL"):
+        overrides.setdefault("ai_provider", {})["default_model"] = model
+
     # 调试模式
     if debug := os.getenv("YUAN_DEBUG"):
         overrides["debug"] = debug.lower() in ("true", "1", "yes")
+
+    # 日志级别
+    if log_level := os.getenv("YUAN_LOG_LEVEL"):
+        overrides["log_level"] = log_level.upper()
 
     return overrides
 

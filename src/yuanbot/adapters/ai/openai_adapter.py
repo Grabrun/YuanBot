@@ -99,6 +99,7 @@ class OpenAIAdapter(BaseAIProvider):
             temperature=temperature,
             max_tokens=max_tokens,
             stream=False,
+            system_prompt=system_prompt,
         )
 
         response = await client.post("/chat/completions", json=payload)
@@ -124,6 +125,7 @@ class OpenAIAdapter(BaseAIProvider):
             temperature=temperature,
             max_tokens=max_tokens,
             stream=True,
+            system_prompt=system_prompt,
         )
 
         async with client.stream("POST", "/chat/completions", json=payload) as response:
@@ -162,6 +164,7 @@ class OpenAIAdapter(BaseAIProvider):
         temperature: float,
         max_tokens: int,
         stream: bool,
+        system_prompt: str | None = None,
     ) -> dict[str, Any]:
         """构建 API 请求体"""
         payload: dict[str, Any] = {
@@ -171,6 +174,10 @@ class OpenAIAdapter(BaseAIProvider):
             "max_tokens": max_tokens,
             "stream": stream,
         }
+
+        # 注入 system_prompt 为首条系统消息
+        if system_prompt:
+            payload["messages"].insert(0, {"role": "system", "content": system_prompt})
 
         if tools:
             payload["tools"] = [

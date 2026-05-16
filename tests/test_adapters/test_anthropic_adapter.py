@@ -3,14 +3,9 @@
 from __future__ import annotations
 
 import json
-from unittest.mock import AsyncMock, MagicMock, patch
 
-import pytest
-
-from yuanbot.adapters.ai.anthropic_adapter import AnthropicAdapter, MODEL_CONTEXT_LENGTHS
+from yuanbot.adapters.ai.anthropic_adapter import AnthropicAdapter
 from yuanbot.core.types import (
-    ChatChunk,
-    ChatResponse,
     FunctionCall,
     Message,
     ToolCall,
@@ -284,3 +279,58 @@ class TestPayloadBuilding:
             stream=False,
         )
         assert "system" not in payload
+
+
+class TestMessageMerging:
+    """消息合并测试（修复连续同角色消息问题）"""
+
+    def test_consecutive_tool_results_merged(self):
+        """多个工具结果应合并到同一条 user 消息中"""
+        messages = [
+            Message(role="tool", content="result1", tool_call_id="tc_1"),
+            Message(role="tool", content="result2", tool_call_id="tc_2"),
+        ]
+        result = AnthropicAdapter._convert_messages(messages)
+        assert len(result) == 1
+        assert result[0]["role"] == "user"
+        assert len(result[0]["content"]) == 2
+        assert result[0]["content"][0]["tool_use_id"] == "tc_1"
+        assert result[0]["content"][1]["tool_use_id"] == "tc_2"
+
+    def test_consecutive_user_messages_merged(self):
+        """连续 user 消息应合并"""
+        messages = [
+            Message(role="user", content="Hello"),
+            Message(role="user", content="World"),
+        ]
+        result = AnthropicAdapter._convert_messages(messages)
+        assert len(result) == 1
+        assert result[0]["role"] == "user"
+        assert "Hello" in result[0]["content"]
+        assert "World" in result[0]["content"]
+
+    def test_user_then_tool_result_merged(self):
+        """user 消息后跟 tool_result 应合并"""
+        messages = [
+            Message(role="user", content="请帮我查询"),
+            Message(role="tool", content="查询结果", tool_call_id="tc_1"),
+        ]
+        result = AnthropicAdapter._convert_messages(messages)
+        assert len(result) == 1
+        assert result[0]["role"] == "user"
+        assert isinstance(result[0]["content"], list)
+        assert result[0]["content"][0]["type"] == "text"
+        assert result[0]["content"][1]["type"] == "tool_result"
+
+    def test_alternating_roles_preserved(self):
+        """正常交替的角色不应被合并"""
+        messages = [
+            Message(role="user", content="Hello"),
+            Message(role="assistant", content="Hi"),
+            Message(role="user", content="How are you?"),
+        ]
+        result = AnthropicAdapter._convert_messages(messages)
+        assert len(result) == 3
+        assert result[0]["role"] == "user"
+        assert result[1]["role"] == "assistant"
+        assert result[2]["role"] == "user"

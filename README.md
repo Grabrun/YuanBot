@@ -74,7 +74,7 @@ yuanbot/
 │   └── config.py       # 配置管理
 ├── configs/            # 配置文件示例
 ├── tests/              # 测试
-├── docx/               # 设计文档与规范
+├── docs/               # 设计文档与规范
 └── examples/           # 示例
 ```
 

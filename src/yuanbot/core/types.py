@@ -4,17 +4,16 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 from pydantic import BaseModel, Field
-
 
 # ──────────────────────────────────────────────
 # 消息相关类型
 # ──────────────────────────────────────────────
 
-class ContentType(str, Enum):
+class ContentType(StrEnum):
     """消息内容类型"""
     TEXT = "text"
     IMAGE = "image"
@@ -148,7 +147,7 @@ class ChannelConfig(BaseModel):
 # 记忆系统类型
 # ──────────────────────────────────────────────
 
-class MemoryType(str, Enum):
+class MemoryType(StrEnum):
     """记忆类型"""
     WORKING = "working"      # 工作记忆：当前会话上下文
     FACT = "fact"            # 事实记忆：用户偏好、习惯、重要事实

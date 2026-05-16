@@ -15,7 +15,7 @@ logger = structlog.get_logger(__name__)
 
 class BaseAIProvider(AIProviderAdapter, ABC):
     """AI 提供商适配器基类
-    
+
     提供通用的配置加载和环境变量隔离机制。
     命名规范：YUAN_AI_{PROVIDER_ID}_{PARAM}
     """

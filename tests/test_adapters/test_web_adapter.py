@@ -2,20 +2,17 @@
 
 from __future__ import annotations
 
-import json
 import asyncio
-from unittest.mock import AsyncMock, MagicMock, patch
+import json
 
 import pytest
 from starlette.websockets import WebSocketState
 
-from yuanbot.adapters.channel.web_adapter import WebAdapter, WebSession, SESSION_TIMEOUT
+from yuanbot.adapters.channel.web_adapter import WebAdapter, WebSession
 from yuanbot.core.types import (
     BotResponse,
-    ChannelConfig,
     ContentType,
     MessageContent,
-    UserMessage,
 )
 
 

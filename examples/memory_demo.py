@@ -4,12 +4,7 @@
 """
 
 import asyncio
-from yuanbot.core.types import (
-    ContentType,
-    UserMessage,
-    MemoryNode,
-    MemoryType,
-)
+
 from yuanbot.memory.manager import MemoryManager
 
 

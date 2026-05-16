@@ -225,6 +225,7 @@ class AnthropicAdapter(BaseAIProvider):
         - 不能有 system 角色消息（已通过顶层参数处理）
         - user/assistant 交替出现
         - 工具调用使用 tool_use / tool_result 内容块
+        - 连续同角色消息需要合并
         """
         converted: list[dict[str, Any]] = []
 
@@ -235,16 +236,26 @@ class AnthropicAdapter(BaseAIProvider):
 
             if msg.role == "tool":
                 # 工具结果消息 → 转为 user 消息中的 tool_result 内容块
-                converted.append({
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "tool_result",
-                            "tool_use_id": msg.tool_call_id or "",
-                            "content": msg.content or "",
-                        }
-                    ],
-                })
+                tool_result_block = {
+                    "type": "tool_result",
+                    "tool_use_id": msg.tool_call_id or "",
+                    "content": msg.content or "",
+                }
+                # 如果前一条也是 user 消息，合并到其 content 数组中
+                if converted and converted[-1]["role"] == "user":
+                    prev_content = converted[-1]["content"]
+                    if isinstance(prev_content, list):
+                        prev_content.append(tool_result_block)
+                    else:
+                        converted[-1]["content"] = [
+                            {"type": "text", "text": prev_content},
+                            tool_result_block,
+                        ]
+                else:
+                    converted.append({
+                        "role": "user",
+                        "content": [tool_result_block],
+                    })
                 continue
 
             if msg.role == "assistant" and msg.tool_calls:
@@ -267,10 +278,20 @@ class AnthropicAdapter(BaseAIProvider):
                 continue
 
             # 普通 user/assistant 消息
-            converted.append({
-                "role": msg.role,
-                "content": msg.content or "",
-            })
+            # 如果与前一条同角色，合并内容
+            content = msg.content or ""
+            if converted and converted[-1]["role"] == msg.role:
+                prev = converted[-1]
+                if isinstance(prev["content"], str):
+                    prev["content"] += "\n" + content
+                else:
+                    # 前一条是 content blocks，追加 text block
+                    prev["content"].append({"type": "text", "text": content})
+            else:
+                converted.append({
+                    "role": msg.role,
+                    "content": content,
+                })
 
         return converted
 

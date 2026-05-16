@@ -6,8 +6,11 @@ from contextlib import asynccontextmanager
 from typing import Any
 
 from fastapi import FastAPI
+from starlette.websockets import WebSocket
 
+from yuanbot.adapters.channel.web_adapter import WebAdapter
 from yuanbot.config import YuanBotConfig
+from yuanbot.core.types import BotResponse
 from yuanbot.memory.manager import MemoryManager
 from yuanbot.orchestrator.engine import OrchestratorEngine
 from yuanbot.skills.manager import SkillManager
@@ -35,12 +38,21 @@ def create_app(config: YuanBotConfig) -> FastAPI:
         memory_manager=memory_manager,
     )
 
+    # Web 通道适配器
+    web_adapter = WebAdapter()
+
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         """应用生命周期管理"""
+        # 启动 Web 适配器
+        async def on_message(msg: Any) -> BotResponse:
+            return await orchestrator.process_message(msg)
+
+        await web_adapter.listen(on_message)
         print("🌸 YuanBot 启动完成")
         yield
         # 清理资源
+        await web_adapter.close()
         if hasattr(ai_provider, "close"):
             await ai_provider.close()
         print("🌸 YuanBot 已停止")
@@ -52,11 +64,30 @@ def create_app(config: YuanBotConfig) -> FastAPI:
         lifespan=lifespan,
     )
 
+    # 将组件存储到 app.state 供外部访问
+    app.state.memory_manager = memory_manager
+    app.state.skill_manager = skill_manager
+    app.state.tool_manager = tool_manager
+    app.state.orchestrator = orchestrator
+    app.state.web_adapter = web_adapter
+
     # 注册路由
     _register_routes(app, orchestrator, memory_manager, config)
 
-    # 注册 WebSocket 路由（Web 通道）
-    _register_websocket(app, config, orchestrator)
+    # 注册 WebSocket 路由
+    @app.websocket("/ws")
+    async def websocket_endpoint(ws: WebSocket):
+        """WebSocket 聊天端点
+
+        连接后即可通过 JSON 消息进行实时对话：
+
+            ws://host:port/ws
+
+        消息格式：
+            {"type": "message", "text": "你好"}
+            {"type": "ping"}
+        """
+        await web_adapter.handle_websocket(ws)
 
     return app
 
@@ -97,7 +128,7 @@ def _register_routes(
     @app.post("/api/chat")
     async def chat(request: dict[str, Any]):
         """对话接口（用于 Web Chat 通道）"""
-        from yuanbot.core.types import UserMessage, ContentType
+        from yuanbot.core.types import ContentType, UserMessage
 
         message = UserMessage(
             platform="web",
@@ -128,45 +159,3 @@ def _register_routes(
                 for m in fact_memories
             ],
         }
-
-
-def _register_websocket(
-    app: FastAPI,
-    config: YuanBotConfig,
-    orchestrator: OrchestratorEngine,
-) -> None:
-    """注册 WebSocket 路由（Web 通道适配器）"""
-    from starlette.websockets import WebSocket
-
-    from yuanbot.adapters.channel.web_adapter import WebAdapter
-    from yuanbot.core.types import BotResponse, MessageContent, ContentType
-
-    web_adapter = WebAdapter()
-
-    # 构建回调：编排层 → Web 响应
-    async def on_message(msg) -> BotResponse:
-        response = await orchestrator.process_message(msg)
-        return response
-
-    # 启动适配器
-    @app.on_event("startup")
-    async def start_web_adapter():
-        await web_adapter.listen(on_message)
-
-    @app.on_event("shutdown")
-    async def stop_web_adapter():
-        await web_adapter.close()
-
-    @app.websocket("/ws")
-    async def websocket_endpoint(ws: WebSocket):
-        """WebSocket 聊天端点
-
-        连接后即可通过 JSON 消息进行实时对话：
-
-            ws://host:port/ws
-
-        消息格式：
-            {"type": "message", "text": "你好"}
-            {"type": "ping"}
-        """
-        await web_adapter.handle_websocket(ws)

@@ -4,7 +4,7 @@
 参考 Mem0 的混合存储架构，针对伴侣场景深度适配。
 """
 
-from yuanbot.core.types import MemoryType, MemoryNode, MemorySearchResult, UserProfile
+from yuanbot.core.types import MemoryNode, MemorySearchResult, MemoryType, UserProfile
 from yuanbot.memory.manager import MemoryManager
 
 __all__ = [

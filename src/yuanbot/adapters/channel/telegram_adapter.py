@@ -126,9 +126,16 @@ class TelegramAdapter(BaseChannelAdapter):
 
     def get_platform_user_id(self, raw_event: Any) -> str:
         """从 Telegram update 中提取用户 ID"""
-        message = raw_event.get("message", {})
-        user = message.get("from", {})
-        return str(user.get("id", ""))
+        if not isinstance(raw_event, dict):
+            return ""
+        message = raw_event.get("message")
+        if not isinstance(message, dict):
+            return ""
+        user = message.get("from")
+        if not isinstance(user, dict):
+            return ""
+        user_id = user.get("id")
+        return str(user_id) if user_id is not None else ""
 
     # ──────────────────────────────────────────
     # 内部方法

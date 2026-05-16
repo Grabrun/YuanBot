@@ -1,10 +1,11 @@
 """YuanBot 记忆管理器测试"""
 
-import pytest
 from datetime import datetime
 
-from yuanbot.memory.manager import MemoryManager
+import pytest
+
 from yuanbot.core.types import MemoryType
+from yuanbot.memory.manager import MemoryManager
 
 
 @pytest.fixture

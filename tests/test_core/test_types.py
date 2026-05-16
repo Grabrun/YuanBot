@@ -1,16 +1,14 @@
 """YuanBot 核心类型测试"""
 
-import pytest
-from datetime import datetime
 
 from yuanbot.core.types import (
     ContentType,
     MemoryNode,
     MemoryType,
     Message,
+    SendResult,
     UserMessage,
     UserProfile,
-    SendResult,
 )
 
 

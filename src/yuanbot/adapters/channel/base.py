@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from abc import ABC
 from collections.abc import Awaitable, Callable
-from typing import Any
 
 import structlog
 
@@ -16,7 +15,7 @@ logger = structlog.get_logger(__name__)
 
 class BaseChannelAdapter(ChannelAdapter, ABC):
     """消息通道适配器基类
-    
+
     提供通用的用户 ID 映射和会话管理。
     """
 
@@ -27,7 +26,7 @@ class BaseChannelAdapter(ChannelAdapter, ABC):
 
     def _resolve_yuanbot_user_id(self, platform_user_id: str) -> str:
         """将平台用户 ID 映射为 YuanBot 统一用户 ID
-        
+
         简单实现：直接使用平台用户 ID 作为 YuanBot 用户 ID。
         后续可通过数据库实现跨平台身份关联。
         """

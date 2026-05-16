@@ -9,10 +9,8 @@
 
 from __future__ import annotations
 
-import asyncio
 import math
-import uuid
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Any
 
 import structlog
@@ -29,7 +27,7 @@ logger = structlog.get_logger(__name__)
 
 class MemoryManager:
     """记忆系统管理器
-    
+
     实现四层记忆模型的统一管理：
     - 工作记忆：会话级 Redis 缓存
     - 事实记忆：PostgreSQL + 知识图谱
@@ -181,7 +179,7 @@ class MemoryManager:
         max_results: int = 5,
     ) -> list[MemorySearchResult]:
         """情景触发式检索
-        
+
         三步流程：
         1. 语义相似度检索（向量匹配）
         2. 关键词/实体匹配
@@ -244,7 +242,7 @@ class MemoryManager:
 
     async def apply_forget_curve(self, user_id: str) -> int:
         """应用遗忘曲线，降权或淘汰低价值记忆
-        
+
         返回被淘汰的记忆数量
         """
         removed = 0
@@ -280,7 +278,7 @@ class MemoryManager:
 
     async def consolidate_memories(self, user_id: str) -> dict[str, int]:
         """记忆固化：将频繁出现的情景记忆升级为事实记忆
-        
+
         由定时任务（深夜低负载时段）触发。
         返回升级统计。
         """
@@ -297,6 +295,7 @@ class MemoryManager:
                 topic_counts[tag].append(node)
 
         # 高频话题（出现 >= 3 次）的情景记忆升级为事实记忆
+        removed_ids: set[str] = set()
         for topic, nodes in topic_counts.items():
             if len(nodes) >= 3:
                 # 合并为一条事实记忆
@@ -309,6 +308,18 @@ class MemoryManager:
                     metadata={"source": "consolidation", "source_count": len(nodes)},
                 )
                 stats["upgraded"] += 1
+                # 标记已合并的情景记忆
+                for node in nodes:
+                    removed_ids.add(node.id)
+
+        # 移除已合并的情景记忆
+        if removed_ids:
+            original_count = len(self._episodic_memories.get(user_id, []))
+            self._episodic_memories[user_id] = [
+                n for n in self._episodic_memories.get(user_id, [])
+                if n.id not in removed_ids
+            ]
+            stats["removed"] = original_count - len(self._episodic_memories[user_id])
 
         logger.info("memory_consolidation", user_id=user_id, **stats)
         return stats
