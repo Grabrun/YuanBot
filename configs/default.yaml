@@ -6,10 +6,16 @@ debug: false
 log_level: "INFO"
 
 # AI 提供商配置
+# 支持: openai, anthropic
 ai_provider:
   provider_id: "openai"
   default_model: "gpt-4o"
-  # api_key: 通过环境变量 YUAN_AI_OPENAI_API_KEY 设置
+  # api_key: 通过环境变量设置
+  #
+  # 使用 Claude:
+  #   provider_id: "anthropic"
+  #   default_model: "claude-sonnet-4-20250514"
+  #   环境变量: YUAN_AI_ANTHROPIC_API_KEY=sk-ant-xxx
 
 # 消息通道配置
 channels:

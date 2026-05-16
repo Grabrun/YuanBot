@@ -64,8 +64,8 @@ yuanbot/
 │   ├── memory/         # 四层记忆系统
 │   ├── orchestrator/   # 编排引擎
 │   ├── adapters/
-│   │   ├── ai/         # AI 提供商适配器
-│   │   └── channel/    # 消息通道适配器
+│   │   ├── ai/         # AI 提供商适配器 (OpenAI, Claude)
+│   │   └── channel/    # 消息通道适配器 (Telegram, Web)
 │   ├── skills/         # Skills 管理
 │   ├── tools/          # Tools 管理
 │   ├── persona/        # Agent 人设
@@ -74,7 +74,7 @@ yuanbot/
 │   └── config.py       # 配置管理
 ├── configs/            # 配置文件示例
 ├── tests/              # 测试
-├── docs/               # 文档
+├── docx/               # 设计文档与规范
 └── examples/           # 示例
 ```
 
@@ -85,7 +85,7 @@ yuanbot/
 ## 开发路线
 
 - [x] M1: 核心框架 — 编排层、记忆系统、统一接口
-- [ ] M2: 基础适配器 — OpenAI/Claude + Telegram/Web
+- [x] M2: 基础适配器 — OpenAI/Claude + Telegram/Web
 - [ ] M3: 记忆系统完善 — 情景触发检索、记忆图谱
 - [ ] M4: 主动陪伴 — 定时交互、事件驱动
 - [ ] M5: 社区生态 — 扩展市场、CLI 工具

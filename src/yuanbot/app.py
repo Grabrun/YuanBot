@@ -55,6 +55,9 @@ def create_app(config: YuanBotConfig) -> FastAPI:
     # 注册路由
     _register_routes(app, orchestrator, memory_manager, config)
 
+    # 注册 WebSocket 路由（Web 通道）
+    _register_websocket(app, config, orchestrator)
+
     return app
 
 
@@ -65,6 +68,9 @@ def _create_ai_provider(config: YuanBotConfig) -> Any:
     if provider_id == "openai":
         from yuanbot.adapters.ai.openai_adapter import OpenAIAdapter
         return OpenAIAdapter(config.ai_provider.model_dump())
+    elif provider_id == "anthropic":
+        from yuanbot.adapters.ai.anthropic_adapter import AnthropicAdapter
+        return AnthropicAdapter(config.ai_provider.model_dump())
     else:
         raise ValueError(f"Unsupported AI provider: {provider_id}")
 
@@ -122,3 +128,45 @@ def _register_routes(
                 for m in fact_memories
             ],
         }
+
+
+def _register_websocket(
+    app: FastAPI,
+    config: YuanBotConfig,
+    orchestrator: OrchestratorEngine,
+) -> None:
+    """注册 WebSocket 路由（Web 通道适配器）"""
+    from starlette.websockets import WebSocket
+
+    from yuanbot.adapters.channel.web_adapter import WebAdapter
+    from yuanbot.core.types import BotResponse, MessageContent, ContentType
+
+    web_adapter = WebAdapter()
+
+    # 构建回调：编排层 → Web 响应
+    async def on_message(msg) -> BotResponse:
+        response = await orchestrator.process_message(msg)
+        return response
+
+    # 启动适配器
+    @app.on_event("startup")
+    async def start_web_adapter():
+        await web_adapter.listen(on_message)
+
+    @app.on_event("shutdown")
+    async def stop_web_adapter():
+        await web_adapter.close()
+
+    @app.websocket("/ws")
+    async def websocket_endpoint(ws: WebSocket):
+        """WebSocket 聊天端点
+
+        连接后即可通过 JSON 消息进行实时对话：
+
+            ws://host:port/ws
+
+        消息格式：
+            {"type": "message", "text": "你好"}
+            {"type": "ping"}
+        """
+        await web_adapter.handle_websocket(ws)
