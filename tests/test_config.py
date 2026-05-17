@@ -19,7 +19,7 @@ class TestYuanBotConfig:
     def test_default_config(self):
         config = YuanBotConfig()
         assert config.app_name == "YuanBot"
-        assert config.version == "0.1.0"
+        assert config.version == "1.0.0"
         assert config.debug is False
         assert config.log_level == "INFO"
         assert config.persona_id == "default"

@@ -69,7 +69,7 @@ class YuanBotConfig(BaseModel):
 
     # 基础配置
     app_name: str = "YuanBot"
-    version: str = "0.1.0"
+    version: str = "1.0.0"
     debug: bool = False
     log_level: str = "INFO"
 
