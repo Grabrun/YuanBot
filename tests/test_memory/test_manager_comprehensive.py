@@ -134,7 +134,7 @@ class TestRetrieveRelevantMemories:
 
     @pytest.mark.asyncio
     async def test_no_memories(self, mm: MemoryManager):
-        results = await mm.retrieve_relevant_memories("u1", "test input")
+        results, emotion = await mm.retrieve_relevant_memories("u1", "test input")
         assert results == []
 
     @pytest.mark.asyncio
@@ -146,7 +146,7 @@ class TestRetrieveRelevantMemories:
             key_entities=["咖啡"],
         )
 
-        results = await mm.retrieve_relevant_memories("u1", "今天想喝咖啡")
+        results, emotion = await mm.retrieve_relevant_memories("u1", "今天想喝咖啡")
         assert len(results) > 0
         assert results[0].match_type == "entity"
 
@@ -159,7 +159,7 @@ class TestRetrieveRelevantMemories:
             topic_tags=["工作"],
         )
 
-        results = await mm.retrieve_relevant_memories("u1", "工作好累")
+        results, emotion = await mm.retrieve_relevant_memories("u1", "工作好累")
         assert len(results) > 0
         assert results[0].match_type == "keyword"
 
@@ -172,7 +172,7 @@ class TestRetrieveRelevantMemories:
             embedding=[1.0, 0.0, 0.0],
         )
 
-        results = await mm.retrieve_relevant_memories(
+        results, emotion = await mm.retrieve_relevant_memories(
             "u1", "蓝色的天空", current_embedding=[0.9, 0.1, 0.0]
         )
         assert len(results) > 0
@@ -188,7 +188,7 @@ class TestRetrieveRelevantMemories:
                 key_entities=[f"实体{i}"],
             )
 
-        results = await mm.retrieve_relevant_memories(
+        results, emotion = await mm.retrieve_relevant_memories(
             "u1", "实体0 实体1 实体2", max_results=3
         )
         assert len(results) <= 3
@@ -202,7 +202,7 @@ class TestRetrieveRelevantMemories:
             key_entities=["xyz"],
         )
 
-        results = await mm.retrieve_relevant_memories("u1", "今天天气不错")
+        results, emotion = await mm.retrieve_relevant_memories("u1", "今天天气不错")
         assert len(results) == 0
 
     @pytest.mark.asyncio
@@ -227,7 +227,7 @@ class TestRetrieveRelevantMemories:
         await mm.add_fact_memory("u1", "事实", key_entities=["搜索词"])
         await mm.add_semantic_memory("u1", "语义", relation_type="test")
 
-        results = await mm.retrieve_relevant_memories("u1", "搜索词")
+        results, emotion = await mm.retrieve_relevant_memories("u1", "搜索词")
         assert len(results) >= 2  # 至少匹配情景和事实
 
 
@@ -420,6 +420,7 @@ class TestUserProfileManagement:
         old_time = profile1.last_interaction
 
         import time
+
         time.sleep(0.01)
         profile2 = await mm.get_or_create_user_profile("u1")
         assert profile2.last_interaction >= old_time

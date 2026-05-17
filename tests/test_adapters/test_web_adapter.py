@@ -78,6 +78,7 @@ class TestWebSession:
         session = WebSession("sid_1", "uid_1", ws)
         old_time = session.last_active
         import time
+
         time.sleep(0.01)
         session.touch()
         assert session.last_active > old_time
@@ -243,6 +244,7 @@ class TestChatMessageHandling:
             return BotResponse(
                 content=MessageContent(content_type=ContentType.TEXT, text="ok"),
             )
+
         adapter._callback = mock_callback
 
         await adapter._process_message(

@@ -1,6 +1,5 @@
 """YuanBot 核心类型测试"""
 
-
 from yuanbot.core.types import (
     ContentType,
     MemoryNode,

@@ -29,7 +29,7 @@ class BaseAIProvider(AIProviderAdapter, ABC):
         prefix = f"YUAN_AI_{self.provider_id.upper()}_"
         for key, value in os.environ.items():
             if key.startswith(prefix):
-                param = key[len(prefix):].lower()
+                param = key[len(prefix) :].lower()
                 self._config[param] = value
                 logger.debug("config_loaded", provider=self.provider_id, param=param)
 

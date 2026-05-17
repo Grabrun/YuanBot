@@ -252,10 +252,12 @@ class AnthropicAdapter(BaseAIProvider):
                             tool_result_block,
                         ]
                 else:
-                    converted.append({
-                        "role": "user",
-                        "content": [tool_result_block],
-                    })
+                    converted.append(
+                        {
+                            "role": "user",
+                            "content": [tool_result_block],
+                        }
+                    )
                 continue
 
             if msg.role == "assistant" and msg.tool_calls:
@@ -268,12 +270,14 @@ class AnthropicAdapter(BaseAIProvider):
                         args = json.loads(tc.function.arguments)
                     except (json.JSONDecodeError, TypeError):
                         args = {}
-                    content_blocks.append({
-                        "type": "tool_use",
-                        "id": tc.id,
-                        "name": tc.function.name,
-                        "input": args,
-                    })
+                    content_blocks.append(
+                        {
+                            "type": "tool_use",
+                            "id": tc.id,
+                            "name": tc.function.name,
+                            "input": args,
+                        }
+                    )
                 converted.append({"role": "assistant", "content": content_blocks})
                 continue
 
@@ -288,10 +292,12 @@ class AnthropicAdapter(BaseAIProvider):
                     # 前一条是 content blocks，追加 text block
                     prev["content"].append({"type": "text", "text": content})
             else:
-                converted.append({
-                    "role": msg.role,
-                    "content": content,
-                })
+                converted.append(
+                    {
+                        "role": msg.role,
+                        "content": content,
+                    }
+                )
 
         return converted
 
@@ -326,13 +332,15 @@ class AnthropicAdapter(BaseAIProvider):
             elif block_type == "tool_use":
                 if tool_calls is None:
                     tool_calls = []
-                tool_calls.append(ToolCall(
-                    id=block["id"],
-                    function=FunctionCall(
-                        name=block["name"],
-                        arguments=json.dumps(block["input"], ensure_ascii=False),
-                    ),
-                ))
+                tool_calls.append(
+                    ToolCall(
+                        id=block["id"],
+                        function=FunctionCall(
+                            name=block["name"],
+                            arguments=json.dumps(block["input"], ensure_ascii=False),
+                        ),
+                    )
+                )
 
         # stop_reason → finish_reason 映射
         stop_reason = data.get("stop_reason")
@@ -346,8 +354,7 @@ class AnthropicAdapter(BaseAIProvider):
                 prompt_tokens=usage_data.get("input_tokens", 0),
                 completion_tokens=usage_data.get("output_tokens", 0),
                 total_tokens=(
-                    usage_data.get("input_tokens", 0)
-                    + usage_data.get("output_tokens", 0)
+                    usage_data.get("input_tokens", 0) + usage_data.get("output_tokens", 0)
                 ),
             )
 
@@ -385,9 +392,7 @@ class AnthropicAdapter(BaseAIProvider):
             delta = event_data.get("delta", {})
             stop_reason = delta.get("stop_reason")
             if stop_reason:
-                return ChatChunk(
-                    finish_reason=_STOP_REASON_MAP.get(stop_reason, stop_reason)
-                )
+                return ChatChunk(finish_reason=_STOP_REASON_MAP.get(stop_reason, stop_reason))
 
         return None
 

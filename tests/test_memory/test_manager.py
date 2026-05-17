@@ -83,7 +83,7 @@ class TestMemoryRetrieval:
         )
 
         # 检索
-        results = await memory_manager.retrieve_relevant_memories(
+        results, emotion = await memory_manager.retrieve_relevant_memories(
             user_id="user1",
             current_input="我的项目快到截止日了",
         )
@@ -103,6 +103,7 @@ class TestForgetCurve:
         )
         # 模拟很久没访问
         from datetime import timedelta
+
         node.last_accessed = datetime.now() - timedelta(days=60)
 
         removed = await memory_manager.apply_forget_curve("user1")
@@ -134,8 +135,8 @@ class TestConsolidation:
         for i in range(4):
             await memory_manager.add_episodic_memory(
                 user_id="user1",
-                content=f"用户第{i+1}次提到想学吉他",
-                summary=f"学吉他讨论 {i+1}",
+                content=f"用户第{i + 1}次提到想学吉他",
+                summary=f"学吉他讨论 {i + 1}",
                 topic_tags=["吉他"],
             )
 

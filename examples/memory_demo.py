@@ -62,8 +62,10 @@ async def memory_demo():
         print(f"\n  查询: '{query}'")
         if results:
             for r in results[:2]:
-                print(f"    → [{r.match_type}] {r.node.summary or r.node.content[:50]} "
-                      f"(评分: {r.score:.2f})")
+                print(
+                    f"    → [{r.match_type}] {r.node.summary or r.node.content[:50]} "
+                    f"(评分: {r.score:.2f})"
+                )
         else:
             print("    → 无匹配记忆")
 
@@ -81,8 +83,8 @@ async def memory_demo():
     for i in range(3):
         await memory.add_episodic_memory(
             user_id="demo_user",
-            content=f"用户第{i+1}次提到想学吉他",
-            summary=f"学吉他讨论 {i+1}",
+            content=f"用户第{i + 1}次提到想学吉他",
+            summary=f"学吉他讨论 {i + 1}",
             topic_tags=["吉他"],
         )
     stats = await memory.consolidate_memories("demo_user")

@@ -62,9 +62,7 @@ class OrchestratorEngine:
         )
 
         # 1. 获取或创建用户画像
-        user_profile = await self._memory.get_or_create_user_profile(
-            message.yuanbot_user_id
-        )
+        user_profile = await self._memory.get_or_create_user_profile(message.yuanbot_user_id)
 
         # 2. 添加到工作记忆
         await self._memory.add_working_memory(
@@ -76,7 +74,7 @@ class OrchestratorEngine:
         emotion = await self._analyze_emotion(message.text or "")
 
         # 4. 情景触发式检索相关记忆
-        relevant_memories = await self._memory.retrieve_relevant_memories(
+        relevant_memories, current_emotion = await self._memory.retrieve_relevant_memories(
             user_id=message.yuanbot_user_id,
             current_input=message.text or "",
         )
@@ -235,12 +233,14 @@ class OrchestratorEngine:
 
         # 如果用户情绪低落，生成后续关心任务
         if emotion == "negative":
-            tasks.append(ProactiveTask(
-                task_type="care",
-                scheduled_at=datetime.now(),  # 立即或短时间后
-                content_hint="用户情绪低落，需要后续关心",
-                priority=2,
-            ))
+            tasks.append(
+                ProactiveTask(
+                    task_type="care",
+                    scheduled_at=datetime.now(),  # 立即或短时间后
+                    content_hint="用户情绪低落，需要后续关心",
+                    priority=2,
+                )
+            )
 
         return tasks
 

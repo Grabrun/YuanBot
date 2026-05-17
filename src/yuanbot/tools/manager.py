@@ -43,11 +43,7 @@ class ToolManager:
         否则返回所有已注册工具的定义。
         """
         if names:
-            return [
-                self._definitions_cache[n]
-                for n in names
-                if n in self._definitions_cache
-            ]
+            return [self._definitions_cache[n] for n in names if n in self._definitions_cache]
         return list(self._definitions_cache.values())
 
     async def invoke_tool(

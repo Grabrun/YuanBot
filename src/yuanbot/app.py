@@ -44,6 +44,7 @@ def create_app(config: YuanBotConfig) -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         """应用生命周期管理"""
+
         # 启动 Web 适配器
         async def on_message(msg: Any) -> BotResponse:
             return await orchestrator.process_message(msg)
@@ -98,9 +99,11 @@ def _create_ai_provider(config: YuanBotConfig) -> Any:
 
     if provider_id == "openai":
         from yuanbot.adapters.ai.openai_adapter import OpenAIAdapter
+
         return OpenAIAdapter(config.ai_provider.model_dump())
     elif provider_id == "anthropic":
         from yuanbot.adapters.ai.anthropic_adapter import AnthropicAdapter
+
         return AnthropicAdapter(config.ai_provider.model_dump())
     else:
         raise ValueError(f"Unsupported AI provider: {provider_id}")
@@ -109,6 +112,7 @@ def _create_ai_provider(config: YuanBotConfig) -> Any:
 def _load_persona(config: YuanBotConfig) -> Any:
     """加载 Agent 人设"""
     from yuanbot.persona.default import DefaultPersona
+
     return DefaultPersona()
 
 
@@ -142,9 +146,7 @@ def _register_routes(
         response = await orchestrator.process_message(message)
         return {
             "content": response.content.text,
-            "proactive_followups": [
-                t.model_dump() for t in (response.proactive_followups or [])
-            ],
+            "proactive_followups": [t.model_dump() for t in (response.proactive_followups or [])],
         }
 
     @app.get("/api/memory/{user_id}")

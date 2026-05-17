@@ -13,6 +13,7 @@ from pydantic import BaseModel, Field
 
 class AIProviderConfig(BaseModel):
     """AI 提供商配置"""
+
     provider_id: str = "openai"
     api_key: str | None = None
     base_url: str | None = None
@@ -21,6 +22,7 @@ class AIProviderConfig(BaseModel):
 
 class ChannelProviderConfig(BaseModel):
     """消息通道配置"""
+
     platform: str
     enabled: bool = True
     config: dict[str, Any] = Field(default_factory=dict)
@@ -28,6 +30,7 @@ class ChannelProviderConfig(BaseModel):
 
 class MemoryConfig(BaseModel):
     """记忆系统配置"""
+
     # 向量数据库
     vector_db: str = "qdrant"
     vector_db_url: str = "http://localhost:6333"
@@ -51,6 +54,7 @@ class MemoryConfig(BaseModel):
 
 class ProactiveConfig(BaseModel):
     """主动交互配置"""
+
     enabled: bool = True
     greeting_enabled: bool = True
     frequency: str = "medium"  # "high" | "medium" | "low" | "event_only"
@@ -62,6 +66,7 @@ class ProactiveConfig(BaseModel):
 
 class YuanBotConfig(BaseModel):
     """YuanBot 主配置"""
+
     # 基础配置
     app_name: str = "YuanBot"
     version: str = "0.1.0"

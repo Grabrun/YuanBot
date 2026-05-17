@@ -81,7 +81,7 @@ class WebAdapter(BaseChannelAdapter):
     def __init__(self, config: ChannelConfig | None = None):
         super().__init__(config)
         self._sessions: dict[str, WebSession] = {}  # session_id -> WebSession
-        self._user_sessions: dict[str, str] = {}    # user_id -> session_id
+        self._user_sessions: dict[str, str] = {}  # user_id -> session_id
         self._ping_task: asyncio.Task | None = None
 
     @property
@@ -273,9 +273,7 @@ class WebAdapter(BaseChannelAdapter):
     async def _send_error(self, session: WebSession, message: str) -> None:
         """发送错误消息"""
         try:
-            await session.ws.send_text(
-                json.dumps({"type": "error", "message": message})
-            )
+            await session.ws.send_text(json.dumps({"type": "error", "message": message}))
         except Exception:
             pass
 
@@ -297,7 +295,8 @@ class WebAdapter(BaseChannelAdapter):
         while True:
             await asyncio.sleep(60)
             expired = [
-                sid for sid, session in self._sessions.items()
+                sid
+                for sid, session in self._sessions.items()
                 if session.is_expired or not session.is_connected
             ]
             for sid in expired:

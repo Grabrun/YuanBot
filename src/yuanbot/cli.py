@@ -21,13 +21,15 @@ def main() -> None:
     # serve 命令
     serve_parser = subparsers.add_parser("serve", help="启动 YuanBot 服务")
     serve_parser.add_argument(
-        "-c", "--config",
+        "-c",
+        "--config",
         type=str,
         default=None,
         help="配置文件路径 (YAML)",
     )
     serve_parser.add_argument(
-        "-p", "--port",
+        "-p",
+        "--port",
         type=int,
         default=8000,
         help="API 服务端口",
@@ -39,7 +41,8 @@ def main() -> None:
     # init 命令
     init_parser = subparsers.add_parser("init", help="初始化配置文件")
     init_parser.add_argument(
-        "-o", "--output",
+        "-o",
+        "--output",
         type=str,
         default="yuanbot.yaml",
         help="输出配置文件路径",
@@ -50,7 +53,8 @@ def main() -> None:
     # 配置日志
     structlog.configure(
         processors=[
-            structlog.dev.ConsoleRenderer() if sys.stderr.isatty()
+            structlog.dev.ConsoleRenderer()
+            if sys.stderr.isatty()
             else structlog.processors.JSONRenderer(),
         ],
         wrapper_class=structlog.make_filtering_bound_logger(
@@ -60,6 +64,7 @@ def main() -> None:
 
     if args.command == "version":
         from yuanbot import __version__
+
         print(f"缘·Bot (YuanBot) v{__version__}")
 
     elif args.command == "serve":
@@ -85,6 +90,7 @@ def _run_serve(config_path: str | None, port: int) -> None:
 
     # 延迟导入避免循环依赖
     from yuanbot.app import create_app
+
     app = create_app(config)
 
     uvicorn.run(app, host="0.0.0.0", port=port, log_level=config.log_level.lower())

@@ -24,6 +24,7 @@ from yuanbot.core.types import (
 # AI 提供商适配器接口
 # ──────────────────────────────────────────────
 
+
 class AIProviderAdapter(ABC):
     """AI 提供商适配器统一接口
 
@@ -87,6 +88,7 @@ class AIProviderAdapter(ABC):
 # 消息通道适配器接口
 # ──────────────────────────────────────────────
 
+
 class ChannelAdapter(ABC):
     """消息通道适配器统一接口
 
@@ -138,23 +140,22 @@ class ChannelAdapter(ABC):
 # Skill 模块接口
 # ──────────────────────────────────────────────
 
+
 class SkillMetadata(ABC):
     """Skill 元数据（用于索引和匹配）"""
 
     @property
     @abstractmethod
-    def name(self) -> str:
-        ...
+    def name(self) -> str: ...
 
     @property
     @abstractmethod
-    def description(self) -> str:
-        ...
+    def description(self) -> str: ...
 
     @property
     @abstractmethod
     def category(self) -> str:
-        """"emotional" | "creative" | "utility" """
+        """ "emotional" | "creative" | "utility" """
         ...
 
     @property
@@ -201,6 +202,7 @@ class SkillModule(ABC):
 # Tool 模块接口
 # ──────────────────────────────────────────────
 
+
 class ToolModule(ABC):
     """Tool 模块接口
 
@@ -231,6 +233,7 @@ class ToolModule(ABC):
 # ──────────────────────────────────────────────
 # Agent 人设接口
 # ──────────────────────────────────────────────
+
 
 class PersonaProfile(ABC):
     """Agent 人设配置接口

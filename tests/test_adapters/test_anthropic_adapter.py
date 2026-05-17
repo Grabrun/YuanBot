@@ -31,10 +31,12 @@ class TestAnthropicAdapterProperties:
         assert adapter.max_context_length == 200000
 
     def test_max_context_length_custom_model(self):
-        adapter = AnthropicAdapter(config={
-            "api_key": "test",
-            "default_model": "claude-opus-4-20250514",
-        })
+        adapter = AnthropicAdapter(
+            config={
+                "api_key": "test",
+                "default_model": "claude-opus-4-20250514",
+            }
+        )
         assert adapter.max_context_length == 200000
 
 

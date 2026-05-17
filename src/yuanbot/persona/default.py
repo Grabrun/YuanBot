@@ -68,10 +68,6 @@ class DefaultPersona(PersonaProfile):
     def should_use_skill(self, skill_metadata: SkillMetadata) -> bool:
         """默认人设接受所有情感类和日常类技能"""
         compatible_categories = {"emotional", "creative", "utility"}
-        return (
-            skill_metadata.category in compatible_categories
-            or any(
-                tag in self.get_capability_domains()
-                for tag in skill_metadata.capability_tags
-            )
+        return skill_metadata.category in compatible_categories or any(
+            tag in self.get_capability_domains() for tag in skill_metadata.capability_tags
         )
