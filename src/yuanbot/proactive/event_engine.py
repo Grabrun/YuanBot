@@ -75,13 +75,16 @@ class EventEngine:
         self,
         config: dict[str, Any] | None = None,
         memory_manager: Any = None,
+        weather_tool: Any = None,
     ) -> None:
         self._config = config or {}
         self._memory_manager = memory_manager
+        self._weather_tool = weather_tool  # 可选：天气查询工具
         self._triggers: dict[str, EventTrigger] = {}
         self._event_handlers: dict[str, list[EventHandler]] = {}
         self._recent_events: list[EventOccurrence] = []
         self._last_check_times: dict[str, datetime] = {}
+        self._last_weather: dict[str, dict[str, Any]] = {}  # user_id -> weather_cache
         self._running = False
         self._loop_task: asyncio.Task[None] | None = None
 
@@ -90,6 +93,11 @@ class EventEngine:
         self._silence_threshold_hours: int = self._config.get("silence_threshold_hours", 48)
         self._emotion_check_interval: int = self._config.get("emotion_check_interval_seconds", 3600)
         self._emotion_alert_days: int = self._config.get("emotion_alert_days", 3)
+        self._weather_check_interval: int = self._config.get("weather_check_interval_seconds", 3600)
+        self._weather_temp_drop_threshold: float = self._config.get(
+            "weather_temp_drop_threshold", 5.0
+        )
+        self._weather_rain_threshold: float = self._config.get("weather_rain_threshold", 70.0)
 
     async def start(self) -> None:
         """启动事件监听"""
@@ -308,8 +316,15 @@ class EventEngine:
             while self._running:
                 await self._check_user_silence()
                 await self._check_emotion_alerts()
-                # 使用较短的间隔便于测试，实际部署可调整
-                await asyncio.sleep(min(self._silence_check_interval, self._emotion_check_interval))
+                await self._check_weather_changes()
+                await self._check_special_dates()
+                # 使用较短的间隔便于测试
+                min_interval = min(
+                    self._silence_check_interval,
+                    self._emotion_check_interval,
+                    self._weather_check_interval,
+                )
+                await asyncio.sleep(min_interval)
         except asyncio.CancelledError:
             logger.debug("event_engine_loop_cancelled")
 
@@ -408,3 +423,136 @@ class EventEngine:
             ):
                 return trigger
         return None
+
+    async def _check_weather_changes(self) -> None:
+        """检查天气变化事件
+
+        设计参考: proactive-companion-system.md 3.3
+
+        每小时查询活跃用户的天气，检测异常变化（降温>5°C、降雨概率>70%）。
+        """
+        now = datetime.now()
+        last_check = self._last_check_times.get("weather")
+        if last_check and (now - last_check).total_seconds() < self._weather_check_interval:
+            return
+
+        self._last_check_times["weather"] = now
+
+        if not self._memory_manager or not self._weather_tool:
+            return
+
+        profiles = getattr(self._memory_manager, "_user_profiles", {})
+        for user_id, profile in profiles.items():
+            try:
+                location = getattr(profile, "preferences", {}).get("location")
+                if not location:
+                    continue
+
+                # 调用天气工具
+                if hasattr(self._weather_tool, "invoke"):
+                    result = await self._weather_tool.invoke({"city": location})
+                    if not result.success:
+                        continue
+                    current_weather = result.output
+                elif callable(self._weather_tool):
+                    current_weather = await self._weather_tool(location)
+                else:
+                    continue
+
+                # 与上次天气对比
+                prev_weather = self._last_weather.get(user_id)
+                self._last_weather[user_id] = current_weather
+
+                if prev_weather:
+                    # 检测温度骤降
+                    prev_temp = prev_weather.get("temperature", 0)
+                    curr_temp = current_weather.get("temperature", 0)
+                    if prev_temp - curr_temp >= self._weather_temp_drop_threshold:
+                        logger.info(
+                            "weather_temp_drop_detected",
+                            user_id=user_id,
+                            drop=prev_temp - curr_temp,
+                        )
+                        await self.emit_event(
+                            EventType.WEATHER_CHANGE,
+                            {
+                                "user_id": user_id,
+                                "change_type": "temp_drop",
+                                "prev_temp": prev_temp,
+                                "curr_temp": curr_temp,
+                                "location": location,
+                            },
+                        )
+
+                    # 检测降雨
+                    rain_prob = current_weather.get("rain_probability", 0)
+                    if rain_prob >= self._weather_rain_threshold:
+                        logger.info(
+                            "weather_rain_detected",
+                            user_id=user_id,
+                            rain_prob=rain_prob,
+                        )
+                        await self.emit_event(
+                            EventType.WEATHER_CHANGE,
+                            {
+                                "user_id": user_id,
+                                "change_type": "rain",
+                                "rain_probability": rain_prob,
+                                "location": location,
+                            },
+                        )
+
+            except Exception:
+                logger.debug("weather_check_skip", user_id=user_id)
+
+    async def _check_special_dates(self) -> None:
+        """检查特殊日期事件
+
+        检查用户配置的重要日期（生日、纪念日等），
+        如果今天匹配则触发特殊日期事件。
+
+        设计参考: proactive-companion-system.md 3.2
+        """
+        now = datetime.now()
+        last_check = self._last_check_times.get("special_date")
+        if last_check and last_check.date() == now.date():
+            return  # 每天只检查一次
+
+        self._last_check_times["special_date"] = now
+
+        if not self._memory_manager:
+            return
+
+        today_str = now.strftime("%m-%d")
+        profiles = getattr(self._memory_manager, "_user_profiles", {})
+
+        for user_id in profiles:
+            try:
+                # 从用户级配置获取重要日期
+                if hasattr(self._memory_manager, "get_user_proactive_settings"):
+                    user_config = await self._memory_manager.get_user_proactive_settings(user_id)
+                    important_dates = user_config.get("important_dates", [])
+
+                    for date_entry in important_dates:
+                        if isinstance(date_entry, dict):
+                            date_str = date_entry.get("date", "")
+                            desc = date_entry.get("description", "特殊日期")
+                        elif isinstance(date_entry, str):
+                            # 支持 "MM-DD:description" 格式
+                            parts = date_entry.split(":", 1)
+                            date_str = parts[0]
+                            desc = parts[1] if len(parts) > 1 else "特殊日期"
+                        else:
+                            continue
+
+                        if date_str == today_str:
+                            event = self.check_special_date(
+                                user_id, {desc: date_str}
+                            )
+                            if event:
+                                await self.emit_event(
+                                    EventType.SPECIAL_DATE,
+                                    {**event.data, "user_id": user_id},
+                                )
+            except Exception:
+                logger.debug("special_date_check_skip", user_id=user_id)

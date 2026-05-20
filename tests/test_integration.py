@@ -668,7 +668,7 @@ class TestProactiveIntegration:
     def test_strategy_respects_disabled_config(self):
         """禁用时不应主动交互"""
         strategy = ProactiveStrategy(config={"enabled": False})
-        decision = strategy.should_act("user-1")
+        decision = strategy.should_act_sync("user-1")
         assert decision.should_act is False
         assert decision.reason == "proactive_disabled"
 
@@ -676,10 +676,10 @@ class TestProactiveIntegration:
         """应遵守每日上限"""
         strategy = ProactiveStrategy(config={"max_per_day": 2})
 
-        assert strategy.should_act("user-1").should_act is True
-        assert strategy.should_act("user-1").should_act is True
+        assert strategy.should_act_sync("user-1").should_act is True
+        assert strategy.should_act_sync("user-1").should_act is True
         # 第三次应被限制
-        assert strategy.should_act("user-1").should_act is False
+        assert strategy.should_act_sync("user-1").should_act is False
 
     @pytest.mark.asyncio
     async def test_strategy_should_send_with_memory(self):

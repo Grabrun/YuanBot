@@ -60,20 +60,20 @@ class TestProactiveStrategyShouldAct:
     def test_normal_should_act(self):
         config = ProactiveConfig(enabled=True, quiet_hours_start=23, quiet_hours_end=7)
         strategy = ProactiveStrategy(config=config.__dict__)
-        decision = strategy.should_act("user1")
+        decision = strategy.should_act_sync("user1")
         assert isinstance(decision, ProactiveDecision)
 
     def test_disabled_strategy(self):
         config = ProactiveConfig(enabled=False)
         strategy = ProactiveStrategy(config=config.__dict__)
-        decision = strategy.should_act("user1")
+        decision = strategy.should_act_sync("user1")
         assert decision.should_act is False
         assert decision.reason == "proactive_disabled"
 
     def test_event_triggers_disabled(self):
         config = ProactiveConfig(enabled=True, event_triggers_enabled=False)
         strategy = ProactiveStrategy(config=config.__dict__)
-        decision = strategy.should_act("user1", is_event_triggered=True)
+        decision = strategy.should_act_sync("user1", is_event_triggered=True)
         assert decision.should_act is False
         assert decision.reason == "event_triggers_disabled"
 
@@ -82,13 +82,13 @@ class TestProactiveStrategyShouldAct:
         strategy = ProactiveStrategy(config=config.__dict__)
 
         # 前两次应成功
-        d1 = strategy.should_act("user1")
+        d1 = strategy.should_act_sync("user1")
         assert d1.should_act is True
-        d2 = strategy.should_act("user1")
+        d2 = strategy.should_act_sync("user1")
         assert d2.should_act is True
 
         # 第三次应被限制
-        d3 = strategy.should_act("user1")
+        d3 = strategy.should_act_sync("user1")
         assert d3.should_act is False
         assert d3.reason == "daily_limit_reached"
 
@@ -96,8 +96,8 @@ class TestProactiveStrategyShouldAct:
         config = ProactiveConfig(enabled=True, max_per_day=1)
         strategy = ProactiveStrategy(config=config.__dict__)
 
-        strategy.should_act("user1")
-        d2 = strategy.should_act("user2")
+        strategy.should_act_sync("user1")
+        d2 = strategy.should_act_sync("user2")
         assert d2.should_act is True
 
     def test_update_config(self):
@@ -108,8 +108,8 @@ class TestProactiveStrategyShouldAct:
 
     def test_get_daily_stats(self):
         strategy = ProactiveStrategy()
-        strategy.should_act("user1")
-        strategy.should_act("user2")
+        strategy.should_act_sync("user1")
+        strategy.should_act_sync("user2")
         stats = strategy.get_daily_stats()
         assert "user1" in stats
         assert "user2" in stats
@@ -120,12 +120,12 @@ class TestProactiveStrategyShouldAct:
         strategy = ProactiveStrategy(config=config.__dict__)
 
         # 非事件触发应被限制
-        decision = strategy.should_act("user1", is_event_triggered=False)
+        decision = strategy.should_act_sync("user1", is_event_triggered=False)
         assert decision.should_act is False
         assert decision.reason == "frequency_limited"
 
         # 事件触发应通过
-        decision = strategy.should_act("user1", is_event_triggered=True)
+        decision = strategy.should_act_sync("user1", is_event_triggered=True)
         assert decision.should_act is True
 
 
@@ -177,13 +177,13 @@ class TestProactiveStrategyGenerateMessage:
         mock_ai = AsyncMock()
         mock_response = AsyncMock()
         mock_response.content = "早上好呀～今天天气不错哦"
-        mock_ai.chat_completion = AsyncMock(return_value=mock_response)
+        mock_ai.generate = AsyncMock(return_value=mock_response)
 
         strategy = ProactiveStrategy(ai_service=mock_ai)
         msg = await strategy.generate_message("user1", "greeting")
 
         assert msg == "早上好呀～今天天气不错哦"
-        mock_ai.chat_completion.assert_called_once()
+        mock_ai.generate.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_generate_without_ai_fallback(self):

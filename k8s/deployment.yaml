@@ -1,0 +1,251 @@
+---
+# YuanBot Kubernetes Deployment
+# 设计参考: architecture-v1.4.md 10.3 部署模式 - Kubernetes
+#
+# 使用方法:
+#   kubectl apply -f k8s/
+#
+# 前置要求:
+#   - 创建 namespace: kubectl create namespace yuanbot
+#   - 创建 Secret: kubectl create secret generic yuanbot-secrets --from-literal=OPENAI_API_KEY=sk-xxx -n yuanbot
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: yuanbot
+  labels:
+    app.kubernetes.io/name: yuanbot
+    app.kubernetes.io/part-of: yuanbot
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: yuanbot-config
+  namespace: yuanbot
+data:
+  bot.yaml: |
+    app_name: "YuanBot"
+    version: "1.0.0"
+    debug: false
+    log_level: "INFO"
+    ai:
+      default_provider: "openai"
+    proactive:
+      enabled: true
+      frequency: "medium"
+      max_per_day: 5
+    orchestrator:
+      intent_engine:
+        enabled: true
+      emotion_engine:
+        enabled: true
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: yuanbot
+  namespace: yuanbot
+  labels:
+    app.kubernetes.io/name: yuanbot
+    app.kubernetes.io/component: api
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: yuanbot
+      app.kubernetes.io/component: api
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: yuanbot
+        app.kubernetes.io/component: api
+    spec:
+      containers:
+        - name: yuanbot
+          image: yuanbot/yuanbot:latest
+          ports:
+            - name: http
+              containerPort: 8000
+              protocol: TCP
+            - name: ws
+              containerPort: 8000
+              protocol: TCP
+          env:
+            - name: YUAN_AI_OPENAI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: yuanbot-secrets
+                  key: OPENAI_API_KEY
+            - name: YUAN_BOT_DEBUG
+              value: "false"
+            - name: YUAN_BOT_LOG_LEVEL
+              value: "INFO"
+          volumeMounts:
+            - name: config
+              mountPath: /app/configs
+              readOnly: true
+            - name: data
+              mountPath: /app/data
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 250m
+              memory: 256Mi
+            limits:
+              cpu: 1000m
+              memory: 1Gi
+      volumes:
+        - name: config
+          configMap:
+            name: yuanbot-config
+        - name: data
+          persistentVolumeClaim:
+            claimName: yuanbot-data
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: yuanbot
+  namespace: yuanbot
+  labels:
+    app.kubernetes.io/name: yuanbot
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+      protocol: TCP
+    - name: ws
+      port: 8000
+      targetPort: ws
+      protocol: TCP
+  selector:
+    app.kubernetes.io/name: yuanbot
+    app.kubernetes.io/component: api
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: yuanbot-data
+  namespace: yuanbot
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+
+---
+# 可选：Redis 部署（用于工作记忆缓存和事件队列）
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: yuanbot-redis
+  namespace: yuanbot
+  labels:
+    app.kubernetes.io/name: yuanbot
+    app.kubernetes.io/component: redis
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: yuanbot
+      app.kubernetes.io/component: redis
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: yuanbot
+        app.kubernetes.io/component: redis
+    spec:
+      containers:
+        - name: redis
+          image: redis:7-alpine
+          ports:
+            - name: redis
+              containerPort: 6379
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          volumeMounts:
+            - name: redis-data
+              mountPath: /data
+      volumes:
+        - name: redis-data
+          emptyDir: {}
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: yuanbot-redis
+  namespace: yuanbot
+spec:
+  type: ClusterIP
+  ports:
+    - name: redis
+      port: 6379
+      targetPort: redis
+  selector:
+    app.kubernetes.io/name: yuanbot
+    app.kubernetes.io/component: redis
+
+---
+# 可选：Ingress（外部访问）
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: yuanbot
+  namespace: yuanbot
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    nginx.ingress.kubernetes.io/websocket-services: "yuanbot"
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: yuanbot.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: yuanbot
+                port:
+                  name: http
+          - path: /ws
+            pathType: Prefix
+            backend:
+              service:
+                name: yuanbot
+                port:
+                  name: ws
+  # tls:
+  #   - hosts:
+  #       - yuanbot.example.com
+  #     secretName: yuanbot-tls
