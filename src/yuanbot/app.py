@@ -1,4 +1,10 @@
-"""YuanBot FastAPI 应用"""
+"""YuanBot FastAPI 应用
+
+集成所有子系统的完整应用入口。
+使用 AIService 门面、CapabilityOrchestrator、事件队列等新组件。
+
+设计参考: architecture-v1.4.md + 所有详细设计文档
+"""
 
 from __future__ import annotations
 
@@ -13,6 +19,15 @@ from yuanbot.config import YuanBotConfig
 from yuanbot.core.types import BotResponse
 from yuanbot.memory.manager import MemoryManager
 from yuanbot.orchestrator.engine import OrchestratorEngine
+from yuanbot.persona.engines.context_builder import ContextBuilder
+from yuanbot.persona.engines.dialogue_decision import DialogueDecisionEngine
+from yuanbot.proactive.event_engine import EventEngine
+from yuanbot.proactive.scheduler import ProactiveScheduler
+from yuanbot.proactive.strategy import ProactiveStrategy
+from yuanbot.providers.manager import ProviderManager
+from yuanbot.providers.registry import ProviderRegistry
+from yuanbot.services.ai_service import AIService
+from yuanbot.services.capability_orchestrator import CapabilityOrchestrator
 from yuanbot.skills.manager import SkillManager
 from yuanbot.tools.manager import ToolManager
 
@@ -20,42 +35,97 @@ from yuanbot.tools.manager import ToolManager
 def create_app(config: YuanBotConfig) -> FastAPI:
     """创建 YuanBot FastAPI 应用"""
 
-    # 初始化核心组件
+    # ── 1. 初始化基础设施 ──────────────────────
     memory_manager = MemoryManager(config=config.memory.model_dump())
+
+    # ── 2. 初始化 AI 提供商系统 ────────────────
+    provider_registry = ProviderRegistry()
+    provider_manager = ProviderManager(registry=provider_registry)
+    ai_service = AIService(
+        provider_manager=provider_manager,
+        config=config.ai.model_dump() if hasattr(config, "ai") else {},
+    )
+
+    # ── 3. 初始化能力系统 ──────────────────────
     skill_manager = SkillManager()
     tool_manager = ToolManager()
+    capability_orchestrator = CapabilityOrchestrator(
+        skill_manager=skill_manager,
+        tool_manager=tool_manager,
+        ai_service=ai_service,
+    )
 
-    # 初始化 AI 提供商
-    ai_provider = _create_ai_provider(config)
-
-    # 初始化 Agent 人设
+    # ── 4. 初始化人格与决策系统 ────────────────
     persona = _load_persona(config)
+    decision_engine = DialogueDecisionEngine()
+    context_builder = ContextBuilder(persona)
 
-    # 初始化编排引擎
+    # ── 5. 初始化编排引擎 ─────────────────────
     orchestrator = OrchestratorEngine(
-        ai_provider=ai_provider,
+        ai_service=ai_service,
         persona=persona,
+        memory_manager=memory_manager,
+        decision_engine=decision_engine,
+        context_builder=context_builder,
+        capability_orchestrator=capability_orchestrator,
+    )
+
+    # ── 6. 初始化主动陪伴系统 ──────────────────
+    proactive_config = config.proactive.model_dump()
+    from yuanbot.gateway.push_dispatcher import PushDispatcher
+
+    push_dispatcher = PushDispatcher()
+
+    proactive_scheduler = ProactiveScheduler(
+        config=proactive_config,
+        memory_manager=memory_manager,
+        ai_service=ai_service,
+        push_dispatcher=push_dispatcher,
+    )
+
+    proactive_strategy = ProactiveStrategy(
+        config=proactive_config,
+        memory_manager=memory_manager,
+        ai_service=ai_service,
+        persona=persona,
+    )
+
+    event_engine = EventEngine(
+        config=proactive_config,
         memory_manager=memory_manager,
     )
 
-    # Web 通道适配器
+    # ── 7. Web 通道适配器 ─────────────────────
     web_adapter = WebAdapter()
+
+    # ── 应用生命周期 ──────────────────────────
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         """应用生命周期管理"""
+
+        # 加载 Skills 和 Tools
+        await skill_manager.load_skills()
+        await tool_manager.load_tools()
 
         # 启动 Web 适配器
         async def on_message(msg: Any) -> BotResponse:
             return await orchestrator.process_message(msg)
 
         await web_adapter.listen(on_message)
-        print("🌸 YuanBot 启动完成")
+
+        # 启动主动陪伴系统
+        await proactive_scheduler.start()
+        await event_engine.start()
+        print("🌸 YuanBot 启动完成（含主动陪伴系统）")
+
         yield
+
         # 清理资源
+        await event_engine.stop()
+        await proactive_scheduler.stop()
         await web_adapter.close()
-        if hasattr(ai_provider, "close"):
-            await ai_provider.close()
+        await provider_manager.close_all()
         print("🌸 YuanBot 已停止")
 
     app = FastAPI(
@@ -69,8 +139,14 @@ def create_app(config: YuanBotConfig) -> FastAPI:
     app.state.memory_manager = memory_manager
     app.state.skill_manager = skill_manager
     app.state.tool_manager = tool_manager
+    app.state.ai_service = ai_service
+    app.state.provider_manager = provider_manager
+    app.state.capability_orchestrator = capability_orchestrator
     app.state.orchestrator = orchestrator
     app.state.web_adapter = web_adapter
+    app.state.proactive_scheduler = proactive_scheduler
+    app.state.proactive_strategy = proactive_strategy
+    app.state.event_engine = event_engine
 
     # 注册路由
     _register_routes(app, orchestrator, memory_manager, config)
@@ -93,22 +169,6 @@ def create_app(config: YuanBotConfig) -> FastAPI:
     return app
 
 
-def _create_ai_provider(config: YuanBotConfig) -> Any:
-    """根据配置创建 AI 提供商适配器"""
-    provider_id = config.ai_provider.provider_id
-
-    if provider_id == "openai":
-        from yuanbot.adapters.ai.openai_adapter import OpenAIAdapter
-
-        return OpenAIAdapter(config.ai_provider.model_dump())
-    elif provider_id == "anthropic":
-        from yuanbot.adapters.ai.anthropic_adapter import AnthropicAdapter
-
-        return AnthropicAdapter(config.ai_provider.model_dump())
-    else:
-        raise ValueError(f"Unsupported AI provider: {provider_id}")
-
-
 def _load_persona(config: YuanBotConfig) -> Any:
     """加载 Agent 人设"""
     from yuanbot.persona.default import DefaultPersona
@@ -127,7 +187,12 @@ def _register_routes(
     @app.get("/health")
     async def health():
         """健康检查"""
-        return {"status": "ok", "version": config.version}
+        ai_health = app.state.ai_service.get_health_status()
+        return {
+            "status": "ok",
+            "version": config.version,
+            "ai_service": ai_health,
+        }
 
     @app.post("/api/chat")
     async def chat(request: dict[str, Any]):
@@ -146,7 +211,9 @@ def _register_routes(
         response = await orchestrator.process_message(message)
         return {
             "content": response.content.text,
-            "proactive_followups": [t.model_dump() for t in (response.proactive_followups or [])],
+            "proactive_followups": [
+                t.model_dump() for t in (response.proactive_followups or [])
+            ],
         }
 
     @app.get("/api/memory/{user_id}")
@@ -157,7 +224,68 @@ def _register_routes(
         return {
             "profile": profile.model_dump(),
             "fact_memories": [
-                {"id": m.id, "content": m.content, "importance": m.importance_score}
+                {
+                    "id": m.id,
+                    "content": m.content,
+                    "importance": m.importance_score,
+                }
                 for m in fact_memories
             ],
+        }
+
+    @app.get("/api/proactive/tasks")
+    async def get_proactive_tasks():
+        """查看主动任务列表"""
+        scheduler: ProactiveScheduler = app.state.proactive_scheduler
+        tasks = scheduler.get_all_tasks()
+        return {
+            "tasks": [
+                {
+                    "task_id": t.task_id,
+                    "name": t.name,
+                    "task_type": t.task_type,
+                    "trigger": t.trigger,
+                    "priority": t.priority,
+                    "enabled": t.enabled,
+                    "next_run": t.next_run.isoformat() if t.next_run else None,
+                    "last_run": t.last_run.isoformat() if t.last_run else None,
+                }
+                for t in tasks
+            ]
+        }
+
+    @app.get("/api/proactive/stats")
+    async def get_proactive_stats():
+        """查看主动交互统计"""
+        strategy: ProactiveStrategy = app.state.proactive_strategy
+        return {
+            "daily_stats": strategy.get_daily_stats(),
+            "config": strategy.get_config().__dict__,
+        }
+
+    @app.get("/api/providers")
+    async def get_providers():
+        """查看 AI 提供商状态"""
+        pm: ProviderManager = app.state.provider_manager
+        return {
+            "providers": [
+                {
+                    "provider_id": p.provider_id,
+                    "enabled": p.enabled,
+                    "default_model": p.default_model,
+                    "model_count": len(p.models),
+                }
+                for p in pm.get_enabled_providers()
+            ],
+            "ai_service_health": app.state.ai_service.get_health_status(),
+        }
+
+    @app.get("/api/capabilities")
+    async def get_capabilities():
+        """查看已加载的能力"""
+        sm: SkillManager = app.state.skill_manager
+        tm: ToolManager = app.state.tool_manager
+        return {
+            "skills": sm.get_all_skills(),
+            "tools": tm.get_all_tools(),
         }

@@ -1,0 +1,36 @@
+# 记忆系统参数 (memory.yaml)
+
+# 工作记忆
+working_memory:
+  max_turns: 20
+  redis_ttl_seconds: 3600
+
+# 事实记忆
+fact_memory:
+  max_entries_per_user: 1000
+  importance_threshold: 0.3
+
+# 情景记忆
+episodic_memory:
+  max_age_days: 90
+  summary_max_length: 500
+  embedding_batch_size: 32
+
+# 遗忘曲线
+forgetting_curve:
+  enabled: true
+  half_life_days: 14
+  min_retention_score: 0.1
+  review_interval_days: 7
+
+# 记忆固化
+consolidation:
+  enabled: true
+  threshold: 3  # 出现 3 次以上的话题升级为事实记忆
+  schedule: "0 3 * * *"  # 每天凌晨 3 点执行
+  batch_size: 100
+
+# 语义记忆
+semantic_memory:
+  graph_update_on_interaction: true
+  relationship_depth: 3

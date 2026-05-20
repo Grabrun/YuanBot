@@ -1,0 +1,11 @@
+# WebChat 通道配置
+
+platform: "webchat"
+display_name: "Web Chat"
+enabled: true
+
+# 配置
+config:
+  cors_origins: ["*"]
+  max_message_length: 4096
+  rate_limit_per_minute: 30

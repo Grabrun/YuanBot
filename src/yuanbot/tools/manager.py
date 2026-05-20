@@ -1,74 +1,184 @@
 """YuanBot Tools 管理器
 
-实现工具的动态加载和沙盒隔离执行。
+扫描 configs/Plugins/tools/ 目录加载 YAML 定义，
+根据意图获取可用的 Tool Schema（OpenAI Function Calling 格式）。
 """
 
 from __future__ import annotations
 
-from typing import Any
+import asyncio
+from pathlib import Path
 
 import structlog
+import yaml
 
-from yuanbot.core.interfaces import ToolModule
-from yuanbot.core.types import ToolDefinition, ToolResult
+from yuanbot.core.types import ToolResult
 
 logger = structlog.get_logger(__name__)
 
 
 class ToolManager:
-    """Tools 动态管理器"""
+    """Tool 管理器 - 扫描 configs/Plugins/tools/ 加载 YAML 定义"""
 
-    def __init__(self):
-        self._tools: dict[str, ToolModule] = {}
-        self._definitions_cache: dict[str, ToolDefinition] = {}
+    def __init__(self, tools_dir: str = "configs/Plugins/tools"):
+        self._tools_dir = Path(tools_dir)
+        self._tool_configs: dict[str, dict] = {}  # tool_id -> config
+        self._tool_schemas: dict[str, dict] = {}  # tool_id -> Function Calling Schema
 
-    def register_tool(self, tool: ToolModule) -> None:
-        """注册 Tool 模块"""
-        schema = tool.get_schema()
-        self._tools[schema.name] = tool
-        self._definitions_cache[schema.name] = schema
-        logger.info("tool_registered", name=schema.name, level=tool.permission_level)
+    async def load_tools(self) -> None:
+        """扫描目录加载所有 *.yaml Tool 配置"""
+        if not self._tools_dir.exists():
+            logger.warning("tools_dir_not_found", path=str(self._tools_dir))
+            return
 
-    def get_tool(self, name: str) -> ToolModule | None:
-        """获取 Tool 模块"""
-        return self._tools.get(name)
+        for yaml_file in sorted(self._tools_dir.glob("*.yaml")):
+            try:
+                with open(yaml_file, encoding="utf-8") as f:
+                    config = yaml.safe_load(f)
+            except (yaml.YAMLError, OSError) as exc:
+                logger.error(
+                    "tool_load_failed",
+                    file=str(yaml_file),
+                    error=str(exc),
+                )
+                continue
 
-    def get_definitions(
+            if not isinstance(config, dict):
+                logger.warning("tool_invalid_format", file=str(yaml_file))
+                continue
+
+            # 检查 enabled 字段（默认为 True）
+            if not config.get("enabled", True):
+                logger.info("tool_disabled", file=str(yaml_file))
+                continue
+
+            tool_id = config.get("tool_id")
+            if not tool_id:
+                logger.warning("tool_missing_id", file=str(yaml_file))
+                continue
+
+            self._tool_configs[tool_id] = config
+
+            # 解析 schema（OpenAI Function Calling 格式）
+            schema = config.get("schema")
+            if isinstance(schema, dict):
+                self._tool_schemas[tool_id] = schema
+
+            logger.info(
+                "tool_loaded",
+                tool_id=tool_id,
+                name=config.get("name", ""),
+                category=config.get("category", ""),
+            )
+
+    def get_tools_for_intent(self, intent: str) -> list[dict]:
+        """根据意图获取可用的 Tool Schema 列表（OpenAI Function Calling 格式）"""
+        result = []
+        for tool_id, config in self._tool_configs.items():
+            tags = config.get("capability_tags", [])
+            category = config.get("category", "")
+
+            # 简单匹配：意图包含 category 或 capability_tags 中的标签
+            if category and category in intent:
+                schema = self._tool_schemas.get(tool_id)
+                if schema:
+                    result.append(schema)
+                continue
+
+            if any(tag in intent for tag in tags):
+                schema = self._tool_schemas.get(tool_id)
+                if schema:
+                    result.append(schema)
+
+        return result
+
+    def get_tool_schema(self, tool_id: str) -> dict | None:
+        """获取 Tool 的 Function Calling Schema"""
+        return self._tool_schemas.get(tool_id)
+
+    async def execute_tool(self, tool_id: str, params: dict) -> ToolResult:
+        """执行工具调用（本地受限执行）"""
+        config = self._tool_configs.get(tool_id)
+        if not config:
+            return ToolResult(
+                tool_id=tool_id,
+                success=False,
+                error=f"Tool '{tool_id}' not found",
+            )
+
+        executor_cfg = config.get("executor", {})
+        executor_type = executor_cfg.get("type", "local_thread")
+        timeout = executor_cfg.get("timeout", 10)
+
+        if executor_type == "local_thread":
+            return await self._execute_local(tool_id, params, timeout)
+
+        return ToolResult(
+            tool_id=tool_id,
+            success=False,
+            error=f"Unsupported executor type: {executor_type}",
+        )
+
+    async def _execute_local(
         self,
-        names: list[str] | None = None,
-    ) -> list[ToolDefinition]:
-        """获取工具定义列表
-
-        如果指定 names，只返回指定工具的定义；
-        否则返回所有已注册工具的定义。
-        """
-        if names:
-            return [self._definitions_cache[n] for n in names if n in self._definitions_cache]
-        return list(self._definitions_cache.values())
-
-    async def invoke_tool(
-        self,
-        name: str,
-        params: dict[str, Any],
-        context: dict[str, Any] | None = None,
+        tool_id: str,
+        params: dict,
+        timeout: int,
     ) -> ToolResult:
-        """调用工具"""
-        tool = self._tools.get(name)
-        if not tool:
+        """在线程池中本地执行工具（模拟受限沙盒）"""
+        try:
+            loop = asyncio.get_running_loop()
+            result = await asyncio.wait_for(
+                loop.run_in_executor(None, self._sync_execute, tool_id, params),
+                timeout=timeout,
+            )
+            return result
+        except TimeoutError:
             return ToolResult(
-                tool_id=name,
+                tool_id=tool_id,
                 success=False,
-                error=f"Tool '{name}' not found",
+                error=f"Tool '{tool_id}' execution timed out after {timeout}s",
+            )
+        except Exception as exc:
+            logger.error("tool_execution_error", tool_id=tool_id, error=str(exc))
+            return ToolResult(
+                tool_id=tool_id,
+                success=False,
+                error=str(exc),
             )
 
-        try:
-            result = await tool.invoke(params, context)
-            logger.info("tool_invoked", name=name, success=result.success)
-            return result
-        except Exception as e:
-            logger.error("tool_invocation_error", name=name, error=str(e))
-            return ToolResult(
-                tool_id=name,
-                success=False,
-                error=str(e),
+    def _sync_execute(self, tool_id: str, params: dict) -> ToolResult:
+        """同步执行（在线程池中运行）
+
+        注意：实际工具实现需要在 executor 配置中指定 handler。
+        当前为占位实现，返回配置信息。
+        """
+        schema = self._tool_schemas.get(tool_id, {})
+        func_name = schema.get("function", {}).get("name", tool_id)
+
+        return ToolResult(
+            tool_id=tool_id,
+            success=True,
+            output={
+                "function": func_name,
+                "params": params,
+                "note": "Local executor placeholder - connect real handler via executor.handler",
+            },
+        )
+
+    def get_all_tools(self) -> list[dict]:
+        """获取所有已注册 Tool 的元数据"""
+        result = []
+        for tool_id, config in self._tool_configs.items():
+            result.append(
+                {
+                    "tool_id": tool_id,
+                    "name": config.get("name", ""),
+                    "version": config.get("version", "1.0.0"),
+                    "category": config.get("category", ""),
+                    "permission_level": config.get("permission_level", "readonly"),
+                    "enabled": config.get("enabled", True),
+                    "executor_type": config.get("executor", {}).get("type", "local_thread"),
+                }
             )
+        return result

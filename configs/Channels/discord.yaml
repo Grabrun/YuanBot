@@ -1,0 +1,9 @@
+adapter: discord-channel-adapter
+enabled: true
+config:
+  bot_token: "${DISCORD_BOT_TOKEN}"
+  public_key: "${DISCORD_PUBLIC_KEY}"
+  intents:
+    - GUILD_MESSAGES
+    - MESSAGE_CONTENT
+    - DIRECT_MESSAGES

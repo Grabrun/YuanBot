@@ -1,4 +1,3 @@
-# Python
 __pycache__/
 *.py[cod]
 *$py.class
@@ -9,37 +8,27 @@ __pycache__/
 dist/
 build/
 .eggs/
-
-# Virtual environment
 .venv/
 venv/
 ENV/
-
-# IDE
+.env
+.env.*
+data/
+logs/
+*.db
+*.sqlite
+*.log
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
 .idea/
 .vscode/
 *.swp
 *.swo
-
-# Testing
-.pytest_cache/
-.coverage
-htmlcov/
-.mypy_cache/
-.ruff_cache/
-
-# OS
 .DS_Store
 Thumbs.db
-
-# Logs
-*.log
-
-# Config (may contain secrets)
-*.env
-.env.*
 yuanbot.yaml
-
-# Archives
 *.tar.gz
 *.zip

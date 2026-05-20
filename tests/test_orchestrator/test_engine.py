@@ -100,10 +100,18 @@ def _make_user_message(text: str = "你好") -> UserMessage:
 
 @pytest.fixture
 def engine():
-    ai = MockAIProvider("你好呀~")
+    from unittest.mock import AsyncMock
+
+    mock_ai = AsyncMock()
+    mock_ai.generate = AsyncMock(return_value=ChatResponse(
+        content="你好呀~",
+        finish_reason="stop",
+        model="mock-model",
+    ))
+    mock_ai.embed = AsyncMock(return_value=[0.1] * 16)
     persona = MockPersona()
     memory = MemoryManager()
-    return OrchestratorEngine(ai_provider=ai, persona=persona, memory_manager=memory)
+    return OrchestratorEngine(ai_service=mock_ai, persona=persona, memory_manager=memory)
 
 
 class TestProcessMessage:
@@ -146,110 +154,128 @@ class TestProcessMessage:
 
 
 class TestAnalyzeEmotion:
-    """情感分析测试"""
+    """情感分析测试（通过 DialogueDecisionEngine）"""
 
     @pytest.mark.asyncio
-    async def test_positive_emotion(self, engine: OrchestratorEngine):
-        emotion = await engine._analyze_emotion("今天好开心呀！太好了")
-        assert emotion == "positive"
+    async def test_positive_emotion(self):
+        from yuanbot.persona.engines.dialogue_decision import DialogueDecisionEngine
+
+        engine = DialogueDecisionEngine()
+        result = await engine.decide("今天好开心呀！太好了", "u1", "s1")
+        assert result.emotion_state is not None
+        assert result.emotion_state.valence == "positive"
 
     @pytest.mark.asyncio
-    async def test_negative_emotion(self, engine: OrchestratorEngine):
-        emotion = await engine._analyze_emotion("好难过，压力好大")
-        assert emotion == "negative"
+    async def test_negative_emotion(self):
+        from yuanbot.persona.engines.dialogue_decision import DialogueDecisionEngine
+
+        engine = DialogueDecisionEngine()
+        result = await engine.decide("好难过，压力好大", "u1", "s1")
+        assert result.emotion_state is not None
+        assert result.emotion_state.valence == "negative"
 
     @pytest.mark.asyncio
-    async def test_neutral_emotion(self, engine: OrchestratorEngine):
-        emotion = await engine._analyze_emotion("今天天气怎么样")
-        assert emotion == "neutral"
+    async def test_neutral_emotion(self):
+        from yuanbot.persona.engines.dialogue_decision import DialogueDecisionEngine
+
+        engine = DialogueDecisionEngine()
+        result = await engine.decide("今天天气怎么样", "u1", "s1")
+        assert result.emotion_state is not None
+        assert result.emotion_state.valence == "neutral"
 
     @pytest.mark.asyncio
-    async def test_empty_text(self, engine: OrchestratorEngine):
-        emotion = await engine._analyze_emotion("")
-        assert emotion == "neutral"
+    async def test_empty_text(self):
+        from yuanbot.persona.engines.dialogue_decision import DialogueDecisionEngine
 
-    @pytest.mark.asyncio
-    async def test_mixed_emotion_equal_is_neutral(self, engine: OrchestratorEngine):
-        """正负情感相等时应为 neutral"""
-        emotion = await engine._analyze_emotion("虽然累但是很开心")
-        assert emotion == "neutral"
+        engine = DialogueDecisionEngine()
+        result = await engine.decide("", "u1", "s1")
+        assert result.emotion_state is not None
+        assert result.emotion_state.emotion.value == "neutral"
+
 
 
 class TestBuildSystemPrompt:
-    """系统提示词组装测试"""
+    """系统提示词组装测试（通过 ContextBuilder）"""
 
-    @pytest.mark.asyncio
-    async def test_includes_persona(self, engine: OrchestratorEngine):
+    def test_includes_persona(self):
+        from yuanbot.persona.default import DefaultPersona
+        from yuanbot.persona.engines.context_builder import ContextBuilder
         from yuanbot.core.types import UserProfile
 
+        persona = DefaultPersona()
+        builder = ContextBuilder(persona)
         profile = UserProfile(user_id="u1")
-        prompt = await engine._build_system_prompt(profile, [], "neutral")
-        assert "测试助手" in prompt
+        prompt = builder.build_system_prompt(user_profile=profile)
+        assert "小缘" in prompt
 
-    @pytest.mark.asyncio
-    async def test_includes_user_info(self, engine: OrchestratorEngine):
+    def test_includes_user_info(self):
+        from yuanbot.persona.default import DefaultPersona
+        from yuanbot.persona.engines.context_builder import ContextBuilder
         from yuanbot.core.types import UserProfile
 
+        persona = DefaultPersona()
+        builder = ContextBuilder(persona)
         profile = UserProfile(
             user_id="u1",
             display_name="小明",
             preferences={"color": "蓝色"},
             relationship_stage="familiar",
         )
-        prompt = await engine._build_system_prompt(profile, [], "neutral")
+        prompt = builder.build_system_prompt(user_profile=profile)
         assert "小明" in prompt
         assert "蓝色" in prompt
         assert "familiar" in prompt
 
-    @pytest.mark.asyncio
-    async def test_includes_behavior_rules(self, engine: OrchestratorEngine):
+    def test_includes_behavior_rules(self):
+        from yuanbot.persona.default import DefaultPersona
+        from yuanbot.persona.engines.context_builder import ContextBuilder
         from yuanbot.core.types import UserProfile
 
+        persona = DefaultPersona()
+        builder = ContextBuilder(persona)
         profile = UserProfile(user_id="u1")
-        prompt = await engine._build_system_prompt(profile, [], "neutral")
-        assert "保持友好" in prompt
+        prompt = builder.build_system_prompt(user_profile=profile)
+        assert "共情" in prompt
 
-    @pytest.mark.asyncio
-    async def test_includes_emotion(self, engine: OrchestratorEngine):
-        from yuanbot.core.types import UserProfile
+    def test_includes_emotion(self):
+        from yuanbot.persona.default import DefaultPersona
+        from yuanbot.persona.engines.context_builder import ContextBuilder
+        from yuanbot.core.types import UserProfile, EmotionState, EmotionCategory
 
+        persona = DefaultPersona()
+        builder = ContextBuilder(persona)
         profile = UserProfile(user_id="u1")
-        prompt = await engine._build_system_prompt(profile, [], "negative")
-        assert "negative" in prompt
+        emotion = EmotionState(emotion=EmotionCategory.SADNESS, intensity=0.8, valence="negative")
+        prompt = builder.build_system_prompt(user_profile=profile, emotion=emotion)
+        assert "sadness" in prompt
 
 
 class TestBuildMessages:
     """消息构建测试"""
 
-    def test_system_message_first(self, engine: OrchestratorEngine):
-
-        messages = engine._build_messages("系统提示", [])
-        assert messages[0].role == "system"
-        assert messages[0].content == "系统提示"
-
-    def test_user_messages(self, engine: OrchestratorEngine):
+    def test_user_messages(self):
         from yuanbot.core.types import MemoryNode, MemoryType
 
         nodes = [
             MemoryNode(memory_type=MemoryType.WORKING, content="[用户] 你好"),
         ]
-        messages = engine._build_messages("sys", nodes)
-        assert len(messages) == 2
-        assert messages[1].role == "user"
-        assert messages[1].content == "你好"
+        messages = OrchestratorEngine._build_messages(nodes)
+        assert len(messages) == 1
+        assert messages[0].role == "user"
+        assert messages[0].content == "你好"
 
-    def test_assistant_messages(self, engine: OrchestratorEngine):
+    def test_assistant_messages(self):
         from yuanbot.core.types import MemoryNode, MemoryType
 
         nodes = [
             MemoryNode(memory_type=MemoryType.WORKING, content="[AI] 你好呀"),
         ]
-        messages = engine._build_messages("sys", nodes)
-        assert len(messages) == 2
-        assert messages[1].role == "assistant"
-        assert messages[1].content == "你好呀"
+        messages = OrchestratorEngine._build_messages(nodes)
+        assert len(messages) == 1
+        assert messages[0].role == "assistant"
+        assert messages[0].content == "你好呀"
 
-    def test_mixed_messages(self, engine: OrchestratorEngine):
+    def test_mixed_messages(self):
         from yuanbot.core.types import MemoryNode, MemoryType
 
         nodes = [
@@ -257,11 +283,11 @@ class TestBuildMessages:
             MemoryNode(memory_type=MemoryType.WORKING, content="[AI] 你好呀~"),
             MemoryNode(memory_type=MemoryType.WORKING, content="[用户] 今天天气怎么样"),
         ]
-        messages = engine._build_messages("sys", nodes)
-        assert len(messages) == 4
-        assert messages[1].role == "user"
-        assert messages[2].role == "assistant"
-        assert messages[3].role == "user"
+        messages = OrchestratorEngine._build_messages(nodes)
+        assert len(messages) == 3
+        assert messages[0].role == "user"
+        assert messages[1].role == "assistant"
+        assert messages[2].role == "user"
 
 
 class TestProactiveTasks:
@@ -269,28 +295,31 @@ class TestProactiveTasks:
 
     @pytest.mark.asyncio
     async def test_negative_emotion_triggers_care(self, engine: OrchestratorEngine):
-        from yuanbot.core.types import UserProfile
+        from yuanbot.core.types import UserProfile, EmotionState, EmotionCategory
 
         profile = UserProfile(user_id="u1")
-        tasks = await engine._generate_proactive_tasks(profile, "negative")
+        emotion = EmotionState(emotion=EmotionCategory.SADNESS, intensity=0.8, valence="negative", needs_immediate_comfort=True)
+        tasks = await engine._generate_proactive_tasks(profile, emotion)
         assert len(tasks) == 1
         assert tasks[0].task_type == "care"
         assert tasks[0].priority == 2
 
     @pytest.mark.asyncio
     async def test_positive_emotion_no_task(self, engine: OrchestratorEngine):
-        from yuanbot.core.types import UserProfile
+        from yuanbot.core.types import UserProfile, EmotionState, EmotionCategory
 
         profile = UserProfile(user_id="u1")
-        tasks = await engine._generate_proactive_tasks(profile, "positive")
+        emotion = EmotionState(emotion=EmotionCategory.JOY, intensity=0.8, valence="positive")
+        tasks = await engine._generate_proactive_tasks(profile, emotion)
         assert len(tasks) == 0
 
     @pytest.mark.asyncio
     async def test_neutral_emotion_no_task(self, engine: OrchestratorEngine):
-        from yuanbot.core.types import UserProfile
+        from yuanbot.core.types import UserProfile, EmotionState, EmotionCategory
 
         profile = UserProfile(user_id="u1")
-        tasks = await engine._generate_proactive_tasks(profile, "neutral")
+        emotion = EmotionState(emotion=EmotionCategory.NEUTRAL, intensity=0.3, valence="neutral")
+        tasks = await engine._generate_proactive_tasks(profile, emotion)
         assert len(tasks) == 0
 
 

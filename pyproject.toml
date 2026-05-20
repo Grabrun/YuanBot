@@ -23,6 +23,8 @@ dependencies = [
     "python-dotenv>=1.0",
     "structlog>=24.1",
     "aiohttp>=3.9",
+    "croniter>=2.0",
+    "aiosqlite>=0.20",
 ]
 
 [project.optional-dependencies]
@@ -35,8 +37,12 @@ dev = [
 ]
 openai = ["openai>=1.30"]
 anthropic = ["anthropic>=0.28"]
+graph = ["kuzu>=0.7"]
 all-providers = [
     "yuanbot[openai,anthropic]",
+]
+all = [
+    "yuanbot[openai,anthropic,graph]",
 ]
 
 [project.scripts]

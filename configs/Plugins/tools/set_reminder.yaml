@@ -1,0 +1,29 @@
+tool_id: set_reminder
+name: "设置提醒"
+version: "1.0.0"
+category: daily_chat
+capability_tags: ["reminder", "提醒", "闹钟", "schedule", "定时"]
+permission_level: readonly
+enabled: true
+schema:
+  type: function
+  function:
+    name: set_reminder
+    description: "为用户设置一个定时提醒，支持一次性提醒和重复提醒"
+    parameters:
+      type: object
+      properties:
+        content:
+          type: string
+          description: "提醒内容，如 '该喝水了' 或 '下午3点开会'"
+        time:
+          type: string
+          description: "提醒时间，ISO 8601 格式或相对时间描述，如 '2024-01-01T15:00:00' 或 '30分钟后'"
+        repeat:
+          type: string
+          enum: ["none", "daily", "weekly", "monthly"]
+          description: "重复频率，默认为 none（不重复）"
+      required: ["content", "time"]
+executor:
+  type: local_thread
+  timeout: 5

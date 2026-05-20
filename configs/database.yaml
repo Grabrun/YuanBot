@@ -1,0 +1,41 @@
+# 数据库配置 (database.yaml)
+# 支持 SQLite (默认) / MySQL 切换，Milvus Lite，Redis
+
+# 关系型数据库
+relational:
+  type: "sqlite"  # sqlite | mysql
+  # SQLite 配置
+  sqlite:
+    path: "data/yuanbot.db"
+  # MySQL 配置 (type=mysql 时生效)
+  mysql:
+    host: "localhost"
+    port: 3306
+    database: "yuanbot"
+    user: "yuanbot"
+    password: "${YUAN_DB_MYSQL_PASSWORD}"
+    pool_size: 10
+
+# 向量数据库 (Milvus Lite)
+vector:
+  type: "milvus_lite"  # milvus_lite | milvus
+  milvus_lite:
+    persist_dir: "data/milvus"
+  milvus:
+    host: "localhost"
+    port: 19530
+
+# 缓存
+redis:
+  url: "redis://localhost:6379/0"
+  max_connections: 20
+
+# 图数据库
+graph:
+  type: "kuzu"  # kuzu | neo4j
+  kuzu:
+    persist_dir: "data/kuzu"
+  neo4j:
+    uri: "bolt://localhost:7687"
+    user: "neo4j"
+    password: "${YUAN_DB_NEO4J_PASSWORD}"

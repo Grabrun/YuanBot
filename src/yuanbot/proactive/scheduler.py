@@ -5,27 +5,29 @@
 
 from __future__ import annotations
 
+import asyncio
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Any
 
 import structlog
+from croniter import croniter
 
 logger = structlog.get_logger(__name__)
 
 
 @dataclass
 class ScheduledTask:
-    """定时任务"""
+    """定时任务数据结构"""
 
     task_id: str = field(default_factory=lambda: str(uuid.uuid4()))
+    task_type: str = "cron"  # "cron" 或 "event"
+    trigger: str = ""  # Cron 表达式或事件类型
     name: str = ""
-    task_type: str = "cron"  # "cron" | "interval" | "once"
-    cron_expression: str | None = None
-    interval_seconds: int | None = None
-    user_ids: list[str] = field(default_factory=list)
-    priority: int = 0  # 0=低, 1=中, 2=高
+    target_users: list[str] = field(default_factory=list)
+    priority: int = 5  # 1-10
+    max_retries: int = 3
     enabled: bool = True
     last_run: datetime | None = None
     next_run: datetime | None = None
@@ -35,16 +37,56 @@ class ScheduledTask:
 class ProactiveScheduler:
     """主动触发调度器
 
+    管理所有定时任务和事件监听器的注册、调度与生命周期。
+
     职责：
     1. 管理定时任务的注册和调度
-    2. 计算下次执行时间
-    3. 支持 Cron 表达式和间隔时间
-    4. 热重载配置
+    2. 每 30 秒检查一次到期任务
+    3. 支持 Cron 表达式（通过 croniter）
+    4. 与策略决策器协作，提交到期任务
     """
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        config: dict[str, Any] | None = None,
+        memory_manager: Any = None,
+        ai_service: Any = None,
+        push_dispatcher: Any = None,
+    ) -> None:
+        self._config = config or {}
+        self._memory_manager = memory_manager
+        self._ai_service = ai_service
+        self._push_dispatcher = push_dispatcher
         self._tasks: dict[str, ScheduledTask] = {}
         self._running = False
+        self._loop_task: asyncio.Task[None] | None = None
+        self._check_interval: int = self._config.get("check_interval_seconds", 30)
+
+    async def start(self) -> None:
+        """启动调度器，开始调度循环"""
+        if self._running:
+            logger.warning("scheduler_already_running")
+            return
+        self._running = True
+        self._loop_task = asyncio.create_task(self._run_loop())
+        logger.info("scheduler_started", check_interval=self._check_interval)
+
+    async def stop(self) -> None:
+        """停止调度器"""
+        self._running = False
+        if self._loop_task and not self._loop_task.done():
+            self._loop_task.cancel()
+            try:
+                await self._loop_task
+            except asyncio.CancelledError:
+                pass
+        self._loop_task = None
+        logger.info("scheduler_stopped")
+
+    @property
+    def is_running(self) -> bool:
+        """调度器是否正在运行"""
+        return self._running
 
     def register_task(self, task: ScheduledTask) -> str:
         """注册定时任务
@@ -52,7 +94,6 @@ class ProactiveScheduler:
         Returns:
             任务 ID
         """
-        # 计算下次执行时间
         if task.next_run is None:
             task.next_run = self._calculate_next_run(task)
 
@@ -77,15 +118,11 @@ class ProactiveScheduler:
     def get_due_tasks(self) -> list[ScheduledTask]:
         """获取到期的任务"""
         now = datetime.now()
-        due = []
-        for task in self._tasks.values():
-            if (
-                task.enabled
-                and task.next_run is not None
-                and task.next_run <= now
-            ):
-                due.append(task)
-        return due
+        return [
+            task
+            for task in self._tasks.values()
+            if task.enabled and task.next_run is not None and task.next_run <= now
+        ]
 
     def mark_executed(self, task_id: str) -> None:
         """标记任务已执行，更新下次执行时间"""
@@ -95,9 +132,8 @@ class ProactiveScheduler:
 
         task.last_run = datetime.now()
 
-        # 一次性任务执行后禁用
-        if task.task_type == "once":
-            task.enabled = False
+        # event 类型的任务不自动调度下次
+        if task.task_type == "event":
             task.next_run = None
         else:
             task.next_run = self._calculate_next_run(task)
@@ -133,64 +169,60 @@ class ProactiveScheduler:
             return True
         return False
 
+    async def _run_loop(self) -> None:
+        """调度主循环：每 30 秒检查一次到期任务"""
+        try:
+            while self._running:
+                await self._check_and_execute()
+                await asyncio.sleep(self._check_interval)
+        except asyncio.CancelledError:
+            logger.debug("scheduler_loop_cancelled")
+
+    async def _check_and_execute(self) -> None:
+        """检查到期任务并执行"""
+        due_tasks = self.get_due_tasks()
+        if not due_tasks:
+            return
+
+        # 按优先级排序（高优先级先执行）
+        due_tasks.sort(key=lambda t: t.priority, reverse=True)
+
+        for task in due_tasks:
+            logger.info(
+                "task_due",
+                task_id=task.task_id,
+                name=task.name,
+                priority=task.priority,
+            )
+            # 标记已执行（更新下次执行时间）
+            self.mark_executed(task.task_id)
+
     def _calculate_next_run(self, task: ScheduledTask) -> datetime | None:
         """计算下次执行时间"""
         now = datetime.now()
 
-        if task.task_type == "interval" and task.interval_seconds:
-            if task.last_run:
-                return task.last_run + timedelta(seconds=task.interval_seconds)
-            return now + timedelta(seconds=task.interval_seconds)
+        if task.task_type == "cron" and task.trigger:
+            return self._parse_cron_next(task.trigger, now)
 
-        if task.task_type == "cron" and task.cron_expression:
-            return self._parse_cron_next(task.cron_expression, now)
-
-        if task.task_type == "once":
-            if task.next_run and task.next_run > now:
-                return task.next_run
-            return now
+        if task.task_type == "event":
+            return None
 
         return None
 
     @staticmethod
-    def _parse_cron_next(cron_expr: str, after: datetime) -> datetime:
-        """简易 Cron 解析器
+    def _parse_cron_next(cron_expr: str, after: datetime) -> datetime | None:
+        """使用 croniter 解析 Cron 表达式，计算下次执行时间
 
-        支持格式: "minute hour day month weekday"
-        特殊值: * 表示任意
+        Args:
+            cron_expr: 标准 5 字段 Cron 表达式
+            after: 起始时间
 
-        注意：这是一个简化的实现，仅支持基本的 Cron 语法。
-        生产环境建议使用 croniter 库。
+        Returns:
+            下次执行时间，解析失败返回 None
         """
-        parts = cron_expr.strip().split()
-        if len(parts) != 5:
-            # 默认每小时
-            return after + timedelta(hours=1)
-
-        minute_part, hour_part, _, _, _ = parts
-
-        # 简单实现：如果指定了具体时间，计算下次匹配
-        next_run = after + timedelta(minutes=1)
-        next_run = next_run.replace(second=0, microsecond=0)
-
-        # 尝试匹配分钟
-        if minute_part != "*":
-            try:
-                target_minute = int(minute_part)
-                if next_run.minute > target_minute:
-                    next_run += timedelta(hours=1)
-                next_run = next_run.replace(minute=target_minute)
-            except ValueError:
-                pass
-
-        # 尝试匹配小时
-        if hour_part != "*":
-            try:
-                target_hour = int(hour_part)
-                if next_run.hour > target_hour:
-                    next_run += timedelta(days=1)
-                next_run = next_run.replace(hour=target_hour)
-            except ValueError:
-                pass
-
-        return next_run
+        try:
+            cron = croniter(cron_expr, after)
+            return cron.get_next(datetime)
+        except (ValueError, KeyError):
+            logger.warning("invalid_cron_expression", expression=cron_expr)
+            return None

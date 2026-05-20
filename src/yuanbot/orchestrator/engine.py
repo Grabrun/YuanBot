@@ -2,9 +2,14 @@
 
 核心职责：
 1. 接收用户消息，驱动完整的处理流水线
-2. 意图识别 + 情感分析
-3. 记忆检索 → 上下文组装 → LLM 调用 → 响应生成
-4. 主动交互触发判断
+2. 复用 EmotionEngine 进行情感分析（不再内嵌简化版）
+3. 复用 DialogueDecisionEngine 做出行为决策
+4. 复用 ContextBuilder 组装上下文
+5. 通过 AIService 调用 LLM
+6. 通过 CapabilityOrchestrator 管理工具执行循环
+7. 记忆更新与主动交互触发
+
+设计参考: persona-decision-system.md 第6节决策流水线
 """
 
 from __future__ import annotations
@@ -14,17 +19,20 @@ from typing import Any
 
 import structlog
 
-from yuanbot.core.interfaces import AIProviderAdapter, ChannelAdapter, PersonaProfile
+from yuanbot.core.interfaces import ChannelAdapter, PersonaProfile
 from yuanbot.core.types import (
     BotResponse,
     ContentType,
-    MemorySearchResult,
     Message,
     MessageContent,
     ProactiveTask,
     UserMessage,
 )
 from yuanbot.memory.manager import MemoryManager
+from yuanbot.persona.engines.context_builder import ContextBuilder
+from yuanbot.persona.engines.dialogue_decision import DialogueDecisionEngine
+from yuanbot.services.ai_service import AIService
+from yuanbot.services.capability_orchestrator import CapabilityOrchestrator
 
 logger = structlog.get_logger(__name__)
 
@@ -32,20 +40,34 @@ logger = structlog.get_logger(__name__)
 class OrchestratorEngine:
     """编排引擎 - YuanBot 的大脑
 
-    处理流水线：
-    UserMessage → 意图识别 → 情感分析 → 记忆检索 → 上下文组装 →
-    LLM 推理 → 响应生成 → 记忆更新 → BotResponse
+    完整处理流水线（设计文档 6. 决策流水线）：
+    UserMessage
+      → 意图识别 + 情感分析 (DialogueDecisionEngine)
+      → 记忆检索
+      → 能力加载 (CapabilityOrchestrator)
+      → 上下文组装 (ContextBuilder)
+      → LLM 推理 (AIService)
+      → 工具执行循环 (CapabilityOrchestrator)
+      → 响应生成
+      → 记忆更新
+      → BotResponse
     """
 
     def __init__(
         self,
-        ai_provider: AIProviderAdapter,
+        ai_service: AIService,
         persona: PersonaProfile,
         memory_manager: MemoryManager,
+        decision_engine: DialogueDecisionEngine | None = None,
+        context_builder: ContextBuilder | None = None,
+        capability_orchestrator: CapabilityOrchestrator | None = None,
     ):
-        self._ai_provider = ai_provider
+        self._ai = ai_service
         self._persona = persona
         self._memory = memory_manager
+        self._decision = decision_engine or DialogueDecisionEngine()
+        self._context_builder = context_builder or ContextBuilder(persona)
+        self._capability = capability_orchestrator
         self._channels: dict[str, ChannelAdapter] = {}
 
     # ──────────────────────────────────────────
@@ -53,7 +75,18 @@ class OrchestratorEngine:
     # ──────────────────────────────────────────
 
     async def process_message(self, message: UserMessage) -> BotResponse:
-        """处理用户消息的完整流水线"""
+        """处理用户消息的完整流水线
+
+        按设计文档决策流水线实现：
+        1. 意图识别 + 情感分析
+        2. 记忆检索
+        3. 决策
+        4. 能力加载
+        5. 上下文组装
+        6. LLM 推理 + 工具循环
+        7. 响应生成
+        8. 记忆更新
+        """
         logger.info(
             "processing_message",
             platform=message.platform,
@@ -62,57 +95,118 @@ class OrchestratorEngine:
         )
 
         # 1. 获取或创建用户画像
-        user_profile = await self._memory.get_or_create_user_profile(message.yuanbot_user_id)
+        user_profile = await self._memory.get_or_create_user_profile(
+            message.yuanbot_user_id
+        )
 
-        # 2. 添加到工作记忆
+        # 2. 添加用户消息到工作记忆
         await self._memory.add_working_memory(
             session_id=message.session_id,
             content=f"[用户] {message.text or '[媒体消息]'}",
         )
 
-        # 3. 情感分析（简化版，后续可独立为 EmotionEngine）
-        emotion = await self._analyze_emotion(message.text or "")
-
-        # 4. 情景触发式检索相关记忆
-        relevant_memories, current_emotion = await self._memory.retrieve_relevant_memories(
+        # 3. 情景触发式检索相关记忆
+        relevant_memories, _ = await self._memory.retrieve_relevant_memories(
             user_id=message.yuanbot_user_id,
             current_input=message.text or "",
         )
 
-        # 5. 组装上下文（System Prompt + 记忆 + 工作记忆）
-        system_prompt = await self._build_system_prompt(
+        # 4. 对话决策（复用 DialogueDecisionEngine，含意图+情感分析）
+        decision = await self._decision.decide(
+            text=message.text or "",
+            user_id=message.yuanbot_user_id,
+            session_id=message.session_id,
+        )
+
+        logger.info(
+            "decision_made",
+            intent=decision.intent.primary,
+            strategy=decision.response_strategy,
+            emotion=decision.emotion_state.emotion.value if decision.emotion_state else "unknown",
+            skills=decision.should_use_skills,
+            tools=decision.should_use_tools,
+        )
+
+        # 5. 能力加载（如果 CapabilityOrchestrator 可用）
+        skill_prompts: list[str] = []
+        tool_definitions = []
+        tool_ids = []
+        if self._capability and (decision.should_use_skills or decision.should_use_tools):
+            capabilities = await self._capability.load_capabilities(
+                skill_ids=decision.should_use_skills,
+                tool_ids=decision.should_use_tools,
+                capability_domains=self._persona.get_capability_domains(),
+            )
+            skill_prompts = capabilities.skill_prompts
+            tool_definitions = capabilities.tool_definitions
+            tool_ids = capabilities.tool_ids
+
+        # 6. 组装上下文（复用 ContextBuilder）
+        system_prompt = self._context_builder.build_system_prompt(
             user_profile=user_profile,
             relevant_memories=relevant_memories,
-            emotion=emotion,
+            emotion=decision.emotion_state,
+            response_strategy=decision.response_strategy,
+            extra_sections={
+                f"技能提示[{i}]": prompt
+                for i, prompt in enumerate(skill_prompts)
+            },
         )
 
-        # 6. 获取工作记忆作为对话历史
+        # 7. 获取工作记忆作为对话历史
         working_memory = await self._memory.get_working_memory(message.session_id)
-        messages = self._build_messages(system_prompt, working_memory)
+        messages = self._build_messages(working_memory)
 
-        # 7. 调用 LLM
-        response = await self._ai_provider.chat_completion(
-            messages=messages,
-            system_prompt=system_prompt,
-        )
+        # 8. 调用 LLM（通过 AIService，支持工具执行循环）
+        if tool_definitions and self._capability:
+            # 有工具定义，使用工具执行循环
+            loop_result = await self._capability.execute_tool_loop(
+                messages=messages,
+                tool_definitions=tool_definitions,
+                tool_ids=tool_ids,
+                system_prompt=system_prompt,
+            )
+            response_text = loop_result.final_response
 
-        # 8. 将 AI 回复加入工作记忆
+            # 将工具执行结果记录到工作记忆
+            if loop_result.tool_calls_made > 0:
+                await self._memory.add_working_memory(
+                    session_id=message.session_id,
+                    content=f"[系统] 执行了 {loop_result.tool_calls_made} 个工具调用",
+                )
+        else:
+            # 无工具，直接调用 LLM
+            response = await self._ai.generate(
+                messages=messages,
+                system_prompt=system_prompt,
+            )
+            response_text = response.content or ""
+
+        # 9. 将 AI 回复加入工作记忆
         await self._memory.add_working_memory(
             session_id=message.session_id,
-            content=f"[AI] {response.content}",
+            content=f"[AI] {response_text}",
         )
 
-        # 9. 生成主动跟进任务
+        # 10. 更新情感记录
+        if decision.emotion_state:
+            await self._memory.record_emotion(
+                user_id=message.yuanbot_user_id,
+                session_id=message.session_id,
+                emotion_state=decision.emotion_state,
+            )
+
+        # 11. 生成主动跟进任务
         proactive_tasks = await self._generate_proactive_tasks(
             user_profile=user_profile,
-            emotion=emotion,
+            emotion_state=decision.emotion_state,
         )
 
-        # 10. 构建响应
+        # 12. 构建响应
         bot_response = BotResponse(
             content=MessageContent(
                 content_type=ContentType.TEXT,
-                text=response.content,
+                text=response_text,
             ),
             proactive_followups=proactive_tasks if proactive_tasks else None,
         )
@@ -120,68 +214,21 @@ class OrchestratorEngine:
         logger.info(
             "message_processed",
             user_id=message.yuanbot_user_id,
-            emotion=emotion,
+            strategy=decision.response_strategy,
             memory_count=len(relevant_memories),
+            response_length=len(response_text),
         )
 
         return bot_response
 
     # ──────────────────────────────────────────
-    # 上下文组装
+    # 消息构建
     # ──────────────────────────────────────────
 
-    async def _build_system_prompt(
-        self,
-        user_profile: Any,
-        relevant_memories: list[MemorySearchResult],
-        emotion: str,
-    ) -> str:
-        """组装完整的 System Prompt"""
-        parts = []
-
-        # 基础人设提示词
-        parts.append(self._persona.get_system_prompt())
-
-        # 用户画像信息
-        if user_profile.display_name:
-            parts.append(f"\n[用户信息]\n用户名称: {user_profile.display_name}")
-        if user_profile.preferences:
-            prefs = ", ".join(f"{k}: {v}" for k, v in user_profile.preferences.items())
-            parts.append(f"用户偏好: {prefs}")
-        parts.append(f"关系阶段: {user_profile.relationship_stage}")
-
-        # 记忆提示（情景触发注入）
-        if relevant_memories:
-            memory_section = "\n[记忆提示]\n你回忆起以下与用户相关的过往交流：\n"
-            for result in relevant_memories:
-                node = result.node
-                if node.summary:
-                    memory_section += f"- {node.summary}"
-                elif node.content:
-                    memory_section += f"- {node.content[:100]}"
-                if node.emotional_tone:
-                    memory_section += f"（情感: {node.emotional_tone}）"
-                memory_section += "\n"
-            parts.append(memory_section)
-
-        # 当前情感状态
-        parts.append(f"\n[当前情感分析]\n用户当前情绪: {emotion}")
-
-        # 行为规则
-        rules = self._persona.get_behavior_rules()
-        if rules:
-            parts.append("\n[行为规则]\n" + "\n".join(f"- {r}" for r in rules))
-
-        return "\n".join(parts)
-
-    def _build_messages(
-        self,
-        system_prompt: str,
-        working_memory: list[Any],
-    ) -> list[Message]:
+    @staticmethod
+    def _build_messages(working_memory: list[Any]) -> list[Message]:
         """从工作记忆构建消息列表"""
-        messages = [Message(role="system", content=system_prompt)]
-
+        messages = []
         for node in working_memory:
             content = node.content
             if content.startswith("[用户] "):
@@ -192,32 +239,8 @@ class OrchestratorEngine:
                 messages.append(Message(role="user", content=content[4:].lstrip()))
             elif content.startswith("[AI]"):
                 messages.append(Message(role="assistant", content=content[4:].lstrip()))
-
+            # 跳过 [系统] 消息，不发送给 LLM
         return messages
-
-    # ──────────────────────────────────────────
-    # 情感分析（简化版）
-    # ──────────────────────────────────────────
-
-    async def _analyze_emotion(self, text: str) -> str:
-        """情感分析（简化版，基于关键词匹配）
-
-        后续版本将独立为 EmotionEngine，使用专门的情感分析模型。
-        """
-        positive_words = ["开心", "高兴", "喜欢", "爱", "棒", "好", "哈哈", "嘿嘿", "太好了"]
-        negative_words = ["难过", "伤心", "烦", "讨厌", "累", "压力", "焦虑", "不好", "糟糕"]
-
-        text_lower = text.lower()
-
-        pos_count = sum(1 for w in positive_words if w in text_lower)
-        neg_count = sum(1 for w in negative_words if w in text_lower)
-
-        if pos_count > neg_count:
-            return "positive"
-        elif neg_count > pos_count:
-            return "negative"
-        else:
-            return "neutral"
 
     # ──────────────────────────────────────────
     # 主动交互任务生成
@@ -226,17 +249,16 @@ class OrchestratorEngine:
     async def _generate_proactive_tasks(
         self,
         user_profile: Any,
-        emotion: str,
+        emotion_state: Any | None,
     ) -> list[ProactiveTask]:
         """基于用户状态生成主动交互任务"""
         tasks = []
 
-        # 如果用户情绪低落，生成后续关心任务
-        if emotion == "negative":
+        if emotion_state and emotion_state.needs_immediate_comfort:
             tasks.append(
                 ProactiveTask(
                     task_type="care",
-                    scheduled_at=datetime.now(),  # 立即或短时间后
+                    scheduled_at=datetime.now(),
                     content_hint="用户情绪低落，需要后续关心",
                     priority=2,
                 )

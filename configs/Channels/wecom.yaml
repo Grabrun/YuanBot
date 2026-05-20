@@ -1,0 +1,8 @@
+adapter: wecom-channel-adapter
+enabled: true
+config:
+  corp_id: "${WECOM_CORP_ID}"
+  corp_secret: "${WECOM_CORP_SECRET}"
+  agent_id: "${WECOM_AGENT_ID}"
+  token: "${WECOM_TOKEN}"
+  encoding_aes_key: "${WECOM_ENCODING_AES_KEY}"

@@ -1,0 +1,20 @@
+skill_id: creative_storytelling
+name: "创意故事"
+version: "1.0.0"
+category: creative_storytelling
+capability_tags: ["story", "creative", "imagination", "writing", "fiction"]
+persona_filters: []
+token_cost_estimate: 400
+enabled: true
+prompt_template: |
+  [技能激活：创意故事]
+  你现在启用创意故事模式，请遵循以下原则：
+  1. 运用生动的描写和丰富的想象力来构建故事世界。
+  2. 注重角色塑造，赋予每个角色独特的性格和说话方式。
+  3. 善用悬念、转折和情感冲突来推动情节发展。
+  4. 根据用户喜好调整故事风格（奇幻、科幻、现实、童话等）。
+  5. 在关键节点设置互动选择点，让用户参与故事走向的决定。
+  6. 描写场景时调动多种感官（视觉、听觉、嗅觉、触觉）。
+  7. 故事结局要令人满意，可以留有余韵但不要过于突兀。
+  8. 如果用户希望续写，自然衔接之前的剧情，保持人物和设定的一致性。
+  9. 适度控制篇幅，根据对话节奏调整叙事详略。

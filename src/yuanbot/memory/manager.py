@@ -6,10 +6,19 @@
 3. 记忆生命周期管理（重要性评分、遗忘曲线）
 4. 自主记忆整理（定时固化）
 5. 情感状态追踪
+
+持久化策略：
+- 工作记忆 → 缓存存储（Redis/内存）
+- 事实记忆 → SQLite
+- 情景记忆 → SQLite（元数据）+ 向量存储（embedding）
+- 语义记忆 → SQLite（暂用事实记忆表扩展）
+- 用户画像 → SQLite
+- 情感记录 → SQLite
 """
 
 from __future__ import annotations
 
+import json
 import math
 from datetime import datetime
 from typing import Any
@@ -38,10 +47,21 @@ class MemoryManager:
     - 语义记忆：知识图谱
 
     集成情感追踪系统，实现情感感知的记忆管理。
+
+    支持两种运行模式：
+    1. 纯内存模式（默认，向后兼容）：所有数据存储在内存字典中
+    2. 持久化模式：传入 DatabaseManager，数据持久化到 SQLite/向量存储/缓存
     """
 
-    def __init__(self, config: dict[str, Any] | None = None):
+    def __init__(
+        self,
+        config: dict[str, Any] | None = None,
+        db_manager: Any | None = None,
+    ):
         self._config = config if config is not None else {}
+        self._db = db_manager  # DatabaseManager | None
+
+        # 内存存储（纯内存模式或作为缓存层）
         self._working_memories: dict[str, list[MemoryNode]] = {}  # session_id -> nodes
         self._fact_memories: dict[str, list[MemoryNode]] = {}  # user_id -> nodes
         self._episodic_memories: dict[str, list[MemoryNode]] = {}  # user_id -> nodes
@@ -56,6 +76,11 @@ class MemoryManager:
         self._forget_curve_half_life_days = self._config.get("forget_curve_half_life_days", 14)
         self._consolidation_threshold = self._config.get("consolidation_threshold", 3)
         self._min_importance_threshold = self._config.get("min_importance_threshold", 0.1)
+
+    @property
+    def has_persistence(self) -> bool:
+        """是否启用了持久化存储"""
+        return self._db is not None and self._db.is_initialized
 
     # ──────────────────────────────────────────
     # 工作记忆（第一层：会话级）
@@ -73,39 +98,63 @@ class MemoryManager:
             content=content,
             metadata=metadata or {},
         )
-        if session_id not in self._working_memories:
-            self._working_memories[session_id] = []
 
-        # 检查是否超过最大轮数限制
-        if len(self._working_memories[session_id]) >= self._working_memory_max_turns:
-            # 移除最旧的记忆
-            self._working_memories[session_id].pop(0)
+        if self.has_persistence:
+            # 持久化模式：写入缓存
+            memories = await self._db.cache.get_working_memory(session_id)
+            # 转换为可序列化格式
+            mem_dict = {
+                "id": node.id,
+                "content": node.content,
+                "metadata": node.metadata,
+                "created_at": node.created_at.isoformat(),
+                "last_accessed": node.last_accessed.isoformat(),
+                "access_count": node.access_count,
+                "importance_score": node.importance_score,
+            }
+            memories.append(mem_dict)
 
-        self._working_memories[session_id].append(node)
+            # 检查是否超过最大轮数限制
+            if len(memories) > self._working_memory_max_turns:
+                memories = memories[-self._working_memory_max_turns :]
+
+            await self._db.cache.set_working_memory(session_id, memories)
+        else:
+            # 纯内存模式
+            if session_id not in self._working_memories:
+                self._working_memories[session_id] = []
+
+            if len(self._working_memories[session_id]) >= self._working_memory_max_turns:
+                self._working_memories[session_id].pop(0)
+
+            self._working_memories[session_id].append(node)
+
         logger.debug("working_memory_added", session_id=session_id, node_id=node.id)
         return node
 
     async def get_working_memory(self, session_id: str) -> list[MemoryNode]:
         """获取当前会话的工作记忆"""
+        if self.has_persistence:
+            memories = await self._db.cache.get_working_memory(session_id)
+            return [self._dict_to_memory_node(m, MemoryType.WORKING) for m in memories]
         return self._working_memories.get(session_id, [])
 
     async def get_working_memory_context(self, session_id: str, max_turns: int = 10) -> str:
         """获取工作记忆的文本上下文"""
-        memories = self._working_memories.get(session_id, [])
+        memories = await self.get_working_memory(session_id)
         if not memories:
             return ""
 
-        # 获取最近的对话轮次
         recent_memories = memories[-max_turns:]
-        context_parts = []
-        for mem in recent_memories:
-            context_parts.append(mem.content)
-
+        context_parts = [mem.content for mem in recent_memories]
         return "\n".join(context_parts)
 
     async def clear_working_memory(self, session_id: str) -> None:
         """清除会话的工作记忆"""
-        self._working_memories.pop(session_id, None)
+        if self.has_persistence:
+            await self._db.cache.clear_working_memory(session_id)
+        else:
+            self._working_memories.pop(session_id, None)
 
     async def archive_working_memory(
         self,
@@ -116,7 +165,7 @@ class MemoryManager:
 
         会话结束时调用，将工作记忆总结为情景记忆。
         """
-        working_memories = self._working_memories.get(session_id, [])
+        working_memories = await self.get_working_memory(session_id)
         if not working_memories:
             return None
 
@@ -183,11 +232,9 @@ class MemoryManager:
                 else "explicit_statement",
             },
         )
-        if user_id not in self._fact_memories:
-            self._fact_memories[user_id] = []
 
         # 检查是否已存在相似的事实（避免重复）
-        existing_facts = self._fact_memories[user_id]
+        existing_facts = await self.get_fact_memories(user_id)
         for existing in existing_facts:
             if self._is_similar_fact(existing, node):
                 # 更新现有事实
@@ -195,10 +242,19 @@ class MemoryManager:
                 existing.importance_score = max(existing.importance_score, importance)
                 existing.last_accessed = datetime.now()
                 existing.access_count += 1
+
+                if self.has_persistence:
+                    await self._persist_fact_memory(user_id, existing)
+
                 logger.info("fact_memory_updated", user_id=user_id, node_id=existing.id)
                 return existing
 
-        self._fact_memories[user_id].append(node)
+        if self.has_persistence:
+            await self._persist_fact_memory(user_id, node)
+        else:
+            if user_id not in self._fact_memories:
+                self._fact_memories[user_id] = []
+            self._fact_memories[user_id].append(node)
 
         # 同步更新用户画像
         await self._update_user_profile_from_fact(user_id, content, key_entities)
@@ -212,6 +268,9 @@ class MemoryManager:
         category: str | None = None,
     ) -> list[MemoryNode]:
         """获取用户的事实记忆"""
+        if self.has_persistence:
+            rows = await self._db.sqlite.get_fact_memories(user_id, category)
+            return [self._row_to_fact_memory_node(row) for row in rows]
         memories = self._fact_memories.get(user_id, [])
         if category:
             memories = [m for m in memories if m.metadata.get("category") == category]
@@ -221,18 +280,17 @@ class MemoryManager:
         """获取用户事实记忆的摘要"""
         facts = await self.get_fact_memories(user_id)
 
-        # 按类别组织
         categorized: dict[str, list[str]] = {}
         for fact in facts:
-            category = fact.metadata.get("category", "general")
-            if category not in categorized:
-                categorized[category] = []
-            categorized[category].append(fact.content)
+            cat = fact.metadata.get("category", "general")
+            if cat not in categorized:
+                categorized[cat] = []
+            categorized[cat].append(fact.content)
 
         return {
             "total_facts": len(facts),
             "categories": categorized,
-            "recent_facts": [f.content for f in facts[-5:]],  # 最近5条
+            "recent_facts": [f.content for f in facts[-5:]],
         }
 
     # ──────────────────────────────────────────
@@ -266,9 +324,39 @@ class MemoryManager:
                 "date": datetime.now().strftime("%Y-%m-%d"),
             },
         )
-        if user_id not in self._episodic_memories:
-            self._episodic_memories[user_id] = []
-        self._episodic_memories[user_id].append(node)
+
+        if self.has_persistence:
+            # 保存元数据到 SQLite
+            await self._db.sqlite.save_episodic_metadata(
+                id=node.id,
+                user_id=user_id,
+                session_id=node.metadata.get("session_id", "unknown"),
+                date=node.metadata["date"],
+                time_of_day=node.metadata.get("time_of_day"),
+                topic=", ".join(node.topic_tags) if node.topic_tags else None,
+                summary=node.summary,
+                emotional_tone=node.emotional_tone,
+                key_entities=node.key_entities,
+                importance=node.importance_score,
+            )
+
+            # 保存向量到向量存储
+            if embedding:
+                await self._db.vector.add_vector(
+                    id=node.id,
+                    vector=embedding,
+                    metadata={"user_id": user_id, "type": "episodic"},
+                )
+
+            # 同时缓存在内存中以保持兼容性
+            if user_id not in self._episodic_memories:
+                self._episodic_memories[user_id] = []
+            self._episodic_memories[user_id].append(node)
+        else:
+            if user_id not in self._episodic_memories:
+                self._episodic_memories[user_id] = []
+            self._episodic_memories[user_id].append(node)
+
         logger.info("episodic_memory_added", user_id=user_id, summary=summary[:50])
         return node
 
@@ -279,6 +367,14 @@ class MemoryManager:
         topic: str | None = None,
     ) -> list[MemoryNode]:
         """获取情景记忆"""
+        if self.has_persistence:
+            date_from = date_range[0].strftime("%Y-%m-%d") if date_range else None
+            date_to = date_range[1].strftime("%Y-%m-%d") if date_range else None
+            rows = await self._db.sqlite.get_episodic_metadata(
+                user_id, date_from=date_from, date_to=date_to, topic=topic
+            )
+            return [self._row_to_episodic_memory_node(row) for row in rows]
+
         memories = self._episodic_memories.get(user_id, [])
 
         if date_range:
@@ -306,21 +402,71 @@ class MemoryManager:
         relation_type: str,
         importance: float = 0.8,
     ) -> MemoryNode:
-        """添加语义记忆（从长期交互中提炼的深层认知）"""
+        """添加语义记忆（从长期交互中提炼的深层认知）
+
+        同时写入 SQLite 和知识图谱。
+        """
         node = MemoryNode(
             memory_type=MemoryType.SEMANTIC,
             content=content,
             importance_score=importance,
             metadata={"relation_type": relation_type},
         )
+
+        if self.has_persistence:
+            # 语义记忆暂存入事实记忆表，category 为 "semantic"
+            await self._db.sqlite.save_fact_memory(
+                id=node.id,
+                user_id=user_id,
+                category="semantic",
+                key=relation_type,
+                value=content,
+                importance=importance,
+                source="semantic_extraction",
+                metadata={"relation_type": relation_type},
+            )
+
+            # 写入知识图谱
+            if self._db.graph:
+                try:
+                    await self._db.graph.add_node(
+                        node_id=node.id,
+                        node_type="SemanticMemory",
+                        properties={
+                            "content": content,
+                            "relation_type": relation_type,
+                            "importance": str(importance),
+                        },
+                    )
+                    await self._db.graph.add_edge(
+                        source_id=user_id,
+                        target_id=node.id,
+                        edge_type="HAS_MEMORY",
+                    )
+                except Exception as e:
+                    logger.debug("graph_semantic_memory_failed", error=str(e))
+
         if user_id not in self._semantic_memories:
             self._semantic_memories[user_id] = []
         self._semantic_memories[user_id].append(node)
+
         logger.info("semantic_memory_added", user_id=user_id, relation_type=relation_type)
         return node
 
     async def get_semantic_memories(self, user_id: str) -> list[MemoryNode]:
         """获取语义记忆"""
+        if self.has_persistence:
+            rows = await self._db.sqlite.get_fact_memories(user_id, category="semantic")
+            return [
+                MemoryNode(
+                    id=row["id"],
+                    memory_type=MemoryType.SEMANTIC,
+                    content=row["value"],
+                    importance_score=row.get("importance", 0.8),
+                    metadata={"relation_type": row.get("key", "unknown")},
+                )
+                for row in rows
+            ]
         return self._semantic_memories.get(user_id, [])
 
     # ──────────────────────────────────────────
@@ -350,22 +496,39 @@ class MemoryManager:
             current_emotion = await self._emotion_tracker.analyze_emotion(
                 text=current_input,
                 user_id=user_id,
-                session_id="current",  # 临时会话ID
+                session_id="current",
             )
 
         # 获取用户所有记忆
-        episodic = self._episodic_memories.get(user_id, [])
-        fact = self._fact_memories.get(user_id, [])
-        semantic = self._semantic_memories.get(user_id, [])
+        episodic = await self.get_episodic_memories(user_id)
+        fact = await self.get_fact_memories(user_id)
+        semantic = await self.get_semantic_memories(user_id)
 
         all_memories = episodic + fact + semantic
+
+        # 如果有向量存储且有 embedding，先进行向量检索
+        vector_results: dict[str, float] = {}
+        if self.has_persistence and current_embedding:
+            try:
+                similar = await self._db.vector.search_similar(
+                    query_vector=current_embedding,
+                    top_k=max_results * 2,
+                    threshold=0.5,
+                )
+                for item in similar:
+                    vector_results[item["id"]] = item["score"]
+            except Exception as e:
+                logger.debug("vector_search_fallback", error=str(e))
 
         for node in all_memories:
             score = 0.0
             match_type = "unknown"
 
-            # 路径 1: 语义相似度（如果有 embedding）
-            if current_embedding and node.embedding:
+            # 路径 1: 语义相似度（向量检索结果或本地计算）
+            if node.id in vector_results:
+                score = vector_results[node.id]
+                match_type = "semantic"
+            elif current_embedding and node.embedding:
                 sim = self._cosine_similarity(current_embedding, node.embedding)
                 if sim > 0.7:
                     score = sim
@@ -385,7 +548,7 @@ class MemoryManager:
                     score = topic_score * 0.8
                     match_type = "keyword"
 
-            # 路径 4: 情感匹配（如果当前有情感状态）
+            # 路径 4: 情感匹配
             if score == 0 and current_emotion and node.emotional_tone:
                 emotion_score = self._emotion_match_score(current_emotion, node.emotional_tone)
                 if emotion_score > 0:
@@ -393,7 +556,6 @@ class MemoryManager:
                     match_type = "emotional"
 
             if score > 0:
-                # 结合重要性评分
                 final_score = score * 0.7 + node.importance_score * 0.3
                 results.append(
                     MemorySearchResult(
@@ -407,7 +569,13 @@ class MemoryManager:
                 node.last_accessed = datetime.now()
                 node.access_count += 1
 
-        # 按分数排序，返回 Top-K
+                # 持久化访问计数更新
+                if self.has_persistence and node.memory_type == MemoryType.EPISODIC:
+                    try:
+                        await self._db.sqlite.update_episodic_access(node.id)
+                    except Exception:
+                        pass
+
         results.sort(key=lambda r: r.score, reverse=True)
         return results[:max_results], current_emotion
 
@@ -428,18 +596,23 @@ class MemoryManager:
             survived = []
 
             for node in memories:
-                # 计算时间衰减
                 days_since_access = (now - node.last_accessed).days
-                decay_factor = math.exp(-0.05 * days_since_access)  # 半衰期约 14 天
+                decay_factor = math.exp(-0.05 * days_since_access)
 
-                # 结合访问频率的强化
                 boost = min(node.access_count * 0.1, 0.5)
                 effective_score = node.importance_score * (decay_factor + boost)
 
-                if effective_score > self._min_importance_threshold:  # 阈值以下淘汰
+                if effective_score > self._min_importance_threshold:
                     survived.append(node)
                 else:
                     removed += 1
+                    # 持久化删除
+                    if self.has_persistence and memory_type_key == "episodic":
+                        try:
+                            await self._db.sqlite.delete_episodic_metadata(node.id)
+                            await self._db.vector.delete_vector(node.id)
+                        except Exception:
+                            pass
                     logger.info(
                         "memory_forgotten",
                         node_id=node.id,
@@ -459,9 +632,8 @@ class MemoryManager:
         """
         stats = {"upgraded": 0, "merged": 0, "removed": 0}
 
-        episodic = self._episodic_memories.get(user_id, [])
+        episodic = await self.get_episodic_memories(user_id)
 
-        # 分析重复出现的话题
         topic_counts: dict[str, list[MemoryNode]] = {}
         for node in episodic:
             for tag in node.topic_tags:
@@ -469,11 +641,9 @@ class MemoryManager:
                     topic_counts[tag] = []
                 topic_counts[tag].append(node)
 
-        # 高频话题（出现 >= 3 次）的情景记忆升级为事实记忆
         removed_ids: set[str] = set()
         for topic, nodes in topic_counts.items():
             if len(nodes) >= self._consolidation_threshold:
-                # 合并为一条事实记忆
                 combined_content = f"用户多次提及{topic}（共{len(nodes)}次）"
                 await self.add_fact_memory(
                     user_id=user_id,
@@ -484,17 +654,24 @@ class MemoryManager:
                     category="habit",
                 )
                 stats["upgraded"] += 1
-                # 标记已合并的情景记忆
                 for node in nodes:
                     removed_ids.add(node.id)
 
-        # 移除已合并的情景记忆
         if removed_ids:
             original_count = len(self._episodic_memories.get(user_id, []))
             self._episodic_memories[user_id] = [
                 n for n in self._episodic_memories.get(user_id, []) if n.id not in removed_ids
             ]
             stats["removed"] = original_count - len(self._episodic_memories[user_id])
+
+            # 持久化删除
+            if self.has_persistence:
+                for rid in removed_ids:
+                    try:
+                        await self._db.sqlite.delete_episodic_metadata(rid)
+                        await self._db.vector.delete_vector(rid)
+                    except Exception:
+                        pass
 
         logger.info("memory_consolidation", user_id=user_id, **stats)
         return stats
@@ -510,7 +687,32 @@ class MemoryManager:
         session_id: str,
     ) -> EmotionState:
         """分析情感（代理到情感追踪器）"""
-        return await self._emotion_tracker.analyze_emotion(text, user_id, session_id)
+        emotion_state = await self._emotion_tracker.analyze_emotion(text, user_id, session_id)
+
+        # 持久化情感记录
+        if self.has_persistence:
+            try:
+                record = self._emotion_tracker._records[user_id][-1]
+                await self._db.sqlite.save_emotion_record(
+                    id=record.id,
+                    user_id=user_id,
+                    session_id=session_id,
+                    emotion=emotion_state.emotion.value,
+                    intensity=emotion_state.intensity,
+                    valence=emotion_state.valence,
+                    arousal=emotion_state.arousal,
+                    dominance=emotion_state.dominance,
+                    needs_immediate_comfort=emotion_state.needs_immediate_comfort,
+                    confidence=emotion_state.confidence,
+                    trigger_text=record.trigger_text,
+                    context_summary=record.context_summary,
+                    analysis_method=record.analysis_method,
+                    raw_scores=record.raw_scores,
+                )
+            except Exception as e:
+                logger.debug("emotion_record_persist_failed", error=str(e))
+
+        return emotion_state
 
     async def get_emotion_trend(self, user_id: str, days: int = 7):
         """获取情感趋势"""
@@ -524,12 +726,93 @@ class MemoryManager:
         """获取安慰建议"""
         return await self._emotion_tracker.get_comfort_suggestions(user_id, current_emotion)
 
+    async def record_emotion(
+        self,
+        user_id: str,
+        session_id: str,
+        emotion_state: EmotionState,
+    ) -> None:
+        """记录情感状态到情感追踪器
+
+        由编排引擎在每次对话后调用，确保情感趋势数据的完整性。
+        """
+        # 情感追踪器在 analyze_emotion 时已经自动记录，
+        # 此方法提供一个显式接口供编排引擎调用
+        logger.debug(
+            "emotion_recorded",
+            user_id=user_id,
+            session_id=session_id,
+            emotion=emotion_state.emotion.value,
+            intensity=emotion_state.intensity,
+        )
+
+    async def get_user_proactive_settings(
+        self,
+        user_id: str,
+    ) -> dict[str, Any]:
+        """获取用户的主动交互个性化配置
+
+        设计参考: proactive-companion-system.md 4.1
+        """
+        default_settings = {
+            "proactive_greeting_enabled": True,
+            "proactive_frequency": "medium",
+            "quiet_hours": ["23:00-07:00"],
+            "max_proactive_per_day": 5,
+            "event_trigger_enabled": True,
+            "custom_wake_up_time": None,
+            "custom_sleep_time": None,
+            "important_dates": [],
+        }
+
+        if self.has_persistence:
+            try:
+                row = await self._db.sqlite.get_user_proactive_settings(user_id)
+                if row:
+                    default_settings.update(row)
+            except Exception:
+                pass  # 表可能不存在
+
+        return default_settings
+
+    async def update_user_proactive_settings(
+        self,
+        user_id: str,
+        settings: dict[str, Any],
+    ) -> None:
+        """更新用户的主动交互个性化配置"""
+        if self.has_persistence:
+            try:
+                await self._db.sqlite.save_user_proactive_settings(user_id, settings)
+            except Exception as e:
+                logger.warning("proactive_settings_save_failed", error=str(e))
+
     # ──────────────────────────────────────────
     # 用户画像管理
     # ──────────────────────────────────────────
 
     async def get_or_create_user_profile(self, user_id: str) -> UserProfile:
         """获取或创建用户画像"""
+        if self.has_persistence:
+            row = await self._db.sqlite.get_user_profile(user_id)
+            if row:
+                profile = self._row_to_user_profile(row)
+                profile.last_interaction = datetime.now()
+                profile.total_interactions += 1
+                await self._persist_user_profile(profile)
+                return profile
+
+            # 创建新画像
+            profile = UserProfile(
+                user_id=user_id,
+                first_interaction=datetime.now(),
+            )
+            profile.last_interaction = datetime.now()
+            profile.total_interactions = 1
+            await self._persist_user_profile(profile)
+            return profile
+
+        # 纯内存模式
         if user_id not in self._user_profiles:
             self._user_profiles[user_id] = UserProfile(
                 user_id=user_id,
@@ -548,54 +831,51 @@ class MemoryManager:
         """更新关系阶段"""
         profile = await self.get_or_create_user_profile(user_id)
         profile.relationship_stage = stage
+
+        if self.has_persistence:
+            await self._persist_user_profile(profile)
+
         logger.info("relationship_updated", user_id=user_id, stage=stage)
 
     async def calculate_trust_score(self, user_id: str) -> float:
         """计算信任度分数"""
         profile = await self.get_or_create_user_profile(user_id)
 
-        # 基于多个因素计算信任度
         factors = []
 
         # 1. 交互天数
         if profile.first_interaction:
             interaction_days = (datetime.now() - profile.first_interaction).days
-            days_score = min(interaction_days / 90, 1.0)  # 90天达到最大
+            days_score = min(interaction_days / 90, 1.0)
             factors.append(days_score * 0.3)
 
         # 2. 交互频率
         if profile.total_interactions > 0:
-            frequency_score = min(profile.total_interactions / 100, 1.0)  # 100次交互达到最大
+            frequency_score = min(profile.total_interactions / 100, 1.0)
             factors.append(frequency_score * 0.2)
 
-        # 3. 情感深度（基于情感记录）
+        # 3. 情感深度
         emotion_records = self._emotion_tracker._records.get(user_id, [])
         if emotion_records:
-            # 统计深度情感（悲伤、恐惧、愤怒等）的出现次数
             deep_emotions = sum(
                 1
                 for r in emotion_records
                 if r.emotion_state.emotion.value in ["sadness", "fear", "anger"]
             )
-            depth_score = min(deep_emotions / 10, 1.0)  # 10次深度情感达到最大
+            depth_score = min(deep_emotions / 10, 1.0)
             factors.append(depth_score * 0.3)
 
         # 4. 记忆丰富度
-        total_memories = (
-            len(self._fact_memories.get(user_id, []))
-            + len(self._episodic_memories.get(user_id, []))
-            + len(self._semantic_memories.get(user_id, []))
-        )
-        memory_score = min(total_memories / 50, 1.0)  # 50条记忆达到最大
+        fact_count = len(await self.get_fact_memories(user_id))
+        episodic_count = len(await self.get_episodic_memories(user_id))
+        semantic_count = len(await self.get_semantic_memories(user_id))
+        total_memories = fact_count + episodic_count + semantic_count
+        memory_score = min(total_memories / 50, 1.0)
         factors.append(memory_score * 0.2)
 
-        # 计算总分
         trust_score = sum(factors) if factors else 0.0
-
-        # 更新用户画像
         profile.trust_score = trust_score
 
-        # 根据信任度更新关系阶段
         if trust_score >= 0.8:
             await self.update_relationship_stage(user_id, "deep")
         elif trust_score >= 0.6:
@@ -615,13 +895,211 @@ class MemoryManager:
         """获取记忆统计信息"""
         return {
             "working_memory_sessions": len(self._working_memories),
-            "fact_memories": len(self._fact_memories.get(user_id, [])),
-            "episodic_memories": len(self._episodic_memories.get(user_id, [])),
-            "semantic_memories": len(self._semantic_memories.get(user_id, [])),
+            "fact_memories": len(await self.get_fact_memories(user_id)),
+            "episodic_memories": len(await self.get_episodic_memories(user_id)),
+            "semantic_memories": len(await self.get_semantic_memories(user_id)),
             "emotion_records": len(self._emotion_tracker._records.get(user_id, [])),
             "emotion_patterns": len(self._emotion_tracker._patterns.get(user_id, [])),
-            "user_profile": self._user_profiles.get(user_id),
+            "user_profile": await self.get_or_create_user_profile(user_id)
+            if self.has_persistence
+            else self._user_profiles.get(user_id),
         }
+
+    # ──────────────────────────────────────────
+    # 持久化辅助方法
+    # ──────────────────────────────────────────
+
+    async def _persist_fact_memory(self, user_id: str, node: MemoryNode) -> None:
+        """持久化事实记忆到 SQLite"""
+        await self._db.sqlite.save_fact_memory(
+            id=node.id,
+            user_id=user_id,
+            category=node.metadata.get("category", "general"),
+            key=node.key_entities[0] if node.key_entities else "general",
+            value=node.content,
+            confidence=node.metadata.get("confidence", 1.0),
+            source=node.metadata.get("source", "explicit_statement"),
+            importance=node.importance_score,
+            metadata=node.metadata,
+        )
+
+    async def _persist_user_profile(self, profile: UserProfile) -> None:
+        """持久化用户画像到 SQLite"""
+        fi = profile.first_interaction
+        li = profile.last_interaction
+        await self._db.sqlite.save_user_profile(
+            user_id=profile.user_id,
+            display_name=profile.display_name,
+            preferences=profile.preferences,
+            relationship_stage=profile.relationship_stage,
+            trust_score=profile.trust_score,
+            total_interactions=profile.total_interactions,
+            first_interaction=fi.timestamp() if fi else None,
+            last_interaction=li.timestamp() if li else None,
+            typical_mood_patterns=profile.typical_mood_patterns,
+            platform_ids=profile.platform_ids,
+            metadata=profile.metadata,
+        )
+
+    @staticmethod
+    def _row_to_fact_memory_node(row: dict[str, Any]) -> MemoryNode:
+        """将数据库行转换为事实记忆节点"""
+        metadata = {}
+        raw_meta = row.get("metadata", "{}")
+        if isinstance(raw_meta, str):
+            try:
+                metadata = json.loads(raw_meta)
+            except (json.JSONDecodeError, TypeError):
+                metadata = {}
+        elif isinstance(raw_meta, dict):
+            metadata = raw_meta
+
+        metadata["category"] = row.get("category", "general")
+        metadata["confidence"] = row.get("confidence", 1.0)
+        metadata["source"] = row.get("source", "explicit_statement")
+
+        return MemoryNode(
+            id=row["id"],
+            memory_type=MemoryType.FACT,
+            content=row["value"],
+            key_entities=[],  # fact_memories 表无 key_entities 字段，存于 metadata
+            importance_score=row.get("importance", 0.5),
+            access_count=row.get("access_count", 0),
+            metadata=metadata,
+        )
+
+    @staticmethod
+    def _row_to_episodic_memory_node(row: dict[str, Any]) -> MemoryNode:
+        """将数据库行转换为情景记忆节点"""
+        key_entities = []
+        raw_entities = row.get("key_entities", "[]")
+        if isinstance(raw_entities, str):
+            try:
+                key_entities = json.loads(raw_entities)
+            except (json.JSONDecodeError, TypeError):
+                key_entities = []
+        elif isinstance(raw_entities, list):
+            key_entities = raw_entities
+
+        topic_tags = []
+        topic = row.get("topic", "")
+        if topic:
+            topic_tags = [t.strip() for t in topic.split(",") if t.strip()]
+
+        created_at_ts = row.get("created_at")
+        created_at = datetime.fromtimestamp(created_at_ts) if created_at_ts else datetime.now()
+
+        last_accessed_ts = row.get("last_accessed_at")
+        last_accessed = datetime.fromtimestamp(last_accessed_ts) if last_accessed_ts else created_at
+
+        metadata = {
+            "date": row.get("date", ""),
+            "time_of_day": row.get("time_of_day", ""),
+        }
+
+        return MemoryNode(
+            id=row["id"],
+            memory_type=MemoryType.EPISODIC,
+            content=row.get("summary", ""),
+            summary=row.get("summary", ""),
+            topic_tags=topic_tags,
+            emotional_tone=row.get("emotional_tone"),
+            key_entities=key_entities,
+            importance_score=row.get("importance", 0.5),
+            access_count=row.get("access_count", 0),
+            created_at=created_at,
+            last_accessed=last_accessed,
+            metadata=metadata,
+        )
+
+    @staticmethod
+    def _row_to_user_profile(row: dict[str, Any]) -> UserProfile:
+        """将数据库行转换为用户画像"""
+        preferences = {}
+        raw_prefs = row.get("preferences", "{}")
+        if isinstance(raw_prefs, str):
+            try:
+                preferences = json.loads(raw_prefs)
+            except (json.JSONDecodeError, TypeError):
+                preferences = {}
+        elif isinstance(raw_prefs, dict):
+            preferences = raw_prefs
+
+        mood_patterns = {}
+        raw_mood = row.get("typical_mood_patterns", "{}")
+        if isinstance(raw_mood, str):
+            try:
+                mood_patterns = json.loads(raw_mood)
+            except (json.JSONDecodeError, TypeError):
+                mood_patterns = {}
+        elif isinstance(raw_mood, dict):
+            mood_patterns = raw_mood
+
+        platform_ids = {}
+        raw_pids = row.get("platform_ids", "{}")
+        if isinstance(raw_pids, str):
+            try:
+                platform_ids = json.loads(raw_pids)
+            except (json.JSONDecodeError, TypeError):
+                platform_ids = {}
+        elif isinstance(raw_pids, dict):
+            platform_ids = raw_pids
+
+        metadata = {}
+        raw_meta = row.get("metadata", "{}")
+        if isinstance(raw_meta, str):
+            try:
+                metadata = json.loads(raw_meta)
+            except (json.JSONDecodeError, TypeError):
+                metadata = {}
+        elif isinstance(raw_meta, dict):
+            metadata = raw_meta
+
+        fi_ts = row.get("first_interaction")
+        li_ts = row.get("last_interaction")
+
+        return UserProfile(
+            user_id=row["user_id"],
+            display_name=row.get("display_name"),
+            preferences=preferences,
+            relationship_stage=row.get("relationship_stage", "initial"),
+            trust_score=row.get("trust_score", 0.0),
+            total_interactions=row.get("total_interactions", 0),
+            first_interaction=datetime.fromtimestamp(fi_ts) if fi_ts else None,
+            last_interaction=datetime.fromtimestamp(li_ts) if li_ts else None,
+            typical_mood_patterns=mood_patterns,
+            platform_ids=platform_ids,
+            metadata=metadata,
+        )
+
+    @staticmethod
+    def _dict_to_memory_node(
+        data: dict[str, Any],
+        memory_type: MemoryType,
+    ) -> MemoryNode:
+        """将字典转换为 MemoryNode（用于缓存反序列化）"""
+        created_at = data.get("created_at")
+        if isinstance(created_at, str):
+            created_at = datetime.fromisoformat(created_at)
+        else:
+            created_at = datetime.now()
+
+        last_accessed = data.get("last_accessed")
+        if isinstance(last_accessed, str):
+            last_accessed = datetime.fromisoformat(last_accessed)
+        else:
+            last_accessed = datetime.now()
+
+        return MemoryNode(
+            id=data.get("id", ""),
+            memory_type=memory_type,
+            content=data.get("content", ""),
+            created_at=created_at,
+            last_accessed=last_accessed,
+            access_count=data.get("access_count", 0),
+            importance_score=data.get("importance_score", 0.5),
+            metadata=data.get("metadata", {}),
+        )
 
     # ──────────────────────────────────────────
     # 内部辅助方法
@@ -635,18 +1113,19 @@ class MemoryManager:
     ) -> None:
         """从事实记忆中更新用户画像"""
         profile = await self.get_or_create_user_profile(user_id)
-        # 简单实现：将实体作为偏好记录
         if entities:
             for entity in entities:
                 if entity not in profile.preferences:
                     profile.preferences[entity] = content
+
+        if self.has_persistence:
+            await self._persist_user_profile(profile)
 
     async def _generate_session_summary(self, memories: list[MemoryNode]) -> str:
         """生成会话摘要"""
         if not memories:
             return "空会话"
 
-        # 提取关键内容
         key_contents = []
         for mem in memories:
             if mem.content and len(mem.content) > 10:
@@ -655,7 +1134,6 @@ class MemoryManager:
         if not key_contents:
             return "简短对话"
 
-        # 简化实现：取前3条有内容的记忆
         summary_parts = key_contents[:3]
         return "会话摘要：" + "；".join(summary_parts)
 
@@ -664,21 +1142,19 @@ class MemoryManager:
         entities = set()
         for mem in memories:
             entities.update(mem.key_entities)
-        return list(entities)[:10]  # 最多10个实体
+        return list(entities)[:10]
 
     def _extract_topics_from_memories(self, memories: list[MemoryNode]) -> list[str]:
         """从记忆中提取话题标签"""
         topics = set()
         for mem in memories:
             topics.update(mem.topic_tags)
-        return list(topics)[:5]  # 最多5个话题
+        return list(topics)[:5]
 
     def _is_similar_fact(self, existing: MemoryNode, new_node: MemoryNode) -> bool:
         """检查是否是相似的事实"""
-        # 简化实现：检查关键实体是否重叠
         if not existing.key_entities or not new_node.key_entities:
             return False
-
         common_entities = set(existing.key_entities) & set(new_node.key_entities)
         return len(common_entities) > 0
 
@@ -687,11 +1163,9 @@ class MemoryManager:
         if not memory_emotion:
             return 0.0
 
-        # 情感相同或相似时给予高分
         if current_emotion.emotion.value == memory_emotion:
             return 1.0
 
-        # 情感效价相同给予部分分数
         positive_emotions = {"joy", "trust", "anticipation"}
         negative_emotions = {"sadness", "anger", "fear", "disgust"}
 

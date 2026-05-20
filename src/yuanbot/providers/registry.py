@@ -19,6 +19,10 @@ _BUILTIN_ADAPTERS: dict[str, str] = {
     "openai-adapter": "yuanbot.adapters.ai.openai_adapter.OpenAIAdapter",
     "anthropic": "yuanbot.adapters.ai.anthropic_adapter.AnthropicAdapter",
     "claude-adapter": "yuanbot.adapters.ai.anthropic_adapter.AnthropicAdapter",
+    "deepseek": "yuanbot.adapters.ai.deepseek_adapter.DeepSeekAdapter",
+    "deepseek-adapter": "yuanbot.adapters.ai.deepseek_adapter.DeepSeekAdapter",
+    "ollama": "yuanbot.adapters.ai.ollama_adapter.OllamaAdapter",
+    "ollama-adapter": "yuanbot.adapters.ai.ollama_adapter.OllamaAdapter",
 }
 
 
@@ -39,12 +43,18 @@ class ProviderRegistry:
         """注册内置适配器"""
         # 延迟导入，避免循环依赖
         from yuanbot.adapters.ai.anthropic_adapter import AnthropicAdapter
+        from yuanbot.adapters.ai.deepseek_adapter import DeepSeekAdapter
+        from yuanbot.adapters.ai.ollama_adapter import OllamaAdapter
         from yuanbot.adapters.ai.openai_adapter import OpenAIAdapter
 
         self._adapter_classes["openai"] = OpenAIAdapter
         self._adapter_classes["openai-adapter"] = OpenAIAdapter
         self._adapter_classes["anthropic"] = AnthropicAdapter
         self._adapter_classes["claude-adapter"] = AnthropicAdapter
+        self._adapter_classes["deepseek"] = DeepSeekAdapter
+        self._adapter_classes["deepseek-adapter"] = DeepSeekAdapter
+        self._adapter_classes["ollama"] = OllamaAdapter
+        self._adapter_classes["ollama-adapter"] = OllamaAdapter
 
     def register(self, adapter_id: str, adapter_class: type[AIProviderAdapter]) -> None:
         """注册自定义适配器"""

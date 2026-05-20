@@ -1,0 +1,12 @@
+# Telegram 通道配置
+
+platform: "telegram"
+display_name: "Telegram"
+enabled: true
+
+# Bot 配置
+config:
+  bot_token: "${YUAN_TELEGRAM_BOT_TOKEN}"
+  webhook_url: null  # 留空使用 polling 模式
+  parse_mode: "Markdown"
+  allowed_users: []  # 空列表表示允许所有用户

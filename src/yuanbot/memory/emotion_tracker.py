@@ -321,7 +321,7 @@ class EmotionTracker:
                 # 提取关键词
                 keywords = self._extract_keywords(text)
                 if keywords:
-                    keywords_str = ', '.join(keywords[:3])
+                    keywords_str = ", ".join(keywords[:3])
                     emotion_val = emotion_state.emotion.value
                     desc = f"用户在讨论{keywords_str}时倾向于{emotion_val}"
                     new_pattern = EmotionPattern(

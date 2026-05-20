@@ -128,12 +128,12 @@ class TestProviderManager:
 
     def test_get_enabled_providers(self):
         manager = ProviderManager()
-        manager.register_provider(ProviderConfig(
-            provider_id="openai", adapter="openai", enabled=True
-        ))
-        manager.register_provider(ProviderConfig(
-            provider_id="anthropic", adapter="anthropic", enabled=False
-        ))
+        manager.register_provider(
+            ProviderConfig(provider_id="openai", adapter="openai", enabled=True)
+        )
+        manager.register_provider(
+            ProviderConfig(provider_id="anthropic", adapter="anthropic", enabled=False)
+        )
         enabled = manager.get_enabled_providers()
         assert len(enabled) == 1
         assert enabled[0].provider_id == "openai"

@@ -94,10 +94,7 @@ class IdentityService:
     def get_linked_platforms(self, yuanbot_user_id: str) -> list[dict[str, str]]:
         """获取用户关联的所有平台账号"""
         keys = self._reverse_map.get(yuanbot_user_id, set())
-        return [
-            {"platform": platform, "platform_user_id": pid}
-            for platform, pid in keys
-        ]
+        return [{"platform": platform, "platform_user_id": pid} for platform, pid in keys]
 
     def get_all_identities(self) -> dict[str, Any]:
         """获取所有身份映射（用于调试和管理）"""

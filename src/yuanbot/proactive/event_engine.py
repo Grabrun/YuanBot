@@ -1,20 +1,25 @@
 """事件监听引擎
 
-监听外部事件（天气、节日）和内部状态（用户静默、情绪趋势），
-自动触发主动交互。
+监听外部和内部事件，在条件满足时触发主动交互。
+支持用户静默检测、情感告警等事件。
 """
 
 from __future__ import annotations
 
+import asyncio
 import uuid
+from collections.abc import Callable, Coroutine
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timedelta
 from enum import StrEnum
 from typing import Any
 
 import structlog
 
 logger = structlog.get_logger(__name__)
+
+# 事件处理器类型: async (event_data: dict) -> None
+EventHandler = Callable[[dict[str, Any]], Coroutine[Any, Any, None]]
 
 
 class EventType(StrEnum):
@@ -57,15 +62,109 @@ class EventOccurrence:
 class EventEngine:
     """事件监听引擎
 
+    监听外部和内部事件，在条件满足时触发主动交互。
+
     职责：
     1. 管理事件触发器的注册
-    2. 检测事件条件是否满足
-    3. 生成事件发生记录
+    2. 注册和调用事件处理器
+    3. 定期检查用户静默状态和情感趋势
+    4. 发布事件并通知所有注册的处理器
     """
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        config: dict[str, Any] | None = None,
+        memory_manager: Any = None,
+    ) -> None:
+        self._config = config or {}
+        self._memory_manager = memory_manager
         self._triggers: dict[str, EventTrigger] = {}
+        self._event_handlers: dict[str, list[EventHandler]] = {}
         self._recent_events: list[EventOccurrence] = []
+        self._last_check_times: dict[str, datetime] = {}
+        self._running = False
+        self._loop_task: asyncio.Task[None] | None = None
+
+        # 配置参数
+        self._silence_check_interval: int = self._config.get("silence_check_interval_seconds", 3600)
+        self._silence_threshold_hours: int = self._config.get("silence_threshold_hours", 48)
+        self._emotion_check_interval: int = self._config.get("emotion_check_interval_seconds", 3600)
+        self._emotion_alert_days: int = self._config.get("emotion_alert_days", 3)
+
+    async def start(self) -> None:
+        """启动事件监听"""
+        if self._running:
+            logger.warning("event_engine_already_running")
+            return
+        self._running = True
+        self._loop_task = asyncio.create_task(self._run_loop())
+        logger.info("event_engine_started")
+
+    async def stop(self) -> None:
+        """停止事件监听"""
+        self._running = False
+        if self._loop_task and not self._loop_task.done():
+            self._loop_task.cancel()
+            try:
+                await self._loop_task
+            except asyncio.CancelledError:
+                pass
+        self._loop_task = None
+        logger.info("event_engine_stopped")
+
+    @property
+    def is_running(self) -> bool:
+        """事件引擎是否正在运行"""
+        return self._running
+
+    def register_handler(self, event_type: str, handler: EventHandler) -> None:
+        """注册事件处理器
+
+        Args:
+            event_type: 事件类型（EventType 值或自定义字符串）
+            handler: 异步处理器函数
+        """
+        if event_type not in self._event_handlers:
+            self._event_handlers[event_type] = []
+        self._event_handlers[event_type].append(handler)
+        logger.info("event_handler_registered", event_type=event_type)
+
+    def unregister_handlers(self, event_type: str) -> int:
+        """注销某事件类型的所有处理器
+
+        Returns:
+            移除的处理器数量
+        """
+        handlers = self._event_handlers.pop(event_type, [])
+        return len(handlers)
+
+    async def emit_event(self, event_type: str, data: dict[str, Any]) -> None:
+        """发布事件，通知所有注册的处理器
+
+        Args:
+            event_type: 事件类型
+            data: 事件数据
+        """
+        handlers = self._event_handlers.get(event_type, [])
+        if not handlers:
+            logger.debug("no_handlers_for_event", event_type=event_type)
+            return
+
+        logger.info(
+            "event_emitted",
+            event_type=event_type,
+            handler_count=len(handlers),
+        )
+
+        for handler in handlers:
+            try:
+                await handler(data)
+            except Exception:
+                logger.exception(
+                    "event_handler_error",
+                    event_type=event_type,
+                    handler=handler.__name__,
+                )
 
     def register_trigger(self, trigger: EventTrigger) -> str:
         """注册事件触发器"""
@@ -198,6 +297,102 @@ class EventEngine:
     def get_triggers(self) -> list[EventTrigger]:
         """获取所有触发器"""
         return list(self._triggers.values())
+
+    def get_last_check_time(self, check_type: str) -> datetime | None:
+        """获取上次检查时间"""
+        return self._last_check_times.get(check_type)
+
+    async def _run_loop(self) -> None:
+        """事件监听主循环"""
+        try:
+            while self._running:
+                await self._check_user_silence()
+                await self._check_emotion_alerts()
+                # 使用较短的间隔便于测试，实际部署可调整
+                await asyncio.sleep(min(self._silence_check_interval, self._emotion_check_interval))
+        except asyncio.CancelledError:
+            logger.debug("event_engine_loop_cancelled")
+
+    async def _check_user_silence(self) -> None:
+        """检查用户静默状态
+
+        如果用户超过配置的时间（默认 48 小时）未交互，
+        触发静默关心事件。
+        """
+        now = datetime.now()
+        last_check = self._last_check_times.get("silence")
+        if last_check and (now - last_check).total_seconds() < self._silence_check_interval:
+            return
+
+        self._last_check_times["silence"] = now
+
+        if not self._memory_manager:
+            return
+
+        # 从 memory_manager 获取所有用户画像
+        profiles = getattr(self._memory_manager, "_user_profiles", {})
+        threshold = timedelta(hours=self._silence_threshold_hours)
+
+        for user_id, profile in profiles.items():
+            last_interaction = getattr(profile, "last_interaction", None)
+            if last_interaction and (now - last_interaction) > threshold:
+                silence_hours = (now - last_interaction).total_seconds() / 3600
+                logger.info(
+                    "user_silence_detected",
+                    user_id=user_id,
+                    silence_hours=round(silence_hours, 1),
+                )
+                await self.emit_event(
+                    EventType.USER_SILENCE,
+                    {
+                        "user_id": user_id,
+                        "silence_hours": round(silence_hours, 1),
+                    },
+                )
+
+    async def _check_emotion_alerts(self) -> None:
+        """检查情感告警
+
+        如果用户连续多天（默认 3 天）情绪低落，
+        触发情感关心事件。
+        """
+        now = datetime.now()
+        last_check = self._last_check_times.get("emotion")
+        if last_check and (now - last_check).total_seconds() < self._emotion_check_interval:
+            return
+
+        self._last_check_times["emotion"] = now
+
+        if not self._memory_manager:
+            return
+
+        profiles = getattr(self._memory_manager, "_user_profiles", {})
+        for user_id in profiles:
+            try:
+                trend = await self._memory_manager.get_emotion_trend(
+                    user_id,
+                    days=self._emotion_alert_days,
+                )
+                if trend and hasattr(trend, "valence_ratio"):
+                    negative_ratio = trend.valence_ratio.get("negative", 0.0)
+                    if negative_ratio >= 0.6:
+                        logger.info(
+                            "emotion_alert_detected",
+                            user_id=user_id,
+                            negative_ratio=negative_ratio,
+                        )
+                        await self.emit_event(
+                            EventType.EMOTION_RISK,
+                            {
+                                "user_id": user_id,
+                                "negative_ratio": negative_ratio,
+                                "dominant_emotion": trend.dominant_emotion.value
+                                if hasattr(trend.dominant_emotion, "value")
+                                else str(trend.dominant_emotion),
+                            },
+                        )
+            except Exception:
+                logger.debug("emotion_check_skip", user_id=user_id)
 
     def _find_trigger(
         self,

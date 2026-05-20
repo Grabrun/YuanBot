@@ -16,6 +16,8 @@ logger = structlog.get_logger(__name__)
 _BUILTIN_ADAPTERS: dict[str, str] = {
     "telegram": "yuanbot.adapters.channel.telegram_adapter.TelegramAdapter",
     "web": "yuanbot.adapters.channel.web_adapter.WebAdapter",
+    "discord": "yuanbot.adapters.channel.discord_adapter.DiscordAdapter",
+    "wecom": "yuanbot.adapters.channel.wecom_adapter.WeComAdapter",
 }
 
 
@@ -121,5 +123,13 @@ class AdapterManager:
             from yuanbot.adapters.channel.web_adapter import WebAdapter
 
             return WebAdapter()
+        elif platform == "discord":
+            from yuanbot.adapters.channel.discord_adapter import DiscordAdapter
+
+            return DiscordAdapter()
+        elif platform == "wecom":
+            from yuanbot.adapters.channel.wecom_adapter import WeComAdapter
+
+            return WeComAdapter()
         else:
             raise ValueError(f"Unknown channel platform: {platform}")

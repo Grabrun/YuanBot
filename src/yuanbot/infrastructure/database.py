@@ -1,6 +1,6 @@
-"""数据库抽象层
+"""统一数据库管理器
 
-提供统一的数据库接口，支持 SQLite（默认）和 MySQL（可选）。
+协调 SQLite 存储、向量存储和缓存存储，提供统一的初始化和关闭接口。
 """
 
 from __future__ import annotations
@@ -10,6 +10,11 @@ from enum import StrEnum
 from typing import Any
 
 import structlog
+
+from yuanbot.infrastructure.cache_store import CacheStore
+from yuanbot.infrastructure.graph_store import GraphStore
+from yuanbot.infrastructure.sqlite_store import SQLiteStore
+from yuanbot.infrastructure.vector_store import VectorStore
 
 logger = structlog.get_logger(__name__)
 
@@ -38,25 +43,49 @@ class DatabaseConfig:
     # 通用配置
     pool_size: int = 5
     echo: bool = False
+    # 向量存储配置
+    use_milvus: bool = False
+    milvus_uri: str | None = None
+    # 缓存配置
+    redis_url: str | None = None
+    # 缓存 TTL 配置
+    working_memory_ttl: int = 3600  # 工作记忆缓存 TTL（秒）
+    # 知识图谱配置
+    graph_db_path: str | None = None  # Kuzu 数据库路径（None 则使用内存图）
 
 
 class DatabaseManager:
-    """数据库管理器
+    """统一数据库管理器
 
     职责：
-    1. 管理数据库连接
-    2. 提供统一的数据访问接口
-    3. 支持 SQLite 和 MySQL 的无缝切换
+    1. 管理 SQLite 存储（事实记忆、情景记忆元数据、用户画像、情感记录、身份映射）
+    2. 管理向量存储（情景记忆向量、语义检索）
+    3. 管理缓存存储（工作记忆、主动交互锁）
+    4. 提供统一的初始化和关闭接口
 
-    注意：当前版本使用内存存储作为默认实现。
-    后续版本将集成 SQLAlchemy 或直接使用 asyncpg/aiomysql。
+    使用方式：
+        config = DatabaseConfig(sqlite_path="data/yuanbot.db")
+        db = DatabaseManager(config)
+        await db.initialize()
+
+        # 使用各存储
+        await db.sqlite.save_fact_memory(...)
+        await db.vector.add_vector(...)
+        await db.cache.get_working_memory(...)
     """
 
     def __init__(self, config: DatabaseConfig | None = None):
         self._config = config or DatabaseConfig()
         self._initialized = False
-        # 内存存储（用于开发和测试）
-        self._store: dict[str, dict[str, Any]] = {}
+
+        # 初始化各存储组件
+        self._sqlite = SQLiteStore(db_path=self._config.sqlite_path)
+        self._vector = VectorStore(
+            use_milvus=self._config.use_milvus,
+            milvus_uri=self._config.milvus_uri,
+        )
+        self._cache = CacheStore(redis_url=self._config.redis_url)
+        self._graph = GraphStore(db_path=self._config.graph_db_path)
 
     @property
     def db_type(self) -> DatabaseType:
@@ -66,67 +95,84 @@ class DatabaseManager:
     def is_initialized(self) -> bool:
         return self._initialized
 
+    @property
+    def sqlite(self) -> SQLiteStore:
+        """SQLite 存储"""
+        return self._sqlite
+
+    @property
+    def vector(self) -> VectorStore:
+        """向量存储"""
+        return self._vector
+
+    @property
+    def cache(self) -> CacheStore:
+        """缓存存储"""
+        return self._cache
+
+    @property
+    def graph(self) -> GraphStore:
+        """知识图谱存储"""
+        return self._graph
+
+    @property
+    def config(self) -> DatabaseConfig:
+        """数据库配置"""
+        return self._config
+
     async def initialize(self) -> None:
-        """初始化数据库连接"""
+        """初始化所有存储组件"""
         if self._initialized:
             return
 
         logger.info(
             "database_initializing",
             db_type=self._config.db_type.value,
+            sqlite_path=self._config.sqlite_path,
+            vector_backend="milvus" if self._config.use_milvus else "memory",
+            cache_backend="redis" if self._config.redis_url else "memory",
         )
 
-        if self._config.db_type == DatabaseType.SQLITE:
-            await self._init_sqlite()
-        elif self._config.db_type == DatabaseType.MYSQL:
-            await self._init_mysql()
-        elif self._config.db_type == DatabaseType.POSTGRESQL:
-            await self._init_postgresql()
+        # 初始化 SQLite
+        await self._sqlite.initialize()
+
+        # 初始化向量存储
+        await self._vector.initialize()
+
+        # 初始化缓存
+        await self._cache.initialize()
 
         self._initialized = True
         logger.info("database_initialized", db_type=self._config.db_type.value)
 
     async def close(self) -> None:
-        """关闭数据库连接"""
+        """关闭所有存储组件"""
+        await self._sqlite.close()
+        await self._vector.close()
+        await self._cache.close()
+        await self._graph.close()
         self._initialized = False
         logger.info("database_closed")
-
-    async def _init_sqlite(self) -> None:
-        """初始化 SQLite"""
-        # 确保数据目录存在
-        from pathlib import Path
-
-        db_path = Path(self._config.sqlite_path)
-        db_path.parent.mkdir(parents=True, exist_ok=True)
-        logger.info("sqlite_ready", path=str(db_path))
-
-    async def _init_mysql(self) -> None:
-        """初始化 MySQL 连接池"""
-        logger.info(
-            "mysql_config",
-            host=self._config.host,
-            port=self._config.port,
-            database=self._config.database,
-        )
-
-    async def _init_postgresql(self) -> None:
-        """初始化 PostgreSQL 连接池"""
-        logger.info(
-            "postgresql_config",
-            host=self._config.host,
-            port=self._config.port,
-            database=self._config.database,
-        )
 
     def get_connection_info(self) -> dict[str, Any]:
         """获取数据库连接信息"""
         return {
             "db_type": self._config.db_type.value,
             "initialized": self._initialized,
-            "sqlite_path": self._config.sqlite_path
-            if self._config.db_type == DatabaseType.SQLITE
-            else None,
-            "host": self._config.host
-            if self._config.db_type != DatabaseType.SQLITE
-            else None,
+            "sqlite": {
+                "path": self._config.sqlite_path,
+                "initialized": self._sqlite.is_initialized,
+            },
+            "vector": {
+                "backend": "milvus" if self._config.use_milvus else "memory",
+                "initialized": self._vector.is_initialized,
+            },
+            "cache": {
+                "backend": self._cache.backend,
+                "initialized": self._cache.is_initialized,
+            },
+            "graph": {
+                "backend": "kuzu" if self._graph.is_kuzu else "memory",
+                "initialized": True,
+            },
         }

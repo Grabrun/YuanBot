@@ -76,9 +76,7 @@ class ContextBuilder:
         # 6. 行为规则
         rules = self._persona.get_behavior_rules()
         if rules:
-            sections.append(
-                "[行为规则]\n" + "\n".join(f"- {r}" for r in rules)
-            )
+            sections.append("[行为规则]\n" + "\n".join(f"- {r}" for r in rules))
 
         # 7. 额外段落
         if extra_sections:

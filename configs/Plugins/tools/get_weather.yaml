@@ -1,0 +1,22 @@
+tool_id: get_weather
+name: "天气查询"
+version: "1.0.0"
+category: daily_chat
+capability_tags: ["weather", "天气", "温度", "climate"]
+permission_level: readonly
+enabled: true
+schema:
+  type: function
+  function:
+    name: get_weather
+    description: "获取指定城市的实时天气信息，包括温度、湿度、天气状况等"
+    parameters:
+      type: object
+      properties:
+        city:
+          type: string
+          description: "城市名称，如 '北京', '上海', '成都'"
+      required: ["city"]
+executor:
+  type: local_thread
+  timeout: 10

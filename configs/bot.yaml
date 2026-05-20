@@ -1,0 +1,46 @@
+# YuanBot 根配置 (bot.yaml)
+# 配置加载优先级: 环境变量 > 配置文件 > 默认值
+
+app_name: "YuanBot"
+version: "1.0.0"
+debug: false
+log_level: "INFO"
+
+# AI 提供商
+ai:
+  default_provider: "openai"
+  # 默认模型（可被 provider 级配置覆盖）
+  default_model: "gpt-4o"
+
+# 消息通道
+channels:
+  default_channel: "webchat"
+
+# Agent 人设
+persona:
+  id: "default"
+  config_path: null
+
+# 主动交互
+proactive:
+  enabled: true
+  greeting_enabled: true
+  frequency: "medium"  # high | medium | low | event_only
+  quiet_hours:
+    start: 23
+    end: 8
+  max_per_day: 5
+  event_triggers_enabled: true
+
+# 编排引擎
+orchestrator:
+  intent_engine:
+    enabled: true
+    confidence_threshold: 0.7
+  emotion_engine:
+    enabled: true
+    decay_rate: 0.1
+  token_budget:
+    max_input_tokens: 8000
+    max_output_tokens: 2000
+    reserved_for_memory: 2000

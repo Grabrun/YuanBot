@@ -1,0 +1,13 @@
+provider_id: ollama
+adapter: ollama-adapter
+enabled: false
+config:
+  base_url: "http://localhost:11434"
+  models:
+    - id: qwen3:14b
+      type: chat
+      max_tokens: 32768
+    - id: nomic-embed-text
+      type: embedding
+      dimension: 768
+  default: qwen3:14b

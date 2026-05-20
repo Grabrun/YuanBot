@@ -88,9 +88,7 @@ class DialogueDecisionEngine:
         recommended_tools = self._recommend_tools(intent)
 
         # 5. 确定上下文优先级和 Token 预算
-        context_priority, token_ratio = self._determine_resource_allocation(
-            intent, emotion
-        )
+        context_priority, token_ratio = self._determine_resource_allocation(intent, emotion)
 
         result = DecisionResult(
             response_strategy=response_strategy,

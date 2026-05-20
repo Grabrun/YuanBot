@@ -1,0 +1,14 @@
+provider_id: deepseek
+adapter: deepseek-adapter
+enabled: false
+config:
+  api_key: "${DEEPSEEK_API_KEY}"
+  base_url: "https://api.deepseek.com"
+  models:
+    - id: deepseek-chat
+      type: chat
+      max_tokens: 128000
+    - id: deepseek-reasoner
+      type: chat
+      max_tokens: 128000
+  default: deepseek-chat

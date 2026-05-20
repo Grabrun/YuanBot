@@ -1,0 +1,20 @@
+version: '3.8'
+
+services:
+  yuanbot:
+    build: .
+    restart: always
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./configs:/app/configs
+      - ./data:/app/data
+      - ./logs:/app/logs
+    environment:
+      - YUAN_AI_API_KEY=${YUAN_AI_API_KEY}
+      - YUAN_AI_PROVIDER=${YUAN_AI_PROVIDER:-openai}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
