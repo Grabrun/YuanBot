@@ -41,6 +41,7 @@ class AIProviderAdapter(ABC):
         temperature: float = 0.7,
         max_tokens: int = 4096,
         system_prompt: str | None = None,
+        model: str | None = None,
     ) -> ChatResponse:
         """发送对话请求并获取响应"""
         ...
@@ -53,6 +54,7 @@ class AIProviderAdapter(ABC):
         temperature: float = 0.7,
         max_tokens: int = 4096,
         system_prompt: str | None = None,
+        model: str | None = None,
     ) -> AsyncIterator[ChatChunk]:
         """流式对话请求"""
         ...

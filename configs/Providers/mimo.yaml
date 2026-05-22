@@ -1,0 +1,16 @@
+# 米莫 AI Provider 配置 (v2.0)
+# 使用 openai-adapter（Mimo API 兼容 OpenAI 格式）
+
+provider_id: mimo
+name: "米莫 AI"
+adapter: openai-adapter
+enabled: false
+
+config:
+  api_key: "${MIMO_API_KEY}"
+  base_url: "https://api.mimo.ai/v1"
+  models:
+    - id: mimo-chat
+      type: chat
+      max_tokens: 128000
+  default: mimo-chat

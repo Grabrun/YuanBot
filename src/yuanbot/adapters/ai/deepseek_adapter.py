@@ -108,6 +108,7 @@ class DeepSeekAdapter(BaseAIProvider):
         temperature: float = 0.7,
         max_tokens: int = 4096,
         system_prompt: str | None = None,
+        model: str | None = None,
     ) -> ChatResponse:
         """发送对话请求"""
         client = await self._ensure_client()
@@ -119,6 +120,7 @@ class DeepSeekAdapter(BaseAIProvider):
             max_tokens=max_tokens,
             stream=False,
             system_prompt=system_prompt,
+            model=model,
         )
 
         for attempt in range(_MAX_RETRIES):
@@ -164,6 +166,7 @@ class DeepSeekAdapter(BaseAIProvider):
         temperature: float = 0.7,
         max_tokens: int = 4096,
         system_prompt: str | None = None,
+        model: str | None = None,
     ) -> AsyncIterator[ChatChunk]:
         """流式对话请求"""
         client = await self._ensure_client()
@@ -175,6 +178,7 @@ class DeepSeekAdapter(BaseAIProvider):
             max_tokens=max_tokens,
             stream=True,
             system_prompt=system_prompt,
+            model=model,
         )
 
         for attempt in range(_MAX_RETRIES):
@@ -248,10 +252,11 @@ class DeepSeekAdapter(BaseAIProvider):
         max_tokens: int,
         stream: bool,
         system_prompt: str | None = None,
+        model: str | None = None,
     ) -> dict[str, Any]:
         """构建 API 请求体"""
         payload: dict[str, Any] = {
-            "model": self._default_model,
+            "model": model or self._default_model,
             "messages": [self._message_to_dict(m) for m in messages],
             "temperature": temperature,
             "max_tokens": max_tokens,

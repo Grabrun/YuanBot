@@ -1,32 +1,24 @@
-# OpenAI Provider 配置
+# OpenAI Provider 配置 (v2.0)
+# 使用 openai-adapter，所有 OpenAI 兼容 API 的提供商均可复用此适配器
 
-provider_id: "openai"
-display_name: "OpenAI"
+provider_id: openai
+name: "OpenAI"
+adapter: openai-adapter
 enabled: true
-default: true
 
-# API 配置
-api:
+config:
+  api_key: "${OPENAI_API_KEY}"
   base_url: "https://api.openai.com/v1"
-  api_key: "${YUAN_AI_OPENAI_API_KEY}"
-  timeout: 60
-  max_retries: 3
-
-# 模型列表
-models:
-  - id: "gpt-4o"
-    type: "chat"
-    default: true
-    max_tokens: 128000
-    supports_tools: true
-    supports_streaming: true
-  - id: "gpt-4o-mini"
-    type: "chat"
-    default: false
-    max_tokens: 128000
-    supports_tools: true
-    supports_streaming: true
-  - id: "text-embedding-3-small"
-    type: "embedding"
-    default: true
-    dimensions: 1536
+  models:
+    - id: gpt-4o
+      type: chat
+      max_tokens: 128000
+    - id: gpt-4o-mini
+      type: chat
+      max_tokens: 128000
+    - id: text-embedding-3-small
+      type: embedding
+      max_tokens: 8191
+      dimension: 1536
+  default: gpt-4o
+  embedding_model: text-embedding-3-small

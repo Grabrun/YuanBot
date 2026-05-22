@@ -678,7 +678,9 @@ class TestProactiveIntegration:
 
     def test_strategy_daily_limit(self):
         """应遵守每日上限"""
-        strategy = ProactiveStrategy(config={"max_per_day": 2})
+        strategy = ProactiveStrategy(
+            config={"max_per_day": 2, "quiet_hours_start": 0, "quiet_hours_end": 0}
+        )
 
         assert strategy.should_act_sync("user-1").should_act is True
         assert strategy.should_act_sync("user-1").should_act is True

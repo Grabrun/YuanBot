@@ -1,0 +1,24 @@
+# 智谱 GLM Provider 配置 (v2.0)
+# 使用 openai-adapter（GLM API 兼容 OpenAI 格式）
+
+provider_id: glm
+name: "智谱 GLM"
+adapter: openai-adapter
+enabled: false
+
+config:
+  api_key: "${GLM_API_KEY}"
+  base_url: "https://open.bigmodel.cn/api/paas/v4"
+  models:
+    - id: glm-4
+      type: chat
+      max_tokens: 128000
+    - id: glm-4-flash
+      type: chat
+      max_tokens: 128000
+    - id: embedding-3
+      type: embedding
+      max_tokens: 8192
+      dimension: 2048
+  default: glm-4
+  embedding_model: embedding-3

@@ -1,6 +1,8 @@
 """AI 提供商适配器注册表
 
 管理所有 AI 提供商适配器的注册和发现。
+v2.0: 适配器通过名称引用（如 "openai-adapter", "anthropic-adapter"），
+ProviderManager 根据配置中的 adapter 字段查找并实例化对应适配器。
 """
 
 from __future__ import annotations
@@ -14,11 +16,17 @@ from yuanbot.core.interfaces import AIProviderAdapter
 logger = structlog.get_logger(__name__)
 
 # 内置适配器映射
+# 支持两种命名风格：短名（openai）和规范名（openai-adapter）
 _BUILTIN_ADAPTERS: dict[str, str] = {
+    # OpenAI 兼容适配器（可服务所有 OpenAI 兼容 API）
     "openai": "yuanbot.adapters.ai.openai_adapter.OpenAIAdapter",
     "openai-adapter": "yuanbot.adapters.ai.openai_adapter.OpenAIAdapter",
+    # Anthropic 适配器
     "anthropic": "yuanbot.adapters.ai.anthropic_adapter.AnthropicAdapter",
+    "anthropic-adapter": "yuanbot.adapters.ai.anthropic_adapter.AnthropicAdapter",
     "claude-adapter": "yuanbot.adapters.ai.anthropic_adapter.AnthropicAdapter",
+    # 以下为向后兼容的旧名称，实际类仍独立存在
+    # 新的 Provider 配置应使用 openai-adapter + 不同 base_url
     "deepseek": "yuanbot.adapters.ai.deepseek_adapter.DeepSeekAdapter",
     "deepseek-adapter": "yuanbot.adapters.ai.deepseek_adapter.DeepSeekAdapter",
     "ollama": "yuanbot.adapters.ai.ollama_adapter.OllamaAdapter",
@@ -47,10 +55,16 @@ class ProviderRegistry:
         from yuanbot.adapters.ai.ollama_adapter import OllamaAdapter
         from yuanbot.adapters.ai.openai_adapter import OpenAIAdapter
 
+        # OpenAI 兼容适配器（主适配器，可服务多家提供商）
         self._adapter_classes["openai"] = OpenAIAdapter
         self._adapter_classes["openai-adapter"] = OpenAIAdapter
+
+        # Anthropic 适配器
         self._adapter_classes["anthropic"] = AnthropicAdapter
+        self._adapter_classes["anthropic-adapter"] = AnthropicAdapter
         self._adapter_classes["claude-adapter"] = AnthropicAdapter
+
+        # 向后兼容：旧的独立适配器类仍然可用
         self._adapter_classes["deepseek"] = DeepSeekAdapter
         self._adapter_classes["deepseek-adapter"] = DeepSeekAdapter
         self._adapter_classes["ollama"] = OllamaAdapter
@@ -65,12 +79,14 @@ class ProviderRegistry:
         self,
         adapter_id: str,
         config: dict[str, Any],
+        provider_id: str | None = None,
     ) -> AIProviderAdapter:
         """创建适配器实例
 
         Args:
-            adapter_id: 适配器标识（如 'openai', 'anthropic'）
-            config: 适配器配置
+            adapter_id: 适配器标识（如 'openai-adapter', 'anthropic-adapter'）
+            config: 适配器配置（来自 Provider YAML 的 config 字段）
+            provider_id: 提供商 ID，传递给适配器以区分不同 Provider
 
         Returns:
             适配器实例
@@ -84,7 +100,11 @@ class ProviderRegistry:
                 f"Unknown AI provider adapter: {adapter_id}. "
                 f"Available: {list(self._adapter_classes.keys())}"
             )
-        return adapter_class(config)
+        # 将 provider_id 注入配置，使适配器知道自己属于哪个 Provider
+        adapter_config = {**config}
+        if provider_id:
+            adapter_config["provider_id"] = provider_id
+        return adapter_class(adapter_config)
 
     def get_registered_ids(self) -> list[str]:
         """获取所有已注册的适配器 ID"""

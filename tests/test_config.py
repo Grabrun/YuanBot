@@ -276,29 +276,59 @@ class TestProviderConfigEntry:
         entry = ProviderConfigEntry(provider_id="openai")
         assert entry.provider_id == "openai"
         assert entry.enabled is True
-        assert entry.default is False
+        assert entry.adapter == ""
         assert entry.models == []
 
     def test_with_models(self):
         entry = ProviderConfigEntry(
             provider_id="openai",
-            default=True,
+            adapter="openai-adapter",
+            config={
+                "default": "gpt-4o",
+                "models": [
+                    {"id": "gpt-4o", "type": "chat", "max_tokens": 128000},
+                    {"id": "gpt-4o-mini", "type": "chat", "max_tokens": 128000},
+                ],
+            },
             models=[
-                ModelEntry(id="gpt-4o", default=True),
-                ModelEntry(id="gpt-4o-mini", default=False),
+                ModelEntry(id="gpt-4o", type="chat", max_tokens=128000),
+                ModelEntry(id="gpt-4o-mini", type="chat", max_tokens=128000),
             ],
+            default_model="gpt-4o",
         )
         assert len(entry.models) == 2
         assert entry.models[0].id == "gpt-4o"
-        assert entry.models[0].default is True
+        assert entry.default_model == "gpt-4o"
 
     def test_embedding_model(self):
         entry = ProviderConfigEntry(
             provider_id="openai",
-            models=[ModelEntry(id="text-embedding-3-small", type="embedding", dimensions=1536)],
+            models=[ModelEntry(id="text-embedding-3-small", type="embedding", dimension=1536)],
         )
         assert entry.models[0].type == "embedding"
-        assert entry.models[0].dimensions == 1536
+        assert entry.models[0].dimension == 1536
+
+    def test_from_yaml(self):
+        raw = {
+            "provider_id": "openai",
+            "name": "OpenAI",
+            "adapter": "openai-adapter",
+            "enabled": True,
+            "config": {
+                "api_key": "test-key",
+                "base_url": "https://api.openai.com/v1",
+                "models": [
+                    {"id": "gpt-4o", "type": "chat", "max_tokens": 128000},
+                ],
+                "default": "gpt-4o",
+            },
+        }
+        entry = ProviderConfigEntry.from_yaml(raw)
+        assert entry.provider_id == "openai"
+        assert entry.adapter == "openai-adapter"
+        assert entry.default_model == "gpt-4o"
+        assert len(entry.models) == 1
+        assert entry.models[0].id == "gpt-4o"
 
 
 class TestChannelConfigEntry:
@@ -392,10 +422,12 @@ class TestNewConfigLoader:
         loader = ConfigLoader(Path(__file__).parent.parent / "configs")
         providers = loader.load_provider_configs()
         assert "openai" in providers
-        assert "claude" in providers
+        assert "anthropic" in providers
         assert "deepseek" in providers
+        assert "glm" in providers
+        assert "qwen" in providers
         assert isinstance(providers["openai"], ProviderConfigEntry)
-        assert providers["openai"].default is True
+        assert providers["openai"].default_model == "gpt-4o"
         assert len(providers["openai"].models) == 3
 
     def test_load_channel_configs(self):
@@ -448,7 +480,13 @@ class TestNewConfigLoader:
             yaml.dump(
                 {
                     "provider_id": "openai",
-                    "api": {"api_key": "${TEST_API_KEY}", "base_url": "https://api.openai.com/v1"},
+                    "adapter": "openai-adapter",
+                    "config": {
+                        "api_key": "${TEST_API_KEY}",
+                        "base_url": "https://api.openai.com/v1",
+                        "models": [{"id": "gpt-4o", "type": "chat"}],
+                        "default": "gpt-4o",
+                    },
                 }
             )
         )
@@ -456,7 +494,7 @@ class TestNewConfigLoader:
         loader = ConfigLoader(configs_dir)
         entry = loader.load_provider_config("openai")
         assert entry is not None
-        assert entry.api.api_key == "sk-12345"
+        assert entry.config["api_key"] == "sk-12345"
 
     def test_apply_env_overrides_nested(self, monkeypatch):
         """支持 YUAN_BOT__AI__DEFAULT_PROVIDER 格式的环境变量"""
@@ -505,7 +543,13 @@ class TestLoadConfigFromDirectory:
             yaml.dump(
                 {
                     "provider_id": "claude",
-                    "api": {"base_url": "https://api.anthropic.com"},
+                    "adapter": "anthropic-adapter",
+                    "config": {
+                        "api_key": "test-key",
+                        "base_url": "https://api.anthropic.com",
+                        "models": [{"id": "claude-sonnet", "type": "chat"}],
+                        "default": "claude-sonnet",
+                    },
                 }
             )
         )

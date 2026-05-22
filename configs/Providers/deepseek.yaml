@@ -1,9 +1,14 @@
+# DeepSeek Provider 配置 (v2.0)
+# 使用 openai-adapter（DeepSeek API 兼容 OpenAI 格式）
+
 provider_id: deepseek
-adapter: deepseek-adapter
+name: "DeepSeek"
+adapter: openai-adapter
 enabled: false
+
 config:
   api_key: "${DEEPSEEK_API_KEY}"
-  base_url: "https://api.deepseek.com"
+  base_url: "https://api.deepseek.com/v1"
   models:
     - id: deepseek-chat
       type: chat

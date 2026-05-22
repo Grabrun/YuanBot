@@ -18,7 +18,7 @@ from dotenv import load_dotenv
 from pydantic import BaseModel, Field
 
 # ---------------------------------------------------------------------------
-# 新配置模型 (v1.4 configs/ 目录结构)
+# 新配置模型 (v1.5 configs/ 目录结构)
 # ---------------------------------------------------------------------------
 
 
@@ -27,31 +27,41 @@ class ModelEntry(BaseModel):
 
     id: str
     type: str = "chat"  # chat | embedding
-    default: bool = False
     max_tokens: int = 128000
-    supports_tools: bool = True
-    supports_streaming: bool = True
-    dimensions: int | None = None  # 仅 embedding 类型
-
-
-class ProviderApiConfig(BaseModel):
-    """提供商 API 连接配置"""
-
-    base_url: str = ""
-    api_key: str | None = None
-    timeout: int = 60
-    max_retries: int = 3
+    dimension: int | None = None  # 仅 embedding 类型
 
 
 class ProviderConfigEntry(BaseModel):
-    """AI 提供商配置条目 (对应 Providers/*.yaml)"""
+    """AI 提供商配置条目 (v2.0 格式, 对应 Providers/*.yaml)"""
 
     provider_id: str
-    display_name: str = ""
+    name: str = ""
+    adapter: str = ""
     enabled: bool = True
-    default: bool = False
-    api: ProviderApiConfig = Field(default_factory=ProviderApiConfig)
+    config: dict[str, Any] = Field(default_factory=dict)
     models: list[ModelEntry] = Field(default_factory=list)
+    default_model: str | None = None
+    embedding_model: str | None = None
+
+    @classmethod
+    def from_yaml(cls, raw: dict[str, Any]) -> ProviderConfigEntry:
+        """从 YAML 原始数据创建（处理嵌套结构）"""
+        config_data = raw.get("config", {})
+        models = [ModelEntry(**m) for m in config_data.get("models", [])]
+        return cls(
+            provider_id=raw.get("provider_id", ""),
+            name=raw.get("name", ""),
+            adapter=raw.get("adapter", ""),
+            enabled=raw.get("enabled", True),
+            config=config_data,
+            models=models,
+            default_model=config_data.get("default"),
+            embedding_model=config_data.get("embedding_model"),
+        )
+
+
+# 向后兼容
+ProviderApiConfig = dict
 
 
 class ChannelConfigEntry(BaseModel):
@@ -68,6 +78,7 @@ class AiConfig(BaseModel):
 
     default_provider: str = "openai"
     default_model: str = "gpt-4o"
+    embedding_provider: str | None = None
 
 
 class PersonaConfig(BaseModel):
@@ -377,6 +388,8 @@ class ConfigLoader:
     def load_provider_configs(self) -> dict[str, ProviderConfigEntry]:
         """扫描 Providers/ 目录加载所有提供商配置
 
+        支持 v2.0 YAML 格式（嵌套 config 字段）。
+
         Returns:
             字典，key 为 provider_id，value 为 ProviderConfigEntry
         """
@@ -390,7 +403,7 @@ class ConfigLoader:
             if not raw:
                 continue
             try:
-                entry = ProviderConfigEntry(**raw)
+                entry = ProviderConfigEntry.from_yaml(raw)
                 providers[entry.provider_id] = entry
             except Exception:
                 continue
@@ -424,7 +437,7 @@ class ConfigLoader:
         if not raw:
             return None
         try:
-            return ProviderConfigEntry(**raw)
+            return ProviderConfigEntry.from_yaml(raw)
         except Exception:
             return None
 
@@ -657,10 +670,12 @@ def _load_from_directory(loader: ConfigLoader) -> dict[str, Any]:
         "provider_id": default_provider_id,
         "default_model": bot.ai.default_model,
     }
-    if default_provider and default_provider.api.api_key:
-        ai_provider["api_key"] = default_provider.api.api_key
-    if default_provider and default_provider.api.base_url:
-        ai_provider["base_url"] = default_provider.api.base_url
+    if default_provider:
+        provider_cfg = default_provider.config
+        if provider_cfg.get("api_key"):
+            ai_provider["api_key"] = provider_cfg["api_key"]
+        if provider_cfg.get("base_url"):
+            ai_provider["base_url"] = provider_cfg["base_url"]
 
     # 构建 channels 兼容格式
     channel_list: list[dict[str, Any]] = []

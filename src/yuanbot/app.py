@@ -44,8 +44,22 @@ def create_app(config: YuanBotConfig) -> FastAPI:
     memory_manager = MemoryManager(config=config.memory.model_dump())
 
     # ── 2. 初始化 AI 提供商系统 ────────────────
+    config_dir = Path("configs")
     provider_registry = ProviderRegistry()
-    provider_manager = ProviderManager(registry=provider_registry)
+    provider_manager = ProviderManager(
+        registry=provider_registry,
+        config_dir=config_dir,
+    )
+    # 从 configs/Providers/*.yaml 加载所有 Provider 配置
+    provider_manager.load_providers()
+
+    # 设置默认提供商（从 bot.yaml 读取）
+    if hasattr(config, "ai") and hasattr(config.ai, "default_provider"):
+        try:
+            provider_manager.set_default_provider(config.ai.default_provider)
+        except ValueError:
+            pass
+
     ai_service = AIService(
         provider_manager=provider_manager,
         config=config.ai.model_dump() if hasattr(config, "ai") else {},

@@ -117,6 +117,7 @@ class AnthropicAdapter(BaseAIProvider):
         temperature: float = 0.7,
         max_tokens: int = 4096,
         system_prompt: str | None = None,
+        model: str | None = None,
     ) -> ChatResponse:
         """发送对话请求"""
         client = await self._ensure_client()
@@ -128,6 +129,7 @@ class AnthropicAdapter(BaseAIProvider):
             max_tokens=max_tokens,
             system_prompt=system_prompt,
             stream=False,
+            model=model,
         )
 
         response = await client.post("/v1/messages", json=payload)
@@ -143,6 +145,7 @@ class AnthropicAdapter(BaseAIProvider):
         temperature: float = 0.7,
         max_tokens: int = 4096,
         system_prompt: str | None = None,
+        model: str | None = None,
     ) -> AsyncIterator[ChatChunk]:
         """流式对话请求"""
         client = await self._ensure_client()
@@ -154,6 +157,7 @@ class AnthropicAdapter(BaseAIProvider):
             max_tokens=max_tokens,
             system_prompt=system_prompt,
             stream=True,
+            model=model,
         )
 
         async with client.stream("POST", "/v1/messages", json=payload) as response:
@@ -192,6 +196,7 @@ class AnthropicAdapter(BaseAIProvider):
         max_tokens: int,
         system_prompt: str | None,
         stream: bool,
+        model: str | None = None,
     ) -> dict[str, Any]:
         """构建 Anthropic Messages API 请求体
 
@@ -201,7 +206,7 @@ class AnthropicAdapter(BaseAIProvider):
         - 工具调用使用不同的格式
         """
         payload: dict[str, Any] = {
-            "model": self._default_model,
+            "model": model or self._default_model,
             "max_tokens": max_tokens,
             "temperature": temperature,
             "stream": stream,

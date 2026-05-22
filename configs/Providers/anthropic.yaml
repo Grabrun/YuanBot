@@ -1,0 +1,19 @@
+# Anthropic Claude Provider 配置 (v2.0)
+# 使用 anthropic-adapter（Anthropic Messages API，非 OpenAI 兼容）
+
+provider_id: anthropic
+name: "Anthropic Claude"
+adapter: anthropic-adapter
+enabled: true
+
+config:
+  api_key: "${ANTHROPIC_API_KEY}"
+  base_url: "https://api.anthropic.com"
+  models:
+    - id: claude-sonnet-4-20250514
+      type: chat
+      max_tokens: 200000
+    - id: claude-haiku-4-20250514
+      type: chat
+      max_tokens: 200000
+  default: claude-sonnet-4-20250514

@@ -1,6 +1,8 @@
-"""OpenAI 适配器
+"""OpenAI 兼容 API 适配器
 
-支持 GPT-4o, GPT-4o-mini, GPT-4.1 系列。
+支持所有兼容 OpenAI Chat Completions API 的提供商，
+包括 OpenAI、DeepSeek、GLM、Qwen、混元、Mimo、Ollama 等。
+通过配置文件中的 base_url 和 api_key 指定具体提供商。
 """
 
 from __future__ import annotations
@@ -37,21 +39,30 @@ MODEL_CONTEXT_LENGTHS = {
 
 
 class OpenAIAdapter(BaseAIProvider):
-    """OpenAI API 适配器"""
+    """OpenAI 兼容 API 适配器
+
+    可服务所有兼容 OpenAI Chat Completions API 的提供商。
+    通过 config 中的 base_url、api_key、default 等字段配置。
+    """
 
     def __init__(self, config: dict[str, Any] | None = None):
         self._api_key: str | None = None
         self._base_url: str = "https://api.openai.com/v1"
         self._default_model: str = "gpt-4o"
+        self._provider_id: str = "openai"
         self._client: httpx.AsyncClient | None = None
         super().__init__(config)
 
     def _load_config_from_env(self) -> None:
-        """加载 OpenAI 特定配置"""
+        """加载配置（支持 OpenAI 兼容的任意提供商）"""
         super()._load_config_from_env()
         self._api_key = self._get_config("api_key")
         self._base_url = self._get_config("base_url", self._base_url)
-        self._default_model = self._get_config("default_model", self._default_model)
+        # 支持 'default' 和 'default_model' 两种配置键名
+        self._default_model = self._get_config(
+            "default", self._get_config("default_model", self._default_model)
+        )
+        self._provider_id = self._get_config("provider_id", self._provider_id)
 
     async def _ensure_client(self) -> httpx.AsyncClient:
         """延迟初始化 HTTP 客户端"""
@@ -73,7 +84,7 @@ class OpenAIAdapter(BaseAIProvider):
 
     @property
     def provider_id(self) -> str:
-        return "openai"
+        return self._provider_id
 
     @property
     def supported_models(self) -> list[str]:
@@ -100,6 +111,7 @@ class OpenAIAdapter(BaseAIProvider):
         temperature: float = 0.7,
         max_tokens: int = 4096,
         system_prompt: str | None = None,
+        model: str | None = None,
     ) -> ChatResponse:
         """发送对话请求"""
         client = await self._ensure_client()
@@ -111,6 +123,7 @@ class OpenAIAdapter(BaseAIProvider):
             max_tokens=max_tokens,
             stream=False,
             system_prompt=system_prompt,
+            model=model,
         )
 
         response = await client.post("/chat/completions", json=payload)
@@ -126,6 +139,7 @@ class OpenAIAdapter(BaseAIProvider):
         temperature: float = 0.7,
         max_tokens: int = 4096,
         system_prompt: str | None = None,
+        model: str | None = None,
     ) -> AsyncIterator[ChatChunk]:
         """流式对话请求"""
         client = await self._ensure_client()
@@ -137,6 +151,7 @@ class OpenAIAdapter(BaseAIProvider):
             max_tokens=max_tokens,
             stream=True,
             system_prompt=system_prompt,
+            model=model,
         )
 
         async with client.stream("POST", "/chat/completions", json=payload) as response:
@@ -176,10 +191,11 @@ class OpenAIAdapter(BaseAIProvider):
         max_tokens: int,
         stream: bool,
         system_prompt: str | None = None,
+        model: str | None = None,
     ) -> dict[str, Any]:
         """构建 API 请求体"""
         payload: dict[str, Any] = {
-            "model": self._default_model,
+            "model": model or self._default_model,
             "messages": [self._message_to_dict(m) for m in messages],
             "temperature": temperature,
             "max_tokens": max_tokens,

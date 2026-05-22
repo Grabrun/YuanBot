@@ -1,0 +1,19 @@
+# 腾讯混元 Provider 配置 (v2.0)
+# 使用 openai-adapter（混元 API 兼容 OpenAI 格式）
+
+provider_id: hunyuan
+name: "腾讯混元"
+adapter: openai-adapter
+enabled: false
+
+config:
+  api_key: "${HUNYUAN_API_KEY}"
+  base_url: "https://api.hunyuan.cloud.tencent.com/v1"
+  models:
+    - id: hunyuan-pro
+      type: chat
+      max_tokens: 32768
+    - id: hunyuan-standard
+      type: chat
+      max_tokens: 32768
+  default: hunyuan-pro

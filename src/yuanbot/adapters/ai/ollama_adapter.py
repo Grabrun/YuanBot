@@ -112,6 +112,7 @@ class OllamaAdapter(BaseAIProvider):
         temperature: float = 0.7,
         max_tokens: int = 4096,
         system_prompt: str | None = None,
+        model: str | None = None,
     ) -> ChatResponse:
         """发送对话请求"""
         client = await self._ensure_client()
@@ -122,6 +123,7 @@ class OllamaAdapter(BaseAIProvider):
             temperature=temperature,
             stream=False,
             system_prompt=system_prompt,
+            model=model,
         )
 
         for attempt in range(_MAX_RETRIES):
@@ -152,6 +154,7 @@ class OllamaAdapter(BaseAIProvider):
         temperature: float = 0.7,
         max_tokens: int = 4096,
         system_prompt: str | None = None,
+        model: str | None = None,
     ) -> AsyncIterator[ChatChunk]:
         """流式对话请求"""
         client = await self._ensure_client()
@@ -162,6 +165,7 @@ class OllamaAdapter(BaseAIProvider):
             temperature=temperature,
             stream=True,
             system_prompt=system_prompt,
+            model=model,
         )
 
         for attempt in range(_MAX_RETRIES):
@@ -255,6 +259,7 @@ class OllamaAdapter(BaseAIProvider):
         temperature: float,
         stream: bool,
         system_prompt: str | None = None,
+        model: str | None = None,
     ) -> dict[str, Any]:
         """构建 Ollama /api/chat 请求体"""
         ollama_messages: list[dict[str, Any]] = []
@@ -269,7 +274,7 @@ class OllamaAdapter(BaseAIProvider):
                 ollama_messages.append(ollama_msg)
 
         payload: dict[str, Any] = {
-            "model": self._default_model,
+            "model": model or self._default_model,
             "messages": ollama_messages,
             "stream": stream,
             "options": {

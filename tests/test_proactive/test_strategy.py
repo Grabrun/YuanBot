@@ -78,7 +78,9 @@ class TestProactiveStrategyShouldAct:
         assert decision.reason == "event_triggers_disabled"
 
     def test_daily_limit(self):
-        config = ProactiveConfig(enabled=True, max_per_day=2)
+        config = ProactiveConfig(
+            enabled=True, max_per_day=2, quiet_hours_start=0, quiet_hours_end=0
+        )
         strategy = ProactiveStrategy(config=config.__dict__)
 
         # 前两次应成功
@@ -93,7 +95,9 @@ class TestProactiveStrategyShouldAct:
         assert d3.reason == "daily_limit_reached"
 
     def test_different_users_independent(self):
-        config = ProactiveConfig(enabled=True, max_per_day=1)
+        config = ProactiveConfig(
+            enabled=True, max_per_day=1, quiet_hours_start=0, quiet_hours_end=0
+        )
         strategy = ProactiveStrategy(config=config.__dict__)
 
         strategy.should_act_sync("user1")
@@ -107,7 +111,7 @@ class TestProactiveStrategyShouldAct:
         assert strategy.get_config().enabled is False
 
     def test_get_daily_stats(self):
-        strategy = ProactiveStrategy()
+        strategy = ProactiveStrategy(config={"quiet_hours_start": 0, "quiet_hours_end": 0})
         strategy.should_act_sync("user1")
         strategy.should_act_sync("user2")
         stats = strategy.get_daily_stats()
@@ -116,7 +120,9 @@ class TestProactiveStrategyShouldAct:
         assert stats["user1"] == 1
 
     def test_event_only_frequency(self):
-        config = ProactiveConfig(enabled=True, frequency="event_only")
+        config = ProactiveConfig(
+            enabled=True, frequency="event_only", quiet_hours_start=0, quiet_hours_end=0
+        )
         strategy = ProactiveStrategy(config=config.__dict__)
 
         # 非事件触发应被限制
@@ -134,7 +140,9 @@ class TestProactiveStrategyShouldSend:
 
     @pytest.mark.asyncio
     async def test_should_send_normal(self):
-        strategy = ProactiveStrategy(config={"enabled": True, "max_per_day": 5})
+        strategy = ProactiveStrategy(
+            config={"enabled": True, "max_per_day": 5, "quiet_hours_start": 0, "quiet_hours_end": 0}
+        )
         result = await strategy.should_send("user1", "greeting")
         assert result is True
 
@@ -163,7 +171,8 @@ class TestProactiveStrategyShouldSend:
     @pytest.mark.asyncio
     async def test_should_send_greeting_blocked_in_quiet_hours(self):
         """greeting 类型在免打扰时段应被阻止"""
-        config = {"enabled": True, "quiet_hours_start": 0, "quiet_hours_end": 23, "max_per_day": 10}
+        # 使用跨越当前时间的免打扰时段（23:00-07:00 跨午夜）
+        config = {"enabled": True, "quiet_hours_start": 23, "quiet_hours_end": 7, "max_per_day": 10}
         strategy = ProactiveStrategy(config=config)
         result = await strategy.should_send("user1", "greeting")
         assert result is False
