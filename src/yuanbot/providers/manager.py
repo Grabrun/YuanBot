@@ -171,6 +171,59 @@ class ProviderManager:
         models = self.get_models(provider_id, model_type="embedding")
         return models[0] if models else None
 
+    async def reload_provider(self, provider_id: str, new_config: dict[str, Any]) -> None:
+        """热重载提供商配置
+
+        当配置文件变化时调用，更新提供商配置并清除缓存的适配器实例，
+        使其在下次请求时使用新配置重新创建。
+
+        Args:
+            provider_id: 提供商 ID
+n            new_config: 新的配置字典（对应 YAML 文件内容）
+        """
+        logger.info("reloading_provider", provider_id=provider_id)
+
+        # 解析新配置
+        config_data = new_config.get("config", {})
+        models = []
+        for m in config_data.get("models", []):
+            models.append(ModelInfo(
+                id=m["id"],
+                type=m.get("type", "chat"),
+                max_tokens=m.get("max_tokens", 128000),
+                dimension=m.get("dimension"),
+            ))
+
+        new_provider_config = ProviderConfig(
+            provider_id=provider_id,
+            adapter=new_config.get("adapter", ""),
+            enabled=new_config.get("enabled", True),
+            config=config_data,
+            models=models,
+            default_model=config_data.get("default"),
+        )
+
+        # 更新配置
+        self._providers[provider_id] = new_provider_config
+
+        # 清除缓存的适配器实例，使其下次使用新配置重建
+        old_adapter = self._adapters.pop(provider_id, None)
+        if old_adapter and hasattr(old_adapter, "close"):
+            try:
+                await old_adapter.close()
+            except Exception as e:
+                logger.error(
+                    "adapter_close_error_during_reload",
+                    provider_id=provider_id, error=str(e),
+                )
+
+        logger.info(
+            "provider_reloaded",
+            provider_id=provider_id,
+            enabled=new_provider_config.enabled,
+            model_count=len(models),
+        )
+
     async def close_all(self) -> None:
         """关闭所有适配器"""
         for pid, adapter in self._adapters.items():
