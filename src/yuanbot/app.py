@@ -547,8 +547,17 @@ def _register_routes(
         Args:
             user_id: 用户 ID
         """
+        import structlog
+
+        _logger = structlog.get_logger("gdpr")
+        _logger.info("gdpr_export_requested", user_id=user_id)
         privacy: PrivacyManager = app.state.privacy_manager
         data = await privacy.export_user_data(user_id)
+        _logger.info(
+            "gdpr_export_completed",
+            user_id=user_id,
+            has_error="error" in data and data["error"] is not None,
+        )
         return data
 
     @app.post("/api/gdpr/delete")
@@ -562,6 +571,9 @@ def _register_routes(
         请求体:
             {"user_id": "xxx", "confirm": true}
         """
+        import structlog
+
+        _logger = structlog.get_logger("gdpr")
         user_id = request.get("user_id")
         if not user_id:
             from fastapi.responses import JSONResponse
@@ -583,9 +595,31 @@ def _register_routes(
                 status_code=400,
             )
 
+        _logger.info("gdpr_delete_requested", user_id=user_id)
         privacy: PrivacyManager = app.state.privacy_manager
         result = await privacy.delete_user_data(user_id)
+        has_error = "error" in result and result["error"] is not None
+        _logger.info(
+            "gdpr_delete_completed",
+            user_id=user_id,
+            items_deleted=result.get("items_deleted", {}),
+            has_error=has_error,
+        )
         return result
+
+    @app.get("/api/gdpr/audit-log")
+    async def gdpr_audit_log(user_id: str | None = None):
+        """GDPR 审计日志
+
+        查看 GDPR 操作的审计记录，包括数据导出和删除操作。
+        可选按 user_id 过滤。
+
+        Args:
+            user_id: 可选，过滤指定用户的日志
+        """
+        privacy: PrivacyManager = app.state.privacy_manager
+        log_entries = privacy.get_audit_log(user_id)
+        return {"audit_log": log_entries, "count": len(log_entries)}
 
     @app.get("/api/capabilities")
     async def get_capabilities():
@@ -655,8 +689,11 @@ def _register_routes(
 
         from fastapi.responses import JSONResponse
 
+        from yuanbot.services.extension_standard import VersionManager
+
         source_url = request.get("url")
         source_path = request.get("path")
+        force = request.get("force", False)
 
         if not source_url and not source_path:
             return JSONResponse(
@@ -721,8 +758,45 @@ def _register_routes(
                     content={"error": "Extension validation failed", "details": errors},
                 )
 
+            # 版本兼容性检查
+            installed: dict[str, str] = {}
+            if _extensions_dir.exists():
+                for ext_dir in _extensions_dir.iterdir():
+                    if ext_dir.is_dir() and (ext_dir / "manifest.json").exists():
+                        try:
+                            m = ExtensionManifest.from_file(ext_dir / "manifest.json")
+                            installed[m.id] = m.version
+                        except Exception:
+                            pass
+
+            dep_errors = VersionManager.check_dependencies(manifest, installed)
+            if dep_errors and not force:
+                return JSONResponse(
+                    status_code=400,
+                    content={
+                        "error": "Dependency check failed",
+                        "details": dep_errors,
+                        "hint": "Use 'force': true to skip dependency check",
+                    },
+                )
+
+            # 检查是否已安装同版本
             dest_dir = _extensions_dir / manifest.id
             if dest_dir.exists():
+                existing_manifest_path = dest_dir / "manifest.json"
+                if existing_manifest_path.exists():
+                    existing = ExtensionManifest.from_file(existing_manifest_path)
+                    if existing.version == manifest.version and not force:
+                        return JSONResponse(
+                            status_code=409,
+                            content={
+                                "error": (
+                            f"Extension '{manifest.id}' version"
+                            f" {manifest.version} is already installed"
+                        ),
+                                "hint": "Use 'force': true to reinstall",
+                            },
+                        )
                 shutil.rmtree(dest_dir)
 
             shutil.copytree(str(source_dir), str(dest_dir))

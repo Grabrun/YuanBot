@@ -7,13 +7,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
     && rm -rf /var/lib/apt/lists/*
 
-# 安装 Python 依赖
+# 复制项目文件
 COPY pyproject.toml .
-RUN pip install --no-cache-dir .
-
-# 复制源代码
 COPY src/ src/
 COPY configs/ configs/
+
+# 安装 Python 依赖
+RUN pip install --no-cache-dir .
 
 # 创建数据目录
 RUN mkdir -p data logs

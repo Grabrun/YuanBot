@@ -19,6 +19,35 @@ import structlog
 logger = structlog.get_logger(__name__)
 
 
+class AuditLogEntry:
+    """GDPR 审计日志条目"""
+
+    def __init__(
+        self,
+        action: str,
+        user_id: str,
+        details: dict[str, Any] | None = None,
+        success: bool = True,
+        error: str | None = None,
+    ):
+        self.timestamp = datetime.now().isoformat()
+        self.action = action
+        self.user_id = user_id
+        self.details = details or {}
+        self.success = success
+        self.error = error
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "timestamp": self.timestamp,
+            "action": self.action,
+            "user_id": self.user_id,
+            "details": self.details,
+            "success": self.success,
+            "error": self.error,
+        }
+
+
 class PrivacyManager:
     """隐私管理器
 
@@ -34,6 +63,21 @@ class PrivacyManager:
         self._memory = memory_manager
         self._db = db_manager
         self._private_sessions: set[str] = set()  # 隐私模式会话 ID 集合
+        self._audit_log: list[AuditLogEntry] = []  # GDPR 审计日志
+
+    def get_audit_log(self, user_id: str | None = None) -> list[dict[str, Any]]:
+        """获取审计日志
+
+        Args:
+            user_id: 可选，过滤指定用户的日志
+
+        Returns:
+            审计日志条目列表
+        """
+        entries = self._audit_log
+        if user_id:
+            entries = [e for e in entries if e.user_id == user_id]
+        return [e.to_dict() for e in entries]
 
     # ── 隐私模式 ──────────────────────────────
 
@@ -165,10 +209,29 @@ class PrivacyManager:
                 export["proactive_settings"] = proactive_settings
 
             logger.info("user_data_exported", user_id=user_id)
+            self._audit_log.append(
+                AuditLogEntry(
+                    action="data_export",
+                    user_id=user_id,
+                    details={
+                        "fact_count": len(export.get("fact_memories", [])),
+                        "episodic_count": len(export.get("episodic_memories", [])),
+                        "semantic_count": len(export.get("semantic_memories", [])),
+                    },
+                )
+            )
             return export
 
         except Exception as e:
             logger.error("data_export_failed", user_id=user_id, error=str(e))
+            self._audit_log.append(
+                AuditLogEntry(
+                    action="data_export",
+                    user_id=user_id,
+                    success=False,
+                    error=str(e),
+                )
+            )
             export["error"] = str(e)
             return export
 
@@ -245,10 +308,25 @@ class PrivacyManager:
             self._memory._user_profiles.pop(user_id, None)
 
             logger.info("user_data_deleted", user_id=user_id)
+            self._audit_log.append(
+                AuditLogEntry(
+                    action="data_deletion",
+                    user_id=user_id,
+                    details=result.get("items_deleted", {}),
+                )
+            )
             return result
 
         except Exception as e:
             logger.error("data_deletion_failed", user_id=user_id, error=str(e))
+            self._audit_log.append(
+                AuditLogEntry(
+                    action="data_deletion",
+                    user_id=user_id,
+                    success=False,
+                    error=str(e),
+                )
+            )
             result["error"] = str(e)
             return result
 

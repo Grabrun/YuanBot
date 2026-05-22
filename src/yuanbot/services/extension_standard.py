@@ -28,6 +28,72 @@ logger = structlog.get_logger(__name__)
 
 MANIFEST_SCHEMA_VERSION = "1.0"
 
+
+def parse_version(version: str) -> tuple[int, ...]:
+    """解析语义化版本号
+
+    Args:
+        version: 版本号字符串，如 "1.2.3"
+
+    Returns:
+        版本号元组，如 (1, 2, 3)
+    """
+    parts = version.strip().split(".")
+    result = []
+    for part in parts:
+        try:
+            result.append(int(part))
+        except ValueError:
+            result.append(0)
+    return tuple(result)
+
+
+def compare_versions(v1: str, v2: str) -> int:
+    """比较两个版本号
+
+    Args:
+        v1: 版本号 1
+        v2: 版本号 2
+
+    Returns:
+        -1 if v1 < v2, 0 if equal, 1 if v1 > v2
+    """
+    parsed1 = parse_version(v1)
+    parsed2 = parse_version(v2)
+    # 补齐长度
+    max_len = max(len(parsed1), len(parsed2))
+    padded1 = parsed1 + (0,) * (max_len - len(parsed1))
+    padded2 = parsed2 + (0,) * (max_len - len(parsed2))
+    if padded1 < padded2:
+        return -1
+    elif padded1 > padded2:
+        return 1
+    return 0
+
+
+def is_version_compatible(required: str, available: str) -> bool:
+    """检查版本兼容性
+
+    规则：主版本号必须相同，可用版本 >= 所需版本。
+
+    Args:
+        required: 所需版本
+        available: 可用版本
+
+    Returns:
+        是否兼容
+    """
+    if not required.strip() or not available.strip():
+        return True
+    req = parse_version(required)
+    avail = parse_version(available)
+    if len(req) == 0 or len(avail) == 0:
+        return True
+    # 主版本号必须相同
+    if req[0] != avail[0]:
+        return False
+    return compare_versions(available, required) >= 0
+
 EXTENSION_TYPES = {
     "ai_provider": "AI 提供商适配器",
     "channel": "消息通道适配器",
@@ -111,6 +177,26 @@ class ExtensionManifest:
             if self.permission_level not in ("safe", "restricted", "dangerous"):
                 errors.append(f"Invalid permission_level: {self.permission_level}")
 
+        # 版本号格式检查
+        if self.version:
+            try:
+                parsed = parse_version(self.version)
+                if len(parsed) < 2:
+                    errors.append(
+                        f"Version '{self.version}' should have at least major.minor format"
+                    )
+            except Exception:
+                errors.append(f"Invalid version format: {self.version}")
+
+        # 依赖版本格式检查
+        for dep in self.dependencies:
+            if ":" in dep:
+                _, dep_version = dep.rsplit(":", 1)
+                try:
+                    parse_version(dep_version)
+                except Exception:
+                    errors.append(f"Invalid dependency version format: {dep}")
+
         return errors
 
     def to_dict(self) -> dict[str, Any]:
@@ -170,6 +256,66 @@ class ExtensionManifest:
         with open(path, encoding="utf-8") as f:
             data = json.load(f)
         return cls.from_dict(data)
+
+
+class VersionManager:
+    """扩展版本管理器
+
+    管理扩展的版本检查、兼容性验证和更新检测。
+    """
+
+    @staticmethod
+    def check_dependencies(
+        manifest: ExtensionManifest,
+        installed_extensions: dict[str, str],
+    ) -> list[str]:
+        """检查扩展依赖是否满足
+
+        Args:
+            manifest: 扩展清单
+            installed_extensions: 已安装扩展 {id: version}
+
+        Returns:
+            错误列表（空表示依赖满足）
+        """
+        errors: list[str] = []
+        for dep in manifest.dependencies:
+            if ":" in dep:
+                dep_id, required_version = dep.rsplit(":", 1)
+            else:
+                dep_id = dep
+                required_version = ""
+
+            if dep_id not in installed_extensions:
+                errors.append(f"Missing dependency: {dep_id}")
+                continue
+
+            if required_version:
+                available = installed_extensions[dep_id]
+                if not is_version_compatible(required_version, available):
+                    errors.append(
+                        f"Dependency version mismatch: {dep_id} "
+                        f"requires {required_version}, "
+                        f"got {available}"
+                    )
+
+        return errors
+
+    @staticmethod
+    def check_update_available(
+        current_version: str,
+        latest_version: str,
+    ) -> bool:
+        """检查是否有可用更新
+
+        Args:
+            current_version: 当前版本
+            latest_version: 最新版本
+
+        Returns:
+            是否有更新
+        """
+        return compare_versions(latest_version, current_version) > 0
 
 
 class ExtensionValidator:
