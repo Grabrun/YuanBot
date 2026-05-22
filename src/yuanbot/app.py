@@ -184,9 +184,66 @@ def _register_routes(
 ) -> None:
     """注册 API 路由"""
 
+    @app.get("/healthz")
+    async def healthz():
+        """Liveness probe - 服务基本健康状态
+
+        只要进程存活即返回 OK，不检查下游依赖。
+        用于 Kubernetes livenessProbe。
+        """
+        return {"status": "ok"}
+
+    @app.get("/readyz")
+    async def readyz():
+        """Readiness probe - 服务就绪状态
+
+        检查所有关键依赖是否就绪，包括 AI 服务、
+        主动调度器和事件引擎。
+        用于 Kubernetes readinessProbe。
+        """
+        checks: dict[str, Any] = {}
+        all_ready = True
+
+        # AI 服务检查
+        try:
+            ai_health = app.state.ai_service.get_health_status()
+            checks["ai_service"] = ai_health
+        except Exception as e:
+            checks["ai_service"] = {"status": "error", "error": str(e)}
+            all_ready = False
+
+        # 主动调度器检查
+        scheduler: ProactiveScheduler = app.state.proactive_scheduler
+        checks["proactive_scheduler"] = {
+            "status": "ok" if scheduler.is_running else "stopped",
+            "task_count": len(scheduler.get_all_tasks()),
+        }
+        if not scheduler.is_running:
+            all_ready = False
+
+        # 事件引擎检查
+        engine: EventEngine = app.state.event_engine
+        checks["event_engine"] = {
+            "status": "ok" if engine.is_running else "stopped",
+            "trigger_count": len(engine.get_triggers()),
+        }
+        if not engine.is_running:
+            all_ready = False
+
+        status_code = 200 if all_ready else 503
+        from fastapi.responses import JSONResponse
+
+        return JSONResponse(
+            content={
+                "status": "ready" if all_ready else "not_ready",
+                "checks": checks,
+            },
+            status_code=status_code,
+        )
+
     @app.get("/health")
     async def health():
-        """健康检查"""
+        """健康检查（向后兼容）"""
         ai_health = app.state.ai_service.get_health_status()
         return {
             "status": "ok",

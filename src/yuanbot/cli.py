@@ -94,6 +94,36 @@ def main() -> None:
     # yuanbot version
     subparsers.add_parser("version", help="显示版本信息")
 
+    # yuanbot create
+    create_parser = subparsers.add_parser("create", help="创建扩展项目")
+    create_parser.add_argument(
+        "--type",
+        required=True,
+        choices=["ai_provider", "channel", "skill", "tool", "persona", "trigger"],
+        help="扩展类型",
+    )
+    create_parser.add_argument("--name", help="扩展名称")
+    create_parser.add_argument("--output-dir", default=".", help="输出目录 (默认当前目录)")
+
+    # yuanbot validate
+    validate_parser = subparsers.add_parser("validate", help="验证扩展是否符合 Y.E.S. 规范")
+    validate_parser.add_argument("path", nargs="?", default=".", help="扩展项目路径")
+
+    # yuanbot test
+    test_parser = subparsers.add_parser("test", help="在本地运行扩展测试")
+    test_parser.add_argument("path", nargs="?", default=".", help="扩展项目路径")
+    test_parser.add_argument("--verbose", "-v", action="store_true", help="详细输出")
+
+    # yuanbot build
+    build_parser = subparsers.add_parser("build", help="打包扩展为 .yuanbot 文件")
+    build_parser.add_argument("path", nargs="?", default=".", help="扩展项目路径")
+    build_parser.add_argument("--output", "-o", help="输出文件路径")
+
+    # yuanbot publish
+    publish_parser = subparsers.add_parser("publish", help="发布扩展到社区市场")
+    publish_parser.add_argument("path", nargs="?", default=".", help="扩展项目路径")
+    publish_parser.add_argument("--dry-run", action="store_true", help="仅验证，不实际发布")
+
     args = parser.parse_args()
 
     # 配置日志
@@ -128,6 +158,16 @@ def main() -> None:
             parser.parse_args(["memory", "--help"])
     elif args.command == "version":
         _run_version()
+    elif args.command == "create":
+        _run_create(args)
+    elif args.command == "validate":
+        _run_validate(args)
+    elif args.command == "test":
+        _run_test(args)
+    elif args.command == "build":
+        _run_build(args)
+    elif args.command == "publish":
+        _run_publish(args)
     else:
         parser.print_help()
 
@@ -528,6 +568,306 @@ def _run_version() -> None:
     from yuanbot import __version__
 
     print(f"缘·Bot (YuanBot) v{__version__}")
+
+
+# --------------------------------------------------------------------------- #
+# yuanbot create
+# --------------------------------------------------------------------------- #
+
+
+_TYPE_PREFIXES = {
+    "ai_provider": "yuanbot-ai-provider",
+    "channel": "yuanbot-channel",
+    "skill": "yuanbot-skill",
+    "tool": "yuanbot-tool",
+    "persona": "yuanbot-persona",
+    "trigger": "yuanbot-trigger",
+}
+
+_TYPE_TEMPLATES: dict[str, dict[str, str]] = {
+    "ai_provider": {
+        "src/adapter.py": '    pass\n',
+        "tests/test_adapter.py": 'import pytest\n\n\ndef test_placeholder():\n    assert True\n',
+    },
+    "channel": {
+        "src/adapter.py": '    pass\n',
+        "tests/test_adapter.py": 'import pytest\n\n\ndef test_placeholder():\n    assert True\n',
+    },
+    "skill": {
+        "src/definition.yaml": '',
+        "tests/test_skill.py": 'import pytest\n\n\ndef test_placeholder():\n    assert True\n',
+    },
+    "tool": {
+        "src/executor.py": '    pass\n',
+        "tests/test_tool.py": 'import pytest\n\n\ndef test_placeholder():\n    assert True\n',
+    },
+    "persona": {
+        "src/persona.yaml": '',
+    },
+    "trigger": {
+        "src/trigger.py": '    pass\n',
+        "tests/test_trigger.py": 'import pytest\n\n\ndef test_placeholder():\n    assert True\n',
+    },
+}
+
+
+def _run_create(args: argparse.Namespace) -> None:
+    """创建扩展项目脚手架"""
+    import json as _json
+
+    ext_type = args.type
+    prefix = _TYPE_PREFIXES[ext_type]
+
+    name = args.name
+    if not name:
+        name = input(f"  ? {ext_type} 名称: ").strip()
+        if not name:
+            _fail("名称不能为空")
+            return
+
+    safe_name = name.replace("-", "_")
+    dir_name = f"{prefix}-{safe_name}"
+    output_dir = Path(args.output_dir)
+    project_dir = output_dir / dir_name
+
+    if project_dir.exists():
+        _fail(f"目录已存在: {project_dir}")
+        return
+
+    _header(f"创建扩展: {dir_name}")
+
+    project_dir.mkdir(parents=True, exist_ok=True)
+    (project_dir / "src").mkdir(exist_ok=True)
+    (project_dir / "tests").mkdir(exist_ok=True)
+
+    manifest = {
+        "$schema": "https://yuanbot.app/schemas/manifest-v1.json",
+        "type": ext_type,
+        "id": safe_name,
+        "name": name,
+        "version": "1.0.0",
+        "author": {"name": "", "email": "", "url": ""},
+        "description": f"TODO: {name} {ext_type} extension",
+        "license": "MIT",
+        "keywords": [],
+        "yuanbot": {"min_core_version": "1.4.0"},
+    }
+    (project_dir / "manifest.json").write_text(
+        _json.dumps(manifest, indent=2, ensure_ascii=False) + "\n",
+        encoding="utf-8",
+    )
+    _ok("manifest.json")
+
+    (project_dir / "README.md").write_text(
+        f"# {name}\n\nTODO: Extension description\n",
+        encoding="utf-8",
+    )
+    _ok("README.md")
+
+    (project_dir / "LICENSE").write_text("MIT License\n", encoding="utf-8")
+    _ok("LICENSE")
+
+    templates = _TYPE_TEMPLATES.get(ext_type, {})
+    for rel_path, content_template in templates.items():
+        content = content_template.format(name=safe_name, display_name=name)
+        file_path = project_dir / rel_path
+        file_path.parent.mkdir(parents=True, exist_ok=True)
+        file_path.write_text(content, encoding="utf-8")
+        _ok(rel_path)
+
+    print()
+    print(f"  {_c('🎉 扩展项目已创建！', _GREEN + _BOLD)}")
+    print(f"  路径: {_c(str(project_dir), _CYAN)}")
+    print(f"  下一步: cd {dir_name} && yuanbot test")
+    print()
+
+
+# --------------------------------------------------------------------------- #
+# yuanbot validate
+# --------------------------------------------------------------------------- #
+
+
+def _run_validate(args: argparse.Namespace) -> None:
+    """验证扩展是否符合 Y.E.S. 规范"""
+    import json as _json
+
+    _header("Y.E.S. 规范验证")
+
+    project_dir = Path(args.path).resolve()
+    all_ok = True
+
+    manifest_path = project_dir / "manifest.json"
+    if not manifest_path.exists():
+        _fail("缺少 manifest.json")
+        all_ok = False
+    else:
+        try:
+            manifest = _json.loads(manifest_path.read_text(encoding="utf-8"))
+            _ok("manifest.json 格式正确")
+
+            required = ["type", "id", "name", "version", "description", "license"]
+            for field_name in required:
+                if field_name not in manifest:
+                    _fail(f"manifest.json 缺少必需字段: {field_name}")
+                    all_ok = False
+                else:
+                    _ok(f"manifest.{field_name} ✓")
+
+            valid_types = ["ai_provider", "channel", "skill", "tool", "persona", "trigger"]
+            mtype = manifest.get("type")
+            if mtype and mtype not in valid_types:
+                _fail(f"未知扩展类型: {mtype}")
+                all_ok = False
+
+        except _json.JSONDecodeError as e:
+            _fail(f"manifest.json 解析失败: {e}")
+            all_ok = False
+
+    for fname in ["README.md", "LICENSE"]:
+        if (project_dir / fname).exists():
+            _ok(f"{fname} ✓")
+        else:
+            _fail(f"缺少 {fname}")
+            all_ok = False
+
+    src_dir = project_dir / "src"
+    if src_dir.exists():
+        total = len(list(src_dir.rglob("*.py"))) + len(list(src_dir.rglob("*.yaml")))
+        if total > 0:
+            _ok(f"src/ 包含 {total} 个源文件")
+        else:
+            _warn("src/ 目录为空")
+    else:
+        _fail("缺少 src/ 目录")
+        all_ok = False
+
+    print()
+    if all_ok:
+        print(f"  {_c('✅ 验证通过！扩展符合 Y.E.S. 规范', _GREEN + _BOLD)}")
+    else:
+        print(f"  {_c('❌ 验证失败，请修复上方问题', _RED + _BOLD)}")
+    print()
+
+
+# --------------------------------------------------------------------------- #
+# yuanbot test
+# --------------------------------------------------------------------------- #
+
+
+def _run_test(args: argparse.Namespace) -> None:
+    """在本地运行扩展测试"""
+    import subprocess
+
+    _header("运行扩展测试")
+
+    project_dir = Path(args.path).resolve()
+    tests_dir = project_dir / "tests"
+
+    if not tests_dir.exists():
+        _warn("tests/ 目录不存在，跳过测试")
+        return
+
+    test_files = list(tests_dir.rglob("test_*.py"))
+    if not test_files:
+        _warn("未找到测试文件")
+        return
+
+    _info(f"找到 {len(test_files)} 个测试文件")
+
+    cmd = [sys.executable, "-m", "pytest", str(tests_dir)]
+    if args.verbose:
+        cmd.append("-v")
+    else:
+        cmd.extend(["-q", "--tb=short"])
+
+    result = subprocess.run(cmd, cwd=str(project_dir))
+    print()
+    if result.returncode == 0:
+        print(f"  {_c('✅ 测试通过！', _GREEN + _BOLD)}")
+    else:
+        print(f"  {_c('❌ 测试失败', _RED + _BOLD)}")
+        sys.exit(result.returncode)
+
+
+# --------------------------------------------------------------------------- #
+# yuanbot build
+# --------------------------------------------------------------------------- #
+
+
+def _run_build(args: argparse.Namespace) -> None:
+    """打包扩展为 .yuanbot 文件"""
+    import json as _json
+    import zipfile
+
+    _header("打包扩展")
+
+    project_dir = Path(args.path).resolve()
+    manifest_path = project_dir / "manifest.json"
+    if not manifest_path.exists():
+        _fail("缺少 manifest.json")
+        return
+
+    manifest = _json.loads(manifest_path.read_text(encoding="utf-8"))
+    ext_id = manifest.get("id", "unknown")
+    ext_version = manifest.get("version", "0.0.0")
+
+    output_path = Path(args.output) if args.output else Path(f"{ext_id}-{ext_version}.yuanbot")
+
+    with zipfile.ZipFile(output_path, "w", zipfile.ZIP_DEFLATED) as zf:
+        for file_path in sorted(project_dir.rglob("*")):
+            if file_path.is_file():
+                rel = file_path.relative_to(project_dir)
+                if any(p.startswith(".") or p == "__pycache__" for p in rel.parts):
+                    continue
+                zf.write(file_path, str(rel))
+
+    size_kb = output_path.stat().st_size / 1024
+    _ok(f"已打包: {output_path} ({size_kb:.1f} KB)")
+    print()
+    print(f"  {_c('🎉 打包完成！', _GREEN + _BOLD)}")
+    print()
+
+
+# --------------------------------------------------------------------------- #
+# yuanbot publish
+# --------------------------------------------------------------------------- #
+
+
+def _run_publish(args: argparse.Namespace) -> None:
+    """发布扩展到社区市场"""
+    import json as _json
+
+    _header("发布扩展")
+
+    project_dir = Path(args.path).resolve()
+    manifest_path = project_dir / "manifest.json"
+    if not manifest_path.exists():
+        _fail("缺少 manifest.json，无法发布")
+        return
+
+    manifest = _json.loads(manifest_path.read_text(encoding="utf-8"))
+    ext_id = manifest.get("id", "unknown")
+    ext_version = manifest.get("version", "0.0.0")
+
+    print(f"  {_c('扩展 ID:', _BOLD)} {ext_id}")
+    print(f"  {_c('版本:', _BOLD)} {ext_version}")
+    print(f"  {_c('类型:', _BOLD)} {manifest.get('type', 'unknown')}")
+    print()
+
+    if args.dry_run:
+        _info("--dry-run 模式，仅验证不实际发布")
+        validate_args = argparse.Namespace(path=str(project_dir))
+        _run_validate(validate_args)
+        return
+
+    _warn("扩展市场功能尚未上线，请通过 GitHub PR 发布：")
+    print()
+    print("  1. Fork https://github.com/yuanbot-ai/yuanbot-extensions")
+    print("  2. 将扩展目录复制到对应类型文件夹")
+    print("  3. 提交 Pull Request")
+    print()
+    print(f"  {_c('文档: https://docs.yuanbot.app/marketplace/publish', _CYAN)}")
+    print()
 
 
 # --------------------------------------------------------------------------- #

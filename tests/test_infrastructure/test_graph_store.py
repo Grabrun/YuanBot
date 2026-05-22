@@ -392,7 +392,8 @@ class TestGraphStoreKuzuFallback:
 
     @pytest.mark.asyncio
     async def test_fallback_to_memory(self):
-        """当 kuzu 未安装时，应自动回退到内存模式"""
+        """当 kuzu 未安装时，应自动回退到内存模式；
+        当 kuzu 已安装时，应能正常使用 kuzu 后端。"""
         store = GraphStore(db_path="/tmp/nonexistent_kuzu_test")
         # 如果 kuzu 未安装，应该是内存模式
         # 如果 kuzu 已安装，会尝试创建数据库

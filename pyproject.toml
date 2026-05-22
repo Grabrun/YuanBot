@@ -37,12 +37,14 @@ dev = [
 ]
 openai = ["openai>=1.30"]
 anthropic = ["anthropic>=0.28"]
+milvus = ["pymilvus>=2.4"]
 graph = ["kuzu>=0.7"]
+cli = ["click>=8.0"]
 all-providers = [
     "yuanbot[openai,anthropic]",
 ]
 all = [
-    "yuanbot[openai,anthropic,graph]",
+    "yuanbot[openai,anthropic,milvus,graph,cli]",
 ]
 
 [project.scripts]

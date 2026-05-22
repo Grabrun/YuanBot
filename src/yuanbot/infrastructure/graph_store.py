@@ -7,12 +7,22 @@
 
 from __future__ import annotations
 
+import importlib.util
 import uuid
 from typing import Any
 
 import structlog
 
 logger = structlog.get_logger(__name__)
+
+# 检测 kuzu 是否可用
+_HAS_KUZU = importlib.util.find_spec("kuzu") is not None
+
+
+def is_kuzu_available() -> bool:
+    """检测 kuzu 是否已安装"""
+    return _HAS_KUZU
+
 
 # Kuzu 节点表定义
 _NODE_TABLES = {
@@ -57,6 +67,7 @@ class GraphStore:
         self._memory_graph = InMemoryGraph()
         self._db: Any = None
         self._conn: Any = None
+        self._db_path = db_path
         self._try_init_kuzu(db_path)
 
     @property
@@ -64,21 +75,33 @@ class GraphStore:
         """是否使用 Kuzu 后端"""
         return self._use_kuzu
 
+    @property
+    def backend(self) -> str:
+        """当前使用的后端名称"""
+        if self._use_kuzu:
+            return "kuzu"
+        return "memory"
+
     def _try_init_kuzu(self, db_path: str | None) -> None:
         """尝试初始化 Kuzu，失败则使用内存图"""
+        if not _HAS_KUZU:
+            logger.info("kuzu_not_available, using in-memory graph")
+            return
+
+        if not db_path:
+            logger.info("kuzu_no_path, using in-memory graph")
+            return
+
         try:
             import kuzu  # type: ignore[import-untyped]
 
-            if db_path:
-                self._db = kuzu.Database(db_path)
-                self._conn = kuzu.Connection(self._db)
-                self._init_schema()
-                self._use_kuzu = True
-                logger.info("kuzu_initialized", path=db_path)
-            else:
-                logger.info("kuzu_no_path, using in-memory graph")
-        except ImportError:
-            logger.info("kuzu_not_available, using in-memory graph")
+            self._db = kuzu.Database(db_path)
+            self._conn = kuzu.Connection(self._db)
+            self._init_schema()
+            self._use_kuzu = True
+            logger.info("kuzu_initialized", path=db_path)
+        except Exception as e:
+            logger.warning("kuzu_init_failed_fallback_memory", error=str(e))
 
     def _init_schema(self) -> None:
         """初始化 Kuzu Schema - 创建节点表和关系表"""
@@ -140,44 +163,52 @@ class GraphStore:
     async def _kuzu_add_node(
         self, node_id: str, node_type: str, properties: dict[str, Any]
     ) -> None:
-        """通过 Kuzu 添加节点"""
+        """通过 Kuzu 添加节点
+
+        使用 CREATE 语句插入新节点，如果主键冲突则使用 MATCH+SET 更新。
+        """
         assert self._conn is not None
 
         table_def = _NODE_TABLES.get(node_type)
         if table_def is None:
             raise ValueError(f"Unknown node type: {node_type}")
 
-        # 构建列值映射
-        col_names = ["id"]
-        col_values: list[str] = [f"'{node_id}'"]
-
+        # 构建属性字典
+        prop_map: dict[str, str] = {}
         for col in table_def:
-            val = properties.get(col, "")
-            # properties 字段存储序列化的额外属性
             if col == "properties":
                 extra = {k: v for k, v in properties.items() if k not in table_def}
                 import json
 
-                val = json.dumps(extra) if extra else "{}"
+                prop_map[col] = json.dumps(extra) if extra else "{}"
             else:
-                val = properties.get(col, "")
-            col_names.append(col)
-            col_values.append(f"'{self._escape(str(val))}'")
+                prop_map[col] = str(properties.get(col, ""))
 
-        cols_str = ", ".join(col_names)
-        vals_str = ", ".join(col_values)
+        # 构建 CREATE 子句: CREATE (n:Type {id: '...', col1: '...', col2: '...'})
+        all_props = {"id": node_id, **prop_map}
+        props_str = ", ".join(
+            f"{k}: '{self._escape(str(v))}'" for k, v in all_props.items()
+        )
 
         try:
             self._conn.execute(
-                f"MERGE INTO {node_type} ON id "
-                f"WHEN NOT MATCHED THEN CREATE ({cols_str}) = ({vals_str})"
+                f"CREATE (n:{node_type} {{{props_str}}})"
             )
-        except Exception:
-            # 如果 MERGE 不支持，尝试 INSERT
+        except RuntimeError:
+            # 主键冲突 -> 使用 MATCH + SET 更新
+            set_parts = []
+            for k, v in prop_map.items():
+                set_parts.append(f"n.{k} = '{self._escape(str(v))}'")
+            set_clause = ", ".join(set_parts)
             try:
-                self._conn.execute(f"INSERT INTO {node_type} ({cols_str}) VALUES ({vals_str})")
+                self._conn.execute(
+                    f"MATCH (n:{node_type}) WHERE n.id = '{self._escape(node_id)}' "
+                    f"SET {set_clause}"
+                )
             except Exception as e:
-                logger.warning("kuzu_add_node_failed", node_id=node_id, error=str(e))
+                logger.warning("kuzu_add_node_update_failed", node_id=node_id, error=str(e))
+        except Exception as e:
+            logger.warning("kuzu_add_node_failed", node_id=node_id, error=str(e))
 
     async def add_edge(
         self,

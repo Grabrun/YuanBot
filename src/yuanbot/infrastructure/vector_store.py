@@ -14,6 +14,19 @@ import structlog
 
 logger = structlog.get_logger(__name__)
 
+# 检测 pymilvus 是否可用
+try:
+    from pymilvus import MilvusClient
+
+    _HAS_MILVUS = True
+except ImportError:
+    _HAS_MILVUS = False
+
+
+def is_milvus_available() -> bool:
+    """检测 pymilvus 是否已安装"""
+    return _HAS_MILVUS
+
 
 @dataclass
 class VectorEntry:
@@ -28,11 +41,25 @@ class VectorStore:
     """向量存储统一接口
 
     首选 Milvus Lite（嵌入式），回退到内存向量存储。
+    支持自动检测 pymilvus 可用性。
     """
 
-    def __init__(self, use_milvus: bool = False, milvus_uri: str | None = None):
-        self._use_milvus = use_milvus
-        self._milvus_uri = milvus_uri
+    COLLECTION_NAME = "yuanbot_vectors"
+    DEFAULT_DIMENSION = 1536
+
+    def __init__(
+        self,
+        use_milvus: bool | None = None,
+        milvus_uri: str | None = None,
+        dimension: int = DEFAULT_DIMENSION,
+    ):
+        # use_milvus=None 时自动检测
+        if use_milvus is None:
+            self._use_milvus = _HAS_MILVUS
+        else:
+            self._use_milvus = use_milvus and _HAS_MILVUS
+        self._milvus_uri = milvus_uri or "data/yuanbot_vectors.db"
+        self._dimension = dimension
         self._milvus_client: Any = None
         self._memory_store: InMemoryVectorStore | None = None
         self._initialized = False
@@ -40,6 +67,15 @@ class VectorStore:
     @property
     def is_initialized(self) -> bool:
         return self._initialized
+
+    @property
+    def backend(self) -> str:
+        """当前使用的后端名称"""
+        if self._milvus_client is not None:
+            return "milvus_lite"
+        if self._memory_store is not None:
+            return "memory"
+        return "uninitialized"
 
     async def initialize(self) -> None:
         """初始化向量存储"""
@@ -50,7 +86,12 @@ class VectorStore:
             try:
                 await self._init_milvus()
                 self._initialized = True
-                logger.info("vector_store_initialized", backend="milvus")
+                logger.info(
+                    "vector_store_initialized",
+                    backend="milvus_lite",
+                    uri=self._milvus_uri,
+                    dimension=self._dimension,
+                )
                 return
             except Exception as e:
                 logger.warning(
@@ -76,24 +117,30 @@ class VectorStore:
         logger.info("vector_store_closed")
 
     async def _init_milvus(self) -> None:
-        """初始化 Milvus Lite"""
-        try:
-            from pymilvus import MilvusClient
-        except ImportError:
+        """初始化 Milvus Lite
+
+        使用 pymilvus.MilvusClient 创建嵌入式向量数据库实例。
+        Milvus Lite 将数据持久化到本地文件。
+        """
+        if not _HAS_MILVUS:
             raise ImportError(
                 "pymilvus is required for Milvus vector store. "
                 "Install it with: pip install pymilvus"
-            ) from None
+            )
 
-        uri = self._milvus_uri or "data/yuanbot_vectors.db"
+        uri = self._milvus_uri
         self._milvus_client = MilvusClient(uri=uri)
 
         # 创建集合（如果不存在）
-        collection_name = "yuanbot_vectors"
-        if not self._milvus_client.has_collection(collection_name):
+        if not self._milvus_client.has_collection(self.COLLECTION_NAME):
             self._milvus_client.create_collection(
-                collection_name=collection_name,
-                dimension=1536,  # OpenAI embedding 默认维度
+                collection_name=self.COLLECTION_NAME,
+                dimension=self._dimension,
+            )
+            logger.info(
+                "milvus_collection_created",
+                collection=self.COLLECTION_NAME,
+                dimension=self._dimension,
             )
 
     async def add_vector(
@@ -151,7 +198,7 @@ class VectorStore:
                 **(metadata or {}),
             }
             self._milvus_client.insert(
-                collection_name="yuanbot_vectors",
+                collection_name=self.COLLECTION_NAME,
                 data=[data],
             )
         except Exception as e:
@@ -167,7 +214,7 @@ class VectorStore:
         """通过 Milvus 搜索"""
         try:
             results = self._milvus_client.search(
-                collection_name="yuanbot_vectors",
+                collection_name=self.COLLECTION_NAME,
                 data=[query_vector],
                 limit=top_k,
                 output_fields=["*"],
@@ -197,7 +244,7 @@ class VectorStore:
         """通过 Milvus 删除"""
         try:
             self._milvus_client.delete(
-                collection_name="yuanbot_vectors",
+                collection_name=self.COLLECTION_NAME,
                 ids=[id],
             )
         except Exception as e:
