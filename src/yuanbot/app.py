@@ -17,6 +17,13 @@ from fastapi import FastAPI
 from starlette.websockets import WebSocket
 
 from yuanbot.adapters.channel.web_adapter import WebAdapter
+from yuanbot.auth.admin_routes import init_admin_stores
+from yuanbot.auth.conversation_routes import init_conversation_store
+from yuanbot.auth.middleware import AuthManager, init_auth_manager
+from yuanbot.auth.routes import router as auth_router
+from yuanbot.auth.conversation_routes import router as conversation_router
+from yuanbot.auth.admin_routes import router as admin_router
+from yuanbot.auth.store import ConversationStore, UserStore
 from yuanbot.config import YuanBotConfig
 from yuanbot.core.types import BotResponse
 from yuanbot.gateway.privacy import PrivacyManager
@@ -114,7 +121,24 @@ def create_app(config: YuanBotConfig) -> FastAPI:
         memory_manager=memory_manager,
     )
 
-    # ── 7. Web 通道适配器 ─────────────────────
+    # ── 7. 认证与用户系统 ───────────────────────
+    import hashlib
+
+    auth_secret = hashlib.sha256(
+        f"yuanbot-{config.app_name}-{config.version}".encode()
+    ).hexdigest()
+    auth_manager = AuthManager(
+        secret_key=auth_secret,
+        token_expire_hours=24,
+    )
+    user_store = UserStore(data_dir="data")
+    conv_store = ConversationStore(data_dir="data")
+    auth_manager.set_user_store(user_store)
+    init_auth_manager(auth_manager)
+    init_conversation_store(conv_store)
+    init_admin_stores(user_store, conv_store)
+
+    # ── 8. Web 通道适配器 ─────────────────────
     web_adapter = WebAdapter()
 
     # ── 8. 配置热加载监听器 ─────────────────────
@@ -155,6 +179,10 @@ def create_app(config: YuanBotConfig) -> FastAPI:
 
         # 初始化记忆管理器（包括自动 Redis 缓存）
         await memory_manager.initialize()
+
+        # 初始化用户与会话存储
+        await user_store.initialize()
+        await conv_store.initialize()
 
         # 启动 Web 适配器
         async def on_message(msg: Any) -> BotResponse:
@@ -201,10 +229,18 @@ def create_app(config: YuanBotConfig) -> FastAPI:
     app.state.proactive_strategy = proactive_strategy
     app.state.event_engine = event_engine
     app.state.config_watcher = config_watcher
+    app.state.auth_manager = auth_manager
+    app.state.user_store = user_store
+    app.state.conv_store = conv_store
 
     # 初始化隐私管理器
     privacy_manager = PrivacyManager(memory_manager=memory_manager)
     app.state.privacy_manager = privacy_manager
+
+    # 注册认证和会话路由
+    app.include_router(auth_router)
+    app.include_router(conversation_router)
+    app.include_router(admin_router)
 
     # 注册路由
     _register_routes(app, orchestrator, memory_manager, config)
@@ -215,17 +251,62 @@ def create_app(config: YuanBotConfig) -> FastAPI:
     # 注册 WebSocket 路由
     @app.websocket("/ws")
     async def websocket_endpoint(ws: WebSocket):
-        """WebSocket 聊天端点
+        """WebSocket 聊天端点（无认证，向后兼容）"""
+        await web_adapter.handle_websocket(ws)
 
-        连接后即可通过 JSON 消息进行实时对话：
+    @app.websocket("/ws/chat")
+    async def websocket_chat_endpoint(ws: WebSocket):
+        """WebSocket 认证聊天端点
 
-            ws://host:port/ws
+        连接时需要在 URL 参数中携带 JWT token:
+            ws://host:port/ws/chat?token=<jwt>
 
         消息格式：
             {"type": "message", "text": "你好"}
             {"type": "ping"}
         """
-        await web_adapter.handle_websocket(ws)
+        from yuanbot.auth.middleware import get_current_user_from_ws
+
+        user = await get_current_user_from_ws(ws)
+        if not user:
+            await ws.close(code=4001, reason="Unauthorized")
+            return
+
+        # 注入用户信息到会话
+        await ws.accept()
+        session_id = f"ws_{user.user_id}"
+        logger.info("ws_chat_connected", user_id=user.user_id, username=user.username)
+
+        try:
+            while True:
+                raw = await ws.receive_text()
+                import json
+
+                try:
+                    data = json.loads(raw)
+                except json.JSONDecodeError:
+                    await ws.send_text(json.dumps({"type": "error", "message": "Invalid JSON"}))
+                    continue
+
+                msg_type = data.get("type", "message")
+                if msg_type == "ping":
+                    await ws.send_text(json.dumps({"type": "pong"}))
+                    continue
+
+                if msg_type == "message":
+                    text = data.get("text", "")
+                    if text:
+                        # 处理聊天消息
+                        response = await orchestrator.process_message(
+                            _make_user_message(user, text, session_id)
+                        )
+                        await ws.send_text(json.dumps({
+                            "type": "response",
+                            "content_type": "text",
+                            "text": response.content.text if response.content else "",
+                        }, ensure_ascii=False))
+        except Exception as e:
+            logger.info("ws_chat_disconnected", user_id=user.user_id, error=str(e))
 
     return app
 
@@ -235,6 +316,20 @@ def _load_persona(config: YuanBotConfig) -> Any:
     from yuanbot.persona.default import DefaultPersona
 
     return DefaultPersona(relationship_stage="initial")
+
+
+def _make_user_message(user: Any, text: str, session_id: str) -> Any:
+    """将认证用户的消息转换为 UserMessage"""
+    from yuanbot.core.types import ContentType, UserMessage
+
+    return UserMessage(
+        platform="web",
+        platform_user_id=user.user_id,
+        yuanbot_user_id=user.user_id,
+        session_id=session_id,
+        content_type=ContentType.TEXT,
+        text=text,
+    )
 
 
 def _register_metrics_middleware(app: FastAPI) -> None:
