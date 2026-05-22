@@ -316,40 +316,13 @@ class AIService:
     def _resolve_model(self, model: str | None) -> tuple[str, str]:
         """解析模型参数，返回 (provider_id, model_id)
 
+        委托给 ProviderManager.resolve_model()。
         支持格式：
         - None: 使用默认提供商的默认模型
-        - "gpt-4o": 在当前提供商中查找
+        - "gpt-4o": 在默认提供商中查找
         - "openai/gpt-4o": 指定提供商+模型
         """
-        if model is None:
-            default_config = self._pm.get_default_provider()
-            if not default_config:
-                raise ValueError("No default AI provider configured")
-            default_model = default_config.default_model
-            if not default_model:
-                # 使用第一个 chat 模型
-                chat_models = self._pm.get_models(
-                    default_config.provider_id, model_type="chat"
-                )
-                if chat_models:
-                    default_model = chat_models[0].id
-                else:
-                    raise ValueError(
-                        f"No chat model found for provider '{default_config.provider_id}'"
-                    )
-            return default_config.provider_id, default_model
-
-        # 检查是否包含提供商前缀
-        if "/" in model:
-            pid, mid = model.split("/", 1)
-            return pid, mid
-
-        # 在默认提供商中查找
-        default_config = self._pm.get_default_provider()
-        if default_config:
-            return default_config.provider_id, model
-
-        raise ValueError(f"Cannot resolve model '{model}'")
+        return self._pm.resolve_model(model)
 
     async def _get_healthy_adapter(self, provider_id: str) -> AIProviderAdapter:
         """获取健康的适配器实例（检查熔断器状态）"""

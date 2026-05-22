@@ -94,6 +94,21 @@ def main() -> None:
     # yuanbot version
     subparsers.add_parser("version", help="显示版本信息")
 
+    # yuanbot provider
+    provider_parser = subparsers.add_parser("provider", help="AI 提供商管理")
+    provider_sub = provider_parser.add_subparsers(dest="provider_action")
+    provider_sub.add_parser("list", help="列出所有已配置的提供商")
+    info_parser = provider_sub.add_parser("info", help="显示提供商详细信息")
+    info_parser.add_argument("provider_id", help="提供商 ID")
+    set_parser = provider_sub.add_parser("set", help="设置默认提供商")
+    set_parser.add_argument("target", choices=["default", "embedding"], help="设置目标")
+    set_parser.add_argument("provider_id", help="提供商 ID")
+    create_parser = provider_sub.add_parser("create", help="交互式创建新的 Provider 配置")
+    create_parser.add_argument("--id", help="Provider ID")
+    create_parser.add_argument("--adapter", default="openai-adapter", help="适配器 (默认 openai-adapter)")
+    create_parser.add_argument("--base-url", help="API Base URL")
+    create_parser.add_argument("--name", help="显示名称")
+
     # yuanbot create
     create_parser = subparsers.add_parser("create", help="创建扩展项目")
     create_parser.add_argument(
@@ -158,6 +173,17 @@ def main() -> None:
             parser.parse_args(["memory", "--help"])
     elif args.command == "version":
         _run_version()
+    elif args.command == "provider":
+        if args.provider_action == "list":
+            _run_provider_list(args)
+        elif args.provider_action == "info":
+            _run_provider_info(args)
+        elif args.provider_action == "set":
+            _run_provider_set(args)
+        elif args.provider_action == "create":
+            _run_provider_create(args)
+        else:
+            parser.parse_args(["provider", "--help"])
     elif args.command == "create":
         _run_create(args)
     elif args.command == "validate":
@@ -568,6 +594,232 @@ def _run_version() -> None:
     from yuanbot import __version__
 
     print(f"缘·Bot (YuanBot) v{__version__}")
+
+
+# --------------------------------------------------------------------------- #
+# yuanbot provider
+# --------------------------------------------------------------------------- #
+
+
+def _run_provider_list(args: argparse.Namespace) -> None:
+    """列出所有已配置的 AI 提供商"""
+    _header("AI 提供商列表")
+
+    from pathlib import Path
+
+    from yuanbot.providers.manager import ProviderManager
+    from yuanbot.providers.registry import ProviderRegistry
+
+    manager = ProviderManager(
+        registry=ProviderRegistry(),
+        config_dir=Path("configs"),
+    )
+    manager.load_providers()
+
+    providers = manager.list_providers()
+    if not providers:
+        _info("未找到任何 Provider 配置")
+        _info("运行 yuanbot provider create 创建新配置")
+        return
+
+    # 表头
+    print(
+        f"  {_c('状态', _BOLD)}  {_c('Provider ID', _BOLD)}  "
+        f"{_c('适配器', _BOLD)}  {_c('默认模型', _BOLD)}  "
+        f"{_c('模型数', _BOLD)}  {_c('角色', _BOLD)}"
+    )
+    print("  " + "─" * 70)
+
+    for p in providers:
+        status = _c("✅", "") if p["enabled"] else _c("❌", "")
+        roles = []
+        if p["is_default"]:
+            roles.append("默认")
+        if p["is_embedding"]:
+            roles.append("嵌入")
+        role_str = ", ".join(roles) if roles else "-"
+        default_model = p["default_model"] or "(未设置)"
+
+        print(
+            f"  {status}  {p['provider_id']:20s} {p['adapter']:20s} "
+            f"{default_model:20s} {p['model_count']:5d}  {role_str}"
+        )
+    print()
+
+
+def _run_provider_info(args: argparse.Namespace) -> None:
+    """显示提供商详细信息"""
+    _header(f"Provider 详情: {args.provider_id}")
+
+    from pathlib import Path
+
+    from yuanbot.providers.manager import ProviderManager
+    from yuanbot.providers.registry import ProviderRegistry
+
+    manager = ProviderManager(
+        registry=ProviderRegistry(),
+        config_dir=Path("configs"),
+    )
+    manager.load_providers()
+
+    provider = manager.get_provider(args.provider_id)
+    if not provider:
+        _fail(f"Provider '{args.provider_id}' 未找到")
+        _info(f"可用: {', '.join(p['provider_id'] for p in manager.list_providers())}")
+        return
+
+    print(f"  {_c('Provider ID:', _BOLD)} {provider.provider_id}")
+    print(f"  {_c('显示名称:', _BOLD)} {provider.name}")
+    print(f"  {_c('适配器:', _BOLD)} {provider.adapter}")
+    print(f"  {_c('启用:', _BOLD)} {'是' if provider.enabled else '否'}")
+    print(f"  {_c('默认模型:', _BOLD)} {provider.default_model or '(未设置)'}")
+    print(f"  {_c('嵌入模型:', _BOLD)} {provider.embedding_model or '(未设置)'}")
+    print()
+
+    if provider.models:
+        print(f"  {_c('模型列表:', _BOLD)}")
+        for m in provider.models:
+            emb_info = f" (维度: {m.dimension})" if m.dimension else ""
+            print(f"    - {m.id}  类型: {m.type}  上下文: {m.max_tokens}{emb_info}")
+    else:
+        _info("无模型配置")
+    print()
+
+    # 显示 API 端点（脱敏）
+    api_key = provider.config.get("api_key", "")
+    base_url = provider.config.get("base_url", "")
+    print(f"  {_c('API 端点:', _BOLD)} {base_url or '(未设置)'}")
+    if api_key:
+        # 日志脱敏：只显示前 8 位和后 4 位
+        masked = _mask_secret(api_key)
+        print(f"  {_c('API Key:', _BOLD)} {masked}")
+    else:
+        print(f"  {_c('API Key:', _BOLD)} (未设置)")
+    print()
+
+
+def _run_provider_set(args: argparse.Namespace) -> None:
+    """设置默认提供商"""
+    _header(f"设置{'默认' if args.target == 'default' else '嵌入'}提供商")
+
+    from pathlib import Path
+
+    from yaml import safe_dump
+
+    from yuanbot.providers.manager import ProviderManager
+    from yuanbot.providers.registry import ProviderRegistry
+
+    manager = ProviderManager(
+        registry=ProviderRegistry(),
+        config_dir=Path("configs"),
+    )
+    manager.load_providers()
+
+    provider = manager.get_provider(args.provider_id)
+    if not provider:
+        _fail(f"Provider '{args.provider_id}' 未找到")
+        return
+
+    if not provider.enabled:
+        _warn(f"Provider '{args.provider_id}' 当前已禁用")
+
+    # 更新 bot.yaml
+    bot_yaml_path = Path("configs/bot.yaml")
+    if not bot_yaml_path.exists():
+        _fail("configs/bot.yaml 不存在")
+        return
+
+    import yaml
+
+    with open(bot_yaml_path) as f:
+        bot_config = yaml.safe_load(f) or {}
+
+    if "ai" not in bot_config:
+        bot_config["ai"] = {}
+
+    if args.target == "default":
+        bot_config["ai"]["default_provider"] = args.provider_id
+        _ok(f"默认对话提供商已设置为: {args.provider_id}")
+    else:
+        bot_config["ai"]["embedding_provider"] = args.provider_id
+        _ok(f"嵌入专用提供商已设置为: {args.provider_id}")
+
+    with open(bot_yaml_path, "w") as f:
+        safe_dump(bot_config, f, allow_unicode=True, default_flow_style=False)
+
+    _info("配置已写入 configs/bot.yaml，重启后生效")
+    print()
+
+
+def _run_provider_create(args: argparse.Namespace) -> None:
+    """交互式创建新的 Provider 配置"""
+    _header("创建新 Provider")
+
+    from pathlib import Path
+
+    from yaml import safe_dump
+
+    provider_id = args.id
+    if not provider_id:
+        provider_id = input("  ? Provider ID (如 my-llm): ").strip()
+        if not provider_id:
+            _fail("Provider ID 不能为空")
+            return
+
+    # 检查是否已存在
+    provider_file = Path(f"configs/Providers/{provider_id}.yaml")
+    if provider_file.exists():
+        _fail(f"Provider '{provider_id}' 配置已存在: {provider_file}")
+        return
+
+    adapter = args.adapter
+    name = args.name or provider_id
+    base_url = args.base_url
+    if not base_url:
+        base_url = input("  ? API Base URL: ").strip()
+        if not base_url:
+            _fail("Base URL 不能为空")
+            return
+
+    default_model = input("  ? 默认模型 ID (如 gpt-4o): ").strip() or ""
+
+    # 构建配置
+    config = {
+        "provider_id": provider_id,
+        "name": name,
+        "adapter": adapter,
+        "enabled": True,
+        "config": {
+            "api_key": f"${{{provider_id.upper()}_API_KEY}}",
+            "base_url": base_url,
+            "models": [],
+        },
+    }
+
+    if default_model:
+        config["config"]["default"] = default_model
+        config["config"]["models"].append({
+            "id": default_model,
+            "type": "chat",
+            "max_tokens": 128000,
+        })
+
+    # 写入文件
+    provider_file.parent.mkdir(parents=True, exist_ok=True)
+    with open(provider_file, "w") as f:
+        safe_dump(config, f, allow_unicode=True, default_flow_style=False)
+
+    _ok(f"Provider 配置已创建: {provider_file}")
+    _info(f"请设置环境变量 {provider_id.upper()}_API_KEY")
+    _info("重启服务后生效")
+    print()
+
+
+def _mask_secret(secret: str) -> str:
+    """脱敏显示密钥，只显示前 8 位和后 4 位"""
+    if len(secret) <= 12:
+        return "****"
+    return f"{secret[:8]}...{secret[-4:]}"
 
 
 # --------------------------------------------------------------------------- #

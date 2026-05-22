@@ -539,17 +539,122 @@ def _register_routes(
         """查看 AI 提供商状态"""
         pm: ProviderManager = app.state.provider_manager
         return {
-            "providers": [
-                {
-                    "provider_id": p.provider_id,
-                    "enabled": p.enabled,
-                    "default_model": p.default_model,
-                    "model_count": len(p.models),
-                }
-                for p in pm.get_enabled_providers()
-            ],
+            "providers": pm.list_providers(),
             "ai_service_health": app.state.ai_service.get_health_status(),
         }
+
+    @app.get("/api/providers/{provider_id}")
+    async def get_provider_detail(provider_id: str):
+        """查看单个提供商详情"""
+        from fastapi.responses import JSONResponse
+
+        pm: ProviderManager = app.state.provider_manager
+        provider = pm.get_provider(provider_id)
+        if not provider:
+            return JSONResponse(
+                status_code=404,
+                content={"error": f"Provider '{provider_id}' not found"},
+            )
+        return {
+            "provider_id": provider.provider_id,
+            "name": provider.name,
+            "adapter": provider.adapter,
+            "enabled": provider.enabled,
+            "default_model": provider.default_model,
+            "embedding_model": provider.embedding_model,
+            "models": [
+                {
+                    "id": m.id,
+                    "type": m.type,
+                    "max_tokens": m.max_tokens,
+                    "dimension": m.dimension,
+                }
+                for m in provider.models
+            ],
+        }
+
+    @app.put("/api/providers/active")
+    async def set_active_provider(request: dict[str, Any]):
+        """动态切换活跃提供商
+
+        请求体：
+            {
+                "provider_id": "deepseek",   // 切换默认对话提供商
+                "type": "default"             // "default" 或 "embedding"
+            }
+        """
+        from fastapi.responses import JSONResponse
+
+        pm: ProviderManager = app.state.provider_manager
+        provider_id = request.get("provider_id")
+        switch_type = request.get("type", "default")
+
+        if not provider_id:
+            return JSONResponse(
+                status_code=400,
+                content={"error": "provider_id is required"},
+            )
+
+        provider = pm.get_provider(provider_id)
+        if not provider:
+            return JSONResponse(
+                status_code=404,
+                content={"error": f"Provider '{provider_id}' not found"},
+            )
+
+        if not provider.enabled:
+            return JSONResponse(
+                status_code=400,
+                content={"error": f"Provider '{provider_id}' is disabled"},
+            )
+
+        try:
+            if switch_type == "embedding":
+                pm.set_embedding_provider(provider_id)
+            else:
+                pm.set_default_provider(provider_id)
+        except ValueError as e:
+            return JSONResponse(
+                status_code=400,
+                content={"error": str(e)},
+            )
+
+        return {
+            "status": "ok",
+            "message": f"{'Embedding' if switch_type == 'embedding' else 'Default'} "
+                        f"provider switched to '{provider_id}'",
+            "provider_id": provider_id,
+            "default_model": provider.default_model,
+        }
+
+    @app.post("/api/providers/{provider_id}/reload")
+    async def reload_provider(provider_id: str):
+        """热重载指定提供商配置"""
+        from fastapi.responses import JSONResponse
+
+        pm: ProviderManager = app.state.provider_manager
+        provider = pm.get_provider(provider_id)
+        if not provider:
+            return JSONResponse(
+                status_code=404,
+                content={"error": f"Provider '{provider_id}' not found"},
+            )
+
+        # 从 YAML 重新加载
+        import yaml
+
+        yaml_path = Path("configs/Providers") / f"{provider_id}.yaml"
+        if not yaml_path.exists():
+            return JSONResponse(
+                status_code=404,
+                content={"error": f"Config file not found: {yaml_path}"},
+            )
+
+        with open(yaml_path) as f:
+            new_config = yaml.safe_load(f)
+
+        await pm.reload_provider(provider_id, new_config)
+        return {"status": "ok", "message": f"Provider '{provider_id}' reloaded"}
 
     @app.get("/api/gdpr/export")
     async def gdpr_export(user_id: str):
