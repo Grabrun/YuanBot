@@ -2,7 +2,50 @@
 
 本项目遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
-## [1.0.0] - 2025-05-22
+## [1.1.0] - 2026-05-22
+
+### ✨ 新增功能
+
+#### 存储引擎升级
+- Milvus Lite 向量数据库真正集成（自动检测，fallback 内存模式）
+- Kuzu 嵌入式图数据库真正集成（知识图谱持久化）
+- MySQL 存储支持（SQLite/MySQL 无缝切换）
+- Redis 工作记忆自动启用（环境变量检测，自动降级）
+
+#### 监控与运维
+- Prometheus 监控指标 `/metrics`（请求计数、延迟、AI调用、记忆操作）
+- 健康检查端点 `/healthz` 和 `/readyz`（Kubernetes 探针规范）
+- 配置热加载（Providers/Channels 配置变化自动重载适配器）
+
+#### 安全与合规
+- JWT 权限令牌（gateway/jwt_auth.py，支持 readonly/user_data/system）
+- GDPR 数据导出/删除 API（/api/gdpr/export、/api/gdpr/delete）
+- AI 适配器 validate_config() 方法
+- AI 适配器速率限制（token bucket 算法）
+
+#### AI 增强
+- 深度情感分析（DeepEmotionAnalyzer，LLM 链式思考模式）
+- 本地小模型意图识别（MLIntentClassifier，ONNX 模型支持）
+- 关系阶段动态调整（4阶段：初期→熟悉→亲密→深度）
+- 记忆整理定时调度（记忆固化 + 遗忘曲线 Cron 任务）
+
+#### 部署与扩展
+- Serverless 部署模式（AWS Lambda / 阿里云 FC handler）
+- 扩展市场基础 API（/api/extensions CRUD）
+- gRPC 工具沙盒框架（proto 定义 + server/client stub）
+- yuanbot-cli 完整命令（create/validate/test/build/publish）
+
+#### 文档
+- 完整使用文档（快速开始、配置、API、部署、开发指南）
+- 架构详解、贡献指南
+- 设计检查报告（4轮迭代）
+
+### 📊 测试
+- 787 个测试全部通过
+
+---
+
+## [1.0.0] - 2026-05-22
 
 ### 🎉 首个正式发布
 
