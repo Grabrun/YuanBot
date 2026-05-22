@@ -8,6 +8,7 @@
 
 from __future__ import annotations
 
+import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
@@ -18,6 +19,7 @@ from starlette.websockets import WebSocket
 from yuanbot.adapters.channel.web_adapter import WebAdapter
 from yuanbot.config import YuanBotConfig
 from yuanbot.core.types import BotResponse
+from yuanbot.gateway.privacy import PrivacyManager
 from yuanbot.infrastructure.config_watcher import ConfigWatcher
 from yuanbot.memory.manager import MemoryManager
 from yuanbot.orchestrator.engine import OrchestratorEngine
@@ -30,6 +32,7 @@ from yuanbot.providers.manager import ProviderManager
 from yuanbot.providers.registry import ProviderRegistry
 from yuanbot.services.ai_service import AIService
 from yuanbot.services.capability_orchestrator import CapabilityOrchestrator
+from yuanbot.services.extension_standard import ExtensionManifest, ExtensionValidator
 from yuanbot.skills.manager import SkillManager
 from yuanbot.tools.manager import ToolManager
 
@@ -184,6 +187,10 @@ def create_app(config: YuanBotConfig) -> FastAPI:
     app.state.proactive_strategy = proactive_strategy
     app.state.event_engine = event_engine
     app.state.config_watcher = config_watcher
+
+    # 初始化隐私管理器
+    privacy_manager = PrivacyManager(memory_manager=memory_manager)
+    app.state.privacy_manager = privacy_manager
 
     # 注册路由
     _register_routes(app, orchestrator, memory_manager, config)
@@ -530,6 +537,56 @@ def _register_routes(
             "ai_service_health": app.state.ai_service.get_health_status(),
         }
 
+    @app.get("/api/gdpr/export")
+    async def gdpr_export(user_id: str):
+        """GDPR 数据导出
+
+        导出指定用户的所有数据（记忆、画像、对话历史）为 JSON。
+        符合 GDPR 数据可携带权要求。
+
+        Args:
+            user_id: 用户 ID
+        """
+        privacy: PrivacyManager = app.state.privacy_manager
+        data = await privacy.export_user_data(user_id)
+        return data
+
+    @app.post("/api/gdpr/delete")
+    async def gdpr_delete(request: dict[str, Any]):
+        """GDPR 数据删除
+
+        删除指定用户的所有数据。
+        符合 GDPR 被遗忘权要求。
+        需要用户确认（传入 user_id 参数）。
+
+        请求体:
+            {"user_id": "xxx", "confirm": true}
+        """
+        user_id = request.get("user_id")
+        if not user_id:
+            from fastapi.responses import JSONResponse
+
+            return JSONResponse(
+                content={"error": "user_id is required"},
+                status_code=400,
+            )
+
+        confirm = request.get("confirm", False)
+        if not confirm:
+            from fastapi.responses import JSONResponse
+
+            return JSONResponse(
+                content={
+                    "error": "Confirmation required",
+                    "hint": "Set 'confirm': true in request body to proceed with data deletion.",
+                },
+                status_code=400,
+            )
+
+        privacy: PrivacyManager = app.state.privacy_manager
+        result = await privacy.delete_user_data(user_id)
+        return result
+
     @app.get("/api/capabilities")
     async def get_capabilities():
         """查看已加载的能力"""
@@ -539,3 +596,163 @@ def _register_routes(
             "skills": sm.get_all_skills(),
             "tools": tm.get_all_tools(),
         }
+
+    # ── 扩展市场 API ────────────────────────────
+
+    _extensions_dir = Path(os.environ.get("YUANBOT_EXTENSIONS_DIR", "data/extensions"))
+
+    @app.get("/api/extensions")
+    async def list_extensions():
+        """列出已安装的扩展"""
+        if not _extensions_dir.exists():
+            return {"extensions": [], "count": 0}
+
+        extensions = []
+        for ext_dir in sorted(_extensions_dir.iterdir()):
+            if not ext_dir.is_dir():
+                continue
+            manifest_path = ext_dir / "manifest.json"
+            if manifest_path.exists():
+                try:
+                    manifest = ExtensionManifest.from_file(manifest_path)
+                    extensions.append(manifest.to_dict())
+                except Exception as e:
+                    extensions.append(
+                        {"id": ext_dir.name, "error": f"Failed to load manifest: {e}"}
+                    )
+
+        return {"extensions": extensions, "count": len(extensions)}
+
+    @app.get("/api/extensions/{ext_id}")
+    async def get_extension(ext_id: str):
+        """获取扩展详情"""
+        ext_dir = _extensions_dir / ext_id
+        if not ext_dir.exists():
+            from fastapi.responses import JSONResponse
+
+            return JSONResponse(
+                status_code=404,
+                content={"error": f"Extension '{ext_id}' not found"},
+            )
+
+        manifest_path = ext_dir / "manifest.json"
+        if not manifest_path.exists():
+            from fastapi.responses import JSONResponse
+
+            return JSONResponse(
+                status_code=404,
+                content={"error": f"Extension '{ext_id}' has no manifest.json"},
+            )
+
+        manifest = ExtensionManifest.from_file(manifest_path)
+        return manifest.to_dict()
+
+    @app.post("/api/extensions/install")
+    async def install_extension(request: dict[str, Any]):
+        """安装扩展（从 URL 下载 zip 或从本地路径安装）"""
+        import shutil
+        import zipfile
+
+        from fastapi.responses import JSONResponse
+
+        source_url = request.get("url")
+        source_path = request.get("path")
+
+        if not source_url and not source_path:
+            return JSONResponse(
+                status_code=400,
+                content={"error": "Must provide either 'url' or 'path'"},
+            )
+
+        _extensions_dir.mkdir(parents=True, exist_ok=True)
+        tmp_dir = _extensions_dir / ".tmp_install"
+
+        try:
+            if source_url:
+                import httpx
+
+                tmp_dir.mkdir(parents=True, exist_ok=True)
+                zip_path = tmp_dir / "extension.zip"
+                async with httpx.AsyncClient(timeout=60) as client:
+                    resp = await client.get(source_url)
+                    resp.raise_for_status()
+                    zip_path.write_bytes(resp.content)
+
+                with zipfile.ZipFile(zip_path) as zf:
+                    zf.extractall(tmp_dir)
+
+                manifest_found = False
+                for item in tmp_dir.iterdir():
+                    if item.is_dir() and (item / "manifest.json").exists():
+                        source_dir = item
+                        manifest_found = True
+                        break
+                if not manifest_found and (tmp_dir / "manifest.json").exists():
+                    source_dir = tmp_dir
+                    manifest_found = True
+
+                if not manifest_found:
+                    return JSONResponse(
+                        status_code=400,
+                        content={"error": "No manifest.json found in downloaded archive"},
+                    )
+            else:
+                source_dir = Path(source_path)
+                if not source_dir.exists():
+                    return JSONResponse(
+                        status_code=400,
+                        content={"error": f"Path does not exist: {source_path}"},
+                    )
+
+            manifest_path = source_dir / "manifest.json"
+            manifest = ExtensionManifest.from_file(manifest_path)
+            manifest_errors = manifest.validate()
+            if manifest_errors:
+                return JSONResponse(
+                    status_code=400,
+                    content={"error": "Invalid manifest", "details": manifest_errors},
+                )
+
+            errors = ExtensionValidator.validate_extension_dir(source_dir)
+            errors = [e for e in errors if "README" not in e]
+            if errors:
+                return JSONResponse(
+                    status_code=400,
+                    content={"error": "Extension validation failed", "details": errors},
+                )
+
+            dest_dir = _extensions_dir / manifest.id
+            if dest_dir.exists():
+                shutil.rmtree(dest_dir)
+
+            shutil.copytree(str(source_dir), str(dest_dir))
+
+            return {"status": "installed", "extension": manifest.to_dict()}
+
+        finally:
+            if tmp_dir.exists():
+                shutil.rmtree(tmp_dir, ignore_errors=True)
+
+    @app.post("/api/extensions/uninstall")
+    async def uninstall_extension(request: dict[str, Any]):
+        """卸载扩展"""
+        import shutil
+
+        from fastapi.responses import JSONResponse
+
+        ext_id = request.get("id")
+        if not ext_id:
+            return JSONResponse(
+                status_code=400,
+                content={"error": "Must provide 'id'"},
+            )
+
+        ext_dir = _extensions_dir / ext_id
+        if not ext_dir.exists():
+            return JSONResponse(
+                status_code=404,
+                content={"error": f"Extension '{ext_id}' not found"},
+            )
+
+        shutil.rmtree(ext_dir)
+        return {"status": "uninstalled", "id": ext_id}

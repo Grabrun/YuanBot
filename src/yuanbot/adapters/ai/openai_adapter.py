@@ -21,6 +21,7 @@ from yuanbot.core.types import (
     TokenUsage,
     ToolCall,
     ToolDefinition,
+    ValidationResult,
 )
 
 logger = structlog.get_logger(__name__)
@@ -81,6 +82,16 @@ class OpenAIAdapter(BaseAIProvider):
     @property
     def max_context_length(self) -> int:
         return MODEL_CONTEXT_LENGTHS.get(self._default_model, 128000)
+
+    def validate_config(self) -> ValidationResult:
+        """验证 OpenAI 适配器配置"""
+        errors: list[str] = []
+        if not self._api_key:
+            errors.append(
+                "OpenAI API key not configured. "
+                "Set YUAN_AI_OPENAI_API_KEY or pass config['api_key']"
+            )
+        return ValidationResult(valid=len(errors) == 0, errors=errors)
 
     async def chat_completion(
         self,

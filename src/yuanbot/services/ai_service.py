@@ -79,6 +79,17 @@ class CircuitBreakerState:
         return True
 
 
+class RateLimitError(Exception):
+    """速率限制错误
+
+    当 AI 服务请求超过速率限制时抛出。
+    """
+
+    def __init__(self, message: str = "Rate limit exceeded", retry_after: float | None = None):
+        super().__init__(message)
+        self.retry_after = retry_after
+
+
 class AIService:
     """统一 AI 服务门面
 
@@ -117,7 +128,17 @@ class AIService:
 
         # 速率限制（每秒最大请求数，0 表示不限制）
         self._rate_limit = self._config.get("rate_limit_per_second", 0)
-        self._rate_limiter: Any = None  # 可选：TokenBucket 实例
+        self._rate_limiter: Any = None
+        if self._rate_limit > 0:
+            from yuanbot.gateway.auth import TokenBucket
+
+            burst = self._config.get("rate_limit_burst", max(int(self._rate_limit * 2), 5))
+            self._rate_limiter = TokenBucket(rate=float(self._rate_limit), burst=burst)
+            logger.info(
+                "rate_limiter_initialized",
+                rate_per_second=self._rate_limit,
+                burst=burst,
+            )
 
     # ── 核心接口 ──────────────────────────────
 
@@ -150,6 +171,7 @@ class AIService:
             ValueError: 提供商未找到
         """
         provider_id, actual_model = self._resolve_model(model)
+        self._check_rate_limit()
         adapter = await self._get_healthy_adapter(provider_id)
 
         last_error: Exception | None = None
@@ -209,6 +231,7 @@ class AIService:
             ChatChunk: 流式响应块
         """
         provider_id, actual_model = self._resolve_model(model)
+        self._check_rate_limit()
         adapter = await self._get_healthy_adapter(provider_id)
 
         try:
@@ -242,6 +265,7 @@ class AIService:
             向量列表
         """
         # 嵌入提供商优先使用配置的 embedding_provider
+        self._check_rate_limit()
         pid = provider_id or self._config.get("embedding_provider")
         if not pid:
             # 回退到默认提供商
@@ -270,6 +294,22 @@ class AIService:
         except Exception:
             self._circuit_breaker.record_failure(pid)
             raise
+
+    # ── 速率限制 ──────────────────────────────
+
+    def _check_rate_limit(self) -> None:
+        """检查速率限制
+
+        如果超限，抛出 RateLimitError。
+        """
+        if self._rate_limiter is None:
+            return
+        if not self._rate_limiter.try_consume():
+            logger.warning("rate_limit_exceeded", rate_per_second=self._rate_limit)
+            raise RateLimitError(
+                f"Rate limit exceeded: max {self._rate_limit} requests/second",
+                retry_after=1.0 / self._rate_limit if self._rate_limit > 0 else None,
+            )
 
     # ── 模型解析 ──────────────────────────────
 

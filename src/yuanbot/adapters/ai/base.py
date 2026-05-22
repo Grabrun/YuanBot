@@ -9,6 +9,7 @@ from typing import Any
 import structlog
 
 from yuanbot.core.interfaces import AIProviderAdapter
+from yuanbot.core.types import ValidationResult
 
 logger = structlog.get_logger(__name__)
 
@@ -41,3 +42,10 @@ class BaseAIProvider(AIProviderAdapter, ABC):
     def max_context_length(self) -> int:
         """默认最大上下文长度"""
         return 128000
+
+    def validate_config(self) -> ValidationResult:
+        """验证提供商基础配置
+
+        子类应重写此方法以检查各自特有配置。
+        """
+        return ValidationResult(valid=True)

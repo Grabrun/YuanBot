@@ -27,6 +27,7 @@ from yuanbot.core.types import (
     TokenUsage,
     ToolCall,
     ToolDefinition,
+    ValidationResult,
 )
 
 logger = structlog.get_logger(__name__)
@@ -91,6 +92,18 @@ class OllamaAdapter(BaseAIProvider):
         if self._default_model in self._model_cache:
             return self._model_cache[self._default_model]
         return 32768
+
+    def validate_config(self) -> ValidationResult:
+        """验证 Ollama 适配器配置"""
+        errors: list[str] = []
+        if not self._base_url:
+            errors.append("Ollama base_url not configured.")
+        if not self._default_model and not self._models:
+            errors.append(
+                "Ollama default_model or models list not configured. "
+                "Set YUAN_AI_OLLAMA_DEFAULT or pass config['default']"
+            )
+        return ValidationResult(valid=len(errors) == 0, errors=errors)
 
     async def chat_completion(
         self,

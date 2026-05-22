@@ -1,0 +1,103 @@
+// YuanBot Tool Sandbox - gRPC 服务定义
+//
+// 定义工具沙盒执行的 gRPC 接口。
+// 使用 protobuf 3 语法。
+//
+// 编译命令（仅供参考，实际使用 stub 实现时不需要）：
+//   python -m grpc_tools.protoc -I. --python_out=. --grpc_python_out=. tool_sandbox.proto
+
+syntax = "proto3";
+
+package yuanbot.sandbox;
+
+// 工具执行请求
+message ToolRequest {
+  // 工具唯一标识
+  string tool_id = 1;
+  // 工具参数（JSON 序列化）
+  string params_json = 2;
+  // 超时时间（秒）
+  int32 timeout_seconds = 3;
+  // 调用 ID（用于追踪）
+  string invocation_id = 4;
+  // 认证令牌
+  string auth_token = 5;
+}
+
+// 工具执行响应
+message ToolResponse {
+  // 调用 ID（与请求对应）
+  string invocation_id = 1;
+  // 执行是否成功
+  bool success = 2;
+  // 输出结果（JSON 序列化）
+  string output_json = 3;
+  // 错误信息
+  string error = 4;
+  // 执行耗时（毫秒）
+  int64 execution_time_ms = 5;
+  // 状态码
+  StatusCode status_code = 6;
+}
+
+// 状态码枚举
+enum StatusCode {
+  OK = 0;
+  TOOL_NOT_FOUND = 1;
+  TIMEOUT = 2;
+  PERMISSION_DENIED = 3;
+  EXECUTION_ERROR = 4;
+  SANDBOX_ERROR = 5;
+  INVALID_PARAMS = 6;
+}
+
+// 工具元数据
+message ToolInfo {
+  string tool_id = 1;
+  string name = 2;
+  string description = 3;
+  // 工具支持的参数 schema（JSON Schema 格式）
+  string params_schema_json = 4;
+  // 需要的沙盒类型
+  SandboxType sandbox_type = 5;
+}
+
+// 沙盒类型
+enum SandboxType {
+  PROCESS = 0;    // 进程隔离
+  DOCKER = 1;     // Docker 容器
+  WASM = 2;       // WASM 运行时
+  GRPC = 3;       // 远程 gRPC 沙盒
+}
+
+// 工具列表请求
+message ListToolsRequest {
+  // 可选的过滤标签
+  repeated string tags = 1;
+}
+
+// 工具列表响应
+message ListToolsResponse {
+  repeated ToolInfo tools = 1;
+}
+
+// 健康检查
+message HealthCheckRequest {}
+
+message HealthCheckResponse {
+  bool healthy = 1;
+  string version = 2;
+  int32 active_executions = 3;
+}
+
+// 工具执行服务
+service ToolExecutorService {
+  // 执行工具
+  rpc Execute(ToolRequest) returns (ToolResponse);
+
+  // 列出可用工具
+  rpc ListTools(ListToolsRequest) returns (ListToolsResponse);
+
+  // 健康检查
+  rpc HealthCheck(HealthCheckRequest) returns (HealthCheckResponse);
+}

@@ -1,17 +1,32 @@
 """意图识别引擎
 
 识别用户输入的核心意图，为后续决策和能力选择提供基础分类。
+
+提供两种实现：
+- IntentEngine: 基于规则的意图识别（零依赖）
+- MLIntentClassifier: 基于本地 ONNX 模型的意图识别（可选依赖 onnxruntime + tokenizers）
 """
 
 from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 import structlog
 
 logger = structlog.get_logger(__name__)
+
+# 可选依赖：ONNX 推理
+try:
+    import numpy as np
+    import onnxruntime as ort
+    from tokenizers import Tokenizer
+
+    _HAS_ONNX = True
+except ImportError:
+    _HAS_ONNX = False
 
 
 @dataclass
@@ -180,3 +195,228 @@ class IntentEngine:
         )
 
         return result
+
+
+class MLIntentClassifier:
+    """基于本地 ONNX 模型的意图分类器
+
+    使用 ONNX Runtime 加载预训练的文本分类模型，
+    配合 tokenizer 进行文本编码，实现意图分类。
+    当模型不可用时自动 fallback 到规则引擎。
+
+    模型要求：
+    - ONNX 格式，输出 logits（shape: [1, num_labels]）
+    - 配套 tokenizer.json（HuggingFace tokenizers 格式）
+    - labels.json（可选，标签名称列表）
+
+    用法::
+
+        classifier = MLIntentClassifier(
+            model_path="models/intent_model.onnx",
+            tokenizer_path="models/tokenizer.json",
+            labels_path="models/labels.json",  # 可选
+        )
+        result = classifier.classify("你好呀")
+    """
+
+    def __init__(
+        self,
+        model_path: str | Path,
+        tokenizer_path: str | Path,
+        labels_path: str | Path | None = None,
+        fallback_engine: IntentEngine | None = None,
+        confidence_threshold: float = 0.5,
+    ):
+        """初始化 ML 意图分类器
+
+        Args:
+            model_path: ONNX 模型文件路径
+            tokenizer_path: tokenizer.json 文件路径
+            labels_path: labels.json 文件路径（可选）
+            fallback_engine: 当模型不可用时的 fallback 引擎
+            confidence_threshold: 低于此阈值时使用 fallback
+        """
+        self._model_path = Path(model_path)
+        self._tokenizer_path = Path(tokenizer_path)
+        self._labels_path = Path(labels_path) if labels_path else None
+        self._fallback = fallback_engine or IntentEngine()
+        self._confidence_threshold = confidence_threshold
+
+        self._session: Any = None
+        self._tokenizer: Any = None
+        self._labels: list[str] = []
+        self._ready = False
+
+        self._try_load()
+
+    def _try_load(self) -> None:
+        """尝试加载模型和 tokenizer，失败则保持未就绪状态"""
+        if not _HAS_ONNX:
+            logger.warning(
+                "ml_intent_deps_missing",
+                msg="onnxruntime or tokenizers not installed, using fallback",
+            )
+            return
+
+        try:
+            if not self._model_path.exists():
+                logger.warning(
+                    "ml_intent_model_not_found",
+                    path=str(self._model_path),
+                )
+                return
+
+            if not self._tokenizer_path.exists():
+                logger.warning(
+                    "ml_intent_tokenizer_not_found",
+                    path=str(self._tokenizer_path),
+                )
+                return
+
+            # 加载 ONNX 模型
+            sess_options = ort.SessionOptions()
+            sess_options.log_severity_level = 3  # 只显示错误
+            self._session = ort.InferenceSession(
+                str(self._model_path),
+                sess_options=sess_options,
+            )
+
+            # 加载 tokenizer
+            self._tokenizer = Tokenizer.from_file(str(self._tokenizer_path))
+
+            # 加载标签
+            if self._labels_path and self._labels_path.exists():
+                import json
+
+                self._labels = json.loads(self._labels_path.read_text(encoding="utf-8"))
+            else:
+                # 尝试从模型输出维度推断
+                output_shape = self._session.get_outputs()[0].shape
+                if len(output_shape) >= 2:
+                    num_labels = output_shape[-1]
+                    self._labels = [f"intent_{i}" for i in range(num_labels)]
+
+            self._ready = True
+            logger.info(
+                "ml_intent_model_loaded",
+                model=str(self._model_path),
+                num_labels=len(self._labels),
+            )
+
+        except Exception as e:
+            logger.error(
+                "ml_intent_load_failed",
+                error=str(e),
+            )
+            self._ready = False
+
+    @property
+    def is_ready(self) -> bool:
+        """模型是否已加载就绪"""
+        return self._ready
+
+    def classify(self, text: str) -> IntentResult:
+        """对输入文本进行意图分类
+
+        当模型未就绪或置信度低于阈值时，自动 fallback 到规则引擎。
+
+        Args:
+            text: 用户输入文本
+
+        Returns:
+            IntentResult: 意图分类结果
+        """
+        if not text or not text.strip():
+            return IntentResult(primary="empty", confidence=1.0)
+
+        if not self._ready:
+            logger.debug("ml_intent_not_ready_using_fallback")
+            return self._fallback.recognize(text)
+
+        try:
+            # Tokenize
+            encoding = self._tokenizer.encode(text.strip())
+            input_ids = encoding.ids
+            attention_mask = [1] * len(input_ids)
+
+            # 构建模型输入
+            input_name = self._session.get_inputs()[0].name
+            inputs = {
+                input_name: np.array([input_ids], dtype=np.int64),
+            }
+
+            # 如果模型需要 attention_mask
+            if len(self._session.get_inputs()) > 1:
+                mask_name = self._session.get_inputs()[1].name
+                inputs[mask_name] = np.array([attention_mask], dtype=np.int64)
+
+            # 推理
+            outputs = self._session.run(None, inputs)
+            logits = outputs[0][0]  # shape: [num_labels]
+
+            # Softmax
+            exp_logits = np.exp(logits - np.max(logits))
+            probs = exp_logits / exp_logits.sum()
+
+            # 获取最高概率
+            best_idx = int(np.argmax(probs))
+            confidence = float(probs[best_idx])
+
+            primary = self._labels[best_idx] if best_idx < len(self._labels) else "unknown"
+
+            # 次要意图（top-3，排除 primary）
+            sorted_indices = np.argsort(probs)[::-1]
+            secondary = [
+                self._labels[i]
+                for i in sorted_indices[1:3]
+                if i < len(self._labels) and probs[i] > 0.1
+            ]
+
+            result = IntentResult(
+                primary=primary,
+                secondary=secondary,
+                confidence=confidence,
+                entities={"source": "ml_model"},
+            )
+
+            # 低置信度时 fallback
+            if confidence < self._confidence_threshold:
+                logger.debug(
+                    "ml_intent_low_confidence",
+                    ml_primary=primary,
+                    ml_confidence=confidence,
+                    threshold=self._confidence_threshold,
+                )
+                fallback_result = self._fallback.recognize(text)
+                # 取置信度更高的结果
+                if fallback_result.confidence > confidence:
+                    fallback_result.entities["ml_primary"] = primary
+                    fallback_result.entities["ml_confidence"] = confidence
+                    return fallback_result
+
+            return result
+
+        except Exception as e:
+            logger.error(
+                "ml_intent_inference_error",
+                error=str(e),
+            )
+            return self._fallback.recognize(text)
+
+    def get_model_info(self) -> dict[str, Any]:
+        """获取模型信息"""
+        info: dict[str, Any] = {
+            "ready": self._ready,
+            "model_path": str(self._model_path),
+            "tokenizer_path": str(self._tokenizer_path),
+            "num_labels": len(self._labels),
+            "confidence_threshold": self._confidence_threshold,
+            "has_onnx_deps": _HAS_ONNX,
+        }
+        if self._ready:
+            info["labels"] = self._labels
+            info["model_inputs"] = [
+                {"name": inp.name, "shape": inp.shape, "type": inp.type}
+                for inp in self._session.get_inputs()
+            ]
+        return info

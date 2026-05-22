@@ -18,6 +18,7 @@ from yuanbot.core.types import (
     ToolDefinition,
     ToolResult,
     UserMessage,
+    ValidationResult,
 )
 
 # ──────────────────────────────────────────────
@@ -82,6 +83,17 @@ class AIProviderAdapter(ABC):
     def provider_id(self) -> str:
         """返回提供商唯一标识（如 'openai', 'anthropic', 'deepseek'）"""
         ...
+
+    def validate_config(self) -> ValidationResult:
+        """验证提供商配置是否完整
+
+        检查必要配置项（如 API key）是否存在。
+        子类可重写以检查各自特有配置。
+
+        Returns:
+            ValidationResult: 验证结果（valid, errors list）
+        """
+        return ValidationResult(valid=True)
 
 
 # ──────────────────────────────────────────────

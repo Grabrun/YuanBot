@@ -357,3 +357,15 @@ class SendResult(BaseModel):
     success: bool
     message_id: str | None = None
     error: str | None = None
+
+
+# ──────────────────────────────────────────────
+# 配置验证类型
+# ──────────────────────────────────────────────
+
+
+class ValidationResult(BaseModel):
+    """配置验证结果"""
+
+    valid: bool
+    errors: list[str] = Field(default_factory=list)
