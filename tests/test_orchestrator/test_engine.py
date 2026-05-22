@@ -198,9 +198,9 @@ class TestBuildSystemPrompt:
     """系统提示词组装测试（通过 ContextBuilder）"""
 
     def test_includes_persona(self):
+        from yuanbot.core.types import UserProfile
         from yuanbot.persona.default import DefaultPersona
         from yuanbot.persona.engines.context_builder import ContextBuilder
-        from yuanbot.core.types import UserProfile
 
         persona = DefaultPersona()
         builder = ContextBuilder(persona)
@@ -209,9 +209,9 @@ class TestBuildSystemPrompt:
         assert "小缘" in prompt
 
     def test_includes_user_info(self):
+        from yuanbot.core.types import UserProfile
         from yuanbot.persona.default import DefaultPersona
         from yuanbot.persona.engines.context_builder import ContextBuilder
-        from yuanbot.core.types import UserProfile
 
         persona = DefaultPersona()
         builder = ContextBuilder(persona)
@@ -227,9 +227,9 @@ class TestBuildSystemPrompt:
         assert "familiar" in prompt
 
     def test_includes_behavior_rules(self):
+        from yuanbot.core.types import UserProfile
         from yuanbot.persona.default import DefaultPersona
         from yuanbot.persona.engines.context_builder import ContextBuilder
-        from yuanbot.core.types import UserProfile
 
         persona = DefaultPersona()
         builder = ContextBuilder(persona)
@@ -238,9 +238,9 @@ class TestBuildSystemPrompt:
         assert "共情" in prompt
 
     def test_includes_emotion(self):
+        from yuanbot.core.types import EmotionCategory, EmotionState, UserProfile
         from yuanbot.persona.default import DefaultPersona
         from yuanbot.persona.engines.context_builder import ContextBuilder
-        from yuanbot.core.types import UserProfile, EmotionState, EmotionCategory
 
         persona = DefaultPersona()
         builder = ContextBuilder(persona)
@@ -295,10 +295,13 @@ class TestProactiveTasks:
 
     @pytest.mark.asyncio
     async def test_negative_emotion_triggers_care(self, engine: OrchestratorEngine):
-        from yuanbot.core.types import UserProfile, EmotionState, EmotionCategory
+        from yuanbot.core.types import EmotionCategory, EmotionState, UserProfile
 
         profile = UserProfile(user_id="u1")
-        emotion = EmotionState(emotion=EmotionCategory.SADNESS, intensity=0.8, valence="negative", needs_immediate_comfort=True)
+        emotion = EmotionState(
+            emotion=EmotionCategory.SADNESS, intensity=0.8,
+            valence="negative", needs_immediate_comfort=True
+        )
         tasks = await engine._generate_proactive_tasks(profile, emotion)
         assert len(tasks) == 1
         assert tasks[0].task_type == "care"
@@ -306,7 +309,7 @@ class TestProactiveTasks:
 
     @pytest.mark.asyncio
     async def test_positive_emotion_no_task(self, engine: OrchestratorEngine):
-        from yuanbot.core.types import UserProfile, EmotionState, EmotionCategory
+        from yuanbot.core.types import EmotionCategory, EmotionState, UserProfile
 
         profile = UserProfile(user_id="u1")
         emotion = EmotionState(emotion=EmotionCategory.JOY, intensity=0.8, valence="positive")
@@ -315,7 +318,7 @@ class TestProactiveTasks:
 
     @pytest.mark.asyncio
     async def test_neutral_emotion_no_task(self, engine: OrchestratorEngine):
-        from yuanbot.core.types import UserProfile, EmotionState, EmotionCategory
+        from yuanbot.core.types import EmotionCategory, EmotionState, UserProfile
 
         profile = UserProfile(user_id="u1")
         emotion = EmotionState(emotion=EmotionCategory.NEUTRAL, intensity=0.3, valence="neutral")

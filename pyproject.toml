@@ -25,6 +25,7 @@ dependencies = [
     "aiohttp>=3.9",
     "croniter>=2.0",
     "aiosqlite>=0.20",
+    "prometheus-client>=0.20",
 ]
 
 [project.optional-dependencies]

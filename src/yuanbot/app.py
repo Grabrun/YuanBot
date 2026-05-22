@@ -9,6 +9,7 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI
@@ -17,6 +18,7 @@ from starlette.websockets import WebSocket
 from yuanbot.adapters.channel.web_adapter import WebAdapter
 from yuanbot.config import YuanBotConfig
 from yuanbot.core.types import BotResponse
+from yuanbot.infrastructure.config_watcher import ConfigWatcher
 from yuanbot.memory.manager import MemoryManager
 from yuanbot.orchestrator.engine import OrchestratorEngine
 from yuanbot.persona.engines.context_builder import ContextBuilder
@@ -98,6 +100,32 @@ def create_app(config: YuanBotConfig) -> FastAPI:
     # ── 7. Web 通道适配器 ─────────────────────
     web_adapter = WebAdapter()
 
+    # ── 8. 配置热加载监听器 ─────────────────────
+    config_dir = Path("configs")
+    config_watcher = ConfigWatcher(config_dir=config_dir)
+
+    async def _on_provider_config_change(file_path: str, new_config: dict) -> None:
+        """提供商配置变化回调：重载提供商"""
+        import structlog
+
+        _logger = structlog.get_logger("config_watcher")
+        _logger.info("provider_config_changed", file=file_path)
+        try:
+            provider_id = Path(file_path).stem
+            await provider_manager.reload_provider(provider_id, new_config)
+        except Exception:
+            _logger.exception("provider_reload_failed", file=file_path)
+
+    async def _on_channel_config_change(file_path: str, new_config: dict) -> None:
+        """通道配置变化回调：重载通道适配器"""
+        import structlog
+
+        _logger = structlog.get_logger("config_watcher")
+        _logger.info("channel_config_changed", file=file_path)
+
+    config_watcher.on_change("Providers/*.yaml", _on_provider_config_change)
+    config_watcher.on_change("Channels/*.yaml", _on_channel_config_change)
+
     # ── 应用生命周期 ──────────────────────────
 
     @asynccontextmanager
@@ -108,6 +136,9 @@ def create_app(config: YuanBotConfig) -> FastAPI:
         await skill_manager.load_skills()
         await tool_manager.load_tools()
 
+        # 初始化记忆管理器（包括自动 Redis 缓存）
+        await memory_manager.initialize()
+
         # 启动 Web 适配器
         async def on_message(msg: Any) -> BotResponse:
             return await orchestrator.process_message(msg)
@@ -117,14 +148,19 @@ def create_app(config: YuanBotConfig) -> FastAPI:
         # 启动主动陪伴系统
         await proactive_scheduler.start()
         await event_engine.start()
-        print("🌸 YuanBot 启动完成（含主动陪伴系统）")
+
+        # 启动配置热加载监听器
+        await config_watcher.start()
+        print("🌸 YuanBot 启动完成（含主动陪伴系统 + 配置热加载）")
 
         yield
 
         # 清理资源
+        await config_watcher.stop()
         await event_engine.stop()
         await proactive_scheduler.stop()
         await web_adapter.close()
+        await memory_manager.close()
         await provider_manager.close_all()
         print("🌸 YuanBot 已停止")
 
@@ -147,9 +183,13 @@ def create_app(config: YuanBotConfig) -> FastAPI:
     app.state.proactive_scheduler = proactive_scheduler
     app.state.proactive_strategy = proactive_strategy
     app.state.event_engine = event_engine
+    app.state.config_watcher = config_watcher
 
     # 注册路由
     _register_routes(app, orchestrator, memory_manager, config)
+
+    # 注册请求指标中间件
+    _register_metrics_middleware(app)
 
     # 注册 WebSocket 路由
     @app.websocket("/ws")
@@ -173,7 +213,60 @@ def _load_persona(config: YuanBotConfig) -> Any:
     """加载 Agent 人设"""
     from yuanbot.persona.default import DefaultPersona
 
-    return DefaultPersona()
+    return DefaultPersona(relationship_stage="initial")
+
+
+def _register_metrics_middleware(app: FastAPI) -> None:
+    """注册请求指标中间件
+
+    自动记录请求计数和延迟到 Prometheus 指标。
+    """
+    import time
+
+    from starlette.middleware.base import BaseHTTPMiddleware
+    from starlette.requests import Request
+    from starlette.responses import Response
+
+    class MetricsMiddleware(BaseHTTPMiddleware):
+        async def dispatch(self, request: Request, call_next: Any) -> Response:
+            # 跳过 /metrics 端点自身
+            if request.url.path == "/metrics":
+                return await call_next(request)
+
+            metrics = getattr(app.state, "metrics", {})
+            request_count = metrics.get("request_count")
+            request_latency = metrics.get("request_latency")
+            active_connections = metrics.get("active_connections")
+
+            if active_connections:
+                active_connections.inc()
+
+            start_time = time.time()
+            try:
+                response = await call_next(request)
+                status = str(response.status_code)
+            except Exception:
+                status = "500"
+                raise
+            finally:
+                duration = time.time() - start_time
+                if request_count:
+                    request_count.labels(
+                        method=request.method,
+                        endpoint=request.url.path,
+                        status=status,
+                    ).inc()
+                if request_latency:
+                    request_latency.labels(
+                        method=request.method,
+                        endpoint=request.url.path,
+                    ).observe(duration)
+                if active_connections:
+                    active_connections.dec()
+
+            return response
+
+    app.add_middleware(MetricsMiddleware)
 
 
 def _register_routes(
@@ -184,6 +277,106 @@ def _register_routes(
 ) -> None:
     """注册 API 路由"""
 
+    # ── Prometheus 监控指标 ─────────────────────
+    try:
+        from fastapi.responses import Response
+        from prometheus_client import (
+            CONTENT_TYPE_LATEST,
+            CollectorRegistry,
+            Counter,
+            Gauge,
+            Histogram,
+            generate_latest,
+        )
+
+        # 使用独立注册表避免重复注册
+        metrics_registry = CollectorRegistry()
+
+        # 定义指标
+        request_count = Counter(
+            "yuanbot_request_total",
+            "Total request count",
+            ["method", "endpoint", "status"],
+            registry=metrics_registry,
+        )
+        request_latency = Histogram(
+            "yuanbot_request_duration_seconds",
+            "Request latency in seconds",
+            ["method", "endpoint"],
+            buckets=(0.01, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0),
+            registry=metrics_registry,
+        )
+        active_connections = Gauge(
+            "yuanbot_active_connections",
+            "Number of active connections",
+            registry=metrics_registry,
+        )
+        ai_call_count = Counter(
+            "yuanbot_ai_call_total",
+            "Total AI provider call count",
+            ["provider", "model", "status"],
+            registry=metrics_registry,
+        )
+        ai_call_latency = Histogram(
+            "yuanbot_ai_call_duration_seconds",
+            "AI provider call latency in seconds",
+            ["provider", "model"],
+            buckets=(0.1, 0.5, 1.0, 2.0, 5.0, 10.0, 30.0, 60.0),
+            registry=metrics_registry,
+        )
+        memory_operations = Counter(
+            "yuanbot_memory_operations_total",
+            "Total memory operations",
+            ["operation", "memory_type"],
+            registry=metrics_registry,
+        )
+        proactive_tasks_executed = Counter(
+            "yuanbot_proactive_tasks_executed_total",
+            "Total proactive tasks executed",
+            ["task_name", "status"],
+            registry=metrics_registry,
+        )
+
+        # 将指标注册到 app.state 供其他组件使用
+        app.state.metrics = {
+            "request_count": request_count,
+            "request_latency": request_latency,
+            "active_connections": active_connections,
+            "ai_call_count": ai_call_count,
+            "ai_call_latency": ai_call_latency,
+            "memory_operations": memory_operations,
+            "proactive_tasks_executed": proactive_tasks_executed,
+        }
+
+        @app.get("/metrics")
+        async def metrics():
+            """Prometheus 监控指标端点
+
+            暴露系统运行指标，包括：
+            - 请求计数和延迟
+            - 活跃连接数
+            - AI 调用次数和延迟
+            - 记忆操作计数
+            - 主动任务执行计数
+            """
+            return Response(
+                content=generate_latest(metrics_registry),
+                media_type=CONTENT_TYPE_LATEST,
+            )
+
+    except ImportError:
+        # prometheus_client 未安装时降级
+        import structlog
+
+        _logger = structlog.get_logger("metrics")
+        _logger.warning("prometheus_client_not_installed", msg="Metrics endpoint disabled")
+        app.state.metrics = {}
+
+        @app.get("/metrics")
+        async def metrics():
+            return {"error": "prometheus_client not installed"}
+
+    # ── 健康检查与业务路由 ─────────────────────
     @app.get("/healthz")
     async def healthz():
         """Liveness probe - 服务基本健康状态

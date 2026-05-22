@@ -68,8 +68,51 @@ class ProactiveScheduler:
             logger.warning("scheduler_already_running")
             return
         self._running = True
+
+        # 注册默认的记忆整理定时任务
+        self._register_default_memory_tasks()
+
         self._loop_task = asyncio.create_task(self._run_loop())
         logger.info("scheduler_started", check_interval=self._check_interval)
+
+    def _register_default_memory_tasks(self) -> None:
+        """注册默认的记忆整理定时任务
+
+        设计要求: 空闲时自动整理记忆
+        - 记忆固化: 每天凌晨 3:00 执行
+        - 遗忘曲线: 每天凌晨 4:00 执行
+        """
+        consolidation_config = {}
+        if self._config:
+            consolidation_config = self._config.get("memory_consolidation", {})
+
+        # 记忆固化任务
+        consolidation_schedule = consolidation_config.get("consolidation_cron", "0 3 * * *")
+        consolidation_task = ScheduledTask(
+            task_type="cron",
+            trigger=consolidation_schedule,
+            name="memory_consolidation",
+            priority=3,
+            metadata={"action": "consolidate_memories"},
+        )
+        self.register_task(consolidation_task)
+
+        # 遗忘曲线任务
+        forget_curve_schedule = consolidation_config.get("forget_curve_cron", "0 4 * * *")
+        forget_task = ScheduledTask(
+            task_type="cron",
+            trigger=forget_curve_schedule,
+            name="forget_curve",
+            priority=2,
+            metadata={"action": "apply_forget_curve"},
+        )
+        self.register_task(forget_task)
+
+        logger.info(
+            "memory_tasks_registered",
+            consolidation_cron=consolidation_schedule,
+            forget_curve_cron=forget_curve_schedule,
+        )
 
     async def stop(self) -> None:
         """停止调度器"""
@@ -194,8 +237,42 @@ class ProactiveScheduler:
                 name=task.name,
                 priority=task.priority,
             )
+
+            # 执行内置的记忆整理任务
+            action = task.metadata.get("action", "")
+            if action in ("consolidate_memories", "apply_forget_curve") and self._memory_manager:
+                await self._execute_memory_task(action)
+
             # 标记已执行（更新下次执行时间）
             self.mark_executed(task.task_id)
+
+    async def _execute_memory_task(self, action: str) -> None:
+        """执行记忆整理任务
+
+        遍历所有用户，执行对应的记忆维护操作。
+        """
+        try:
+            # 获取所有用户 ID
+            user_ids: list[str] = []
+            if hasattr(self._memory_manager, "_user_profiles"):
+                user_ids = list(self._memory_manager._user_profiles.keys())
+            if hasattr(self._memory_manager, "_fact_memories"):
+                user_ids = list(set(user_ids) | set(self._memory_manager._fact_memories.keys()))
+            if hasattr(self._memory_manager, "_episodic_memories"):
+                user_ids = list(set(user_ids) | set(self._memory_manager._episodic_memories.keys()))
+
+            for user_id in user_ids:
+                if action == "consolidate_memories":
+                    stats = await self._memory_manager.consolidate_memories(user_id)
+                    logger.info("memory_consolidation_executed", user_id=user_id, **stats)
+                elif action == "apply_forget_curve":
+                    removed = await self._memory_manager.apply_forget_curve(user_id)
+                    logger.info("forget_curve_executed", user_id=user_id, removed=removed)
+
+            if not user_ids:
+                logger.debug("no_users_for_memory_task", action=action)
+        except Exception:
+            logger.exception("memory_task_failed", action=action)
 
     def _calculate_next_run(self, task: ScheduledTask) -> datetime | None:
         """计算下次执行时间"""

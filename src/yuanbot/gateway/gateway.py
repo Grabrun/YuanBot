@@ -18,6 +18,7 @@ from yuanbot.gateway.adapter_manager import AdapterManager
 from yuanbot.gateway.auth import ChannelAuthenticator, RateLimiter
 from yuanbot.gateway.identity_service import IdentityService
 from yuanbot.gateway.push_dispatcher import PushDispatcher
+from yuanbot.infrastructure.config_watcher import ConfigWatcher
 from yuanbot.infrastructure.event_queue import (
     TOPIC_INBOUND,
     MemoryEventQueue,
@@ -40,7 +41,11 @@ class YuanGateway:
     6. 健康检查：提供各通道适配器连通性状态
     """
 
-    def __init__(self, event_queue_config: dict[str, Any] | None = None) -> None:
+    def __init__(
+        self,
+        event_queue_config: dict[str, Any] | None = None,
+        config_dir: str | None = None,
+    ) -> None:
         self._adapter_manager = AdapterManager()
         self._identity_service = IdentityService()
         self._push_dispatcher = PushDispatcher()
@@ -51,6 +56,12 @@ class YuanGateway:
         )
         self._started_at: float | None = None
         self._message_handler: Any = None
+        self._config_watcher: ConfigWatcher | None = None
+        if config_dir:
+            from pathlib import Path
+
+            self._config_watcher = ConfigWatcher(config_dir=Path(config_dir))
+            self._register_config_callbacks()
 
     @property
     def adapter_manager(self) -> AdapterManager:
@@ -76,6 +87,34 @@ class YuanGateway:
     def event_queue(self) -> MemoryEventQueue | RedisEventQueue:
         return self._event_queue
 
+    @property
+    def config_watcher(self) -> ConfigWatcher | None:
+        return self._config_watcher
+
+    def _register_config_callbacks(self) -> None:
+        """注册配置变化回调，用于热加载适配器"""
+        if not self._config_watcher:
+            return
+
+        async def _reload_channel(file_path: str, new_config: dict[str, Any]) -> None:
+            """通道配置变化时重载适配器"""
+            from pathlib import Path
+
+            platform = Path(file_path).stem
+            logger.info("hot_reload_channel", platform=platform)
+            try:
+                channel_config = ChannelConfig(
+                    platform=platform,
+                    enabled=new_config.get("enabled", True),
+                    config=new_config.get("config", {}),
+                )
+                await self._adapter_manager.unload_adapter(platform)
+                await self._adapter_manager.load_adapter(platform, channel_config)
+            except Exception:
+                logger.exception("hot_reload_channel_failed", platform=platform)
+
+        self._config_watcher.on_change("Channels/*.yaml", _reload_channel)
+
     def set_message_handler(self, handler: Any) -> None:
         """设置消息处理回调（通常是编排引擎的 process_message）"""
         self._message_handler = handler
@@ -90,10 +129,16 @@ class YuanGateway:
         # 订阅入站消息主题
         self._event_queue.subscribe(TOPIC_INBOUND, self._handle_inbound_message)
 
+        # 启动配置热加载
+        if self._config_watcher:
+            await self._config_watcher.start()
+
         logger.info("gateway_started")
 
     async def stop(self) -> None:
         """停止网关及事件队列"""
+        if self._config_watcher:
+            await self._config_watcher.stop()
         await self._event_queue.stop()
         await self._adapter_manager.shutdown_all()
         self._started_at = None

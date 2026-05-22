@@ -21,6 +21,11 @@ class CacheStore:
     """
 
     def __init__(self, redis_url: str | None = None):
+        # 自动检测 Redis URL: 显式参数 > 环境变量 > None（内存模式）
+        if redis_url is None:
+            import os
+
+            redis_url = os.environ.get("YUAN_REDIS_URL") or os.environ.get("REDIS_URL")
         self._redis_url = redis_url
         self._redis: Any = None
         self._memory_cache: InMemoryCacheStore | None = None

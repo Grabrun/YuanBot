@@ -541,7 +541,9 @@ class TestOrchestratorIntegration:
         # 验证 AI 收到了包含人设的系统提示词
         engine._ai.generate.assert_called_once()
         call_kwargs = engine._ai.generate.call_args
-        system_prompt = call_kwargs.kwargs.get("system_prompt") or call_kwargs[1].get("system_prompt")
+        system_prompt = call_kwargs.kwargs.get("system_prompt") or call_kwargs[1].get(
+            "system_prompt"
+        )
         assert system_prompt is not None
         assert "小缘" in system_prompt  # 默认人设名称
 
@@ -560,7 +562,9 @@ class TestOrchestratorIntegration:
         # 验证 AI 收到了包含记忆的系统提示词
         engine._ai.generate.assert_called_once()
         call_kwargs = engine._ai.generate.call_args
-        system_prompt = call_kwargs.kwargs.get("system_prompt") or call_kwargs[1].get("system_prompt")
+        system_prompt = call_kwargs.kwargs.get("system_prompt") or call_kwargs[1].get(
+            "system_prompt"
+        )
         assert system_prompt is not None
 
     @pytest.mark.asyncio

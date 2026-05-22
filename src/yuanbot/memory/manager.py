@@ -61,6 +61,12 @@ class MemoryManager:
         self._config = config if config is not None else {}
         self._db = db_manager  # DatabaseManager | None
 
+        # 自动启用 Redis 缓存: 当配置中包含 redis_url 且未传入 db_manager 时
+        self._redis_url: str | None = None
+        if self._db is None:
+            self._redis_url = self._config.get("redis_url")
+        self._auto_cache: Any = None  # 延迟初始化，调用 initialize() 时创建
+
         # 内存存储（纯内存模式或作为缓存层）
         self._working_memories: dict[str, list[MemoryNode]] = {}  # session_id -> nodes
         self._fact_memories: dict[str, list[MemoryNode]] = {}  # user_id -> nodes
@@ -77,10 +83,48 @@ class MemoryManager:
         self._consolidation_threshold = self._config.get("consolidation_threshold", 3)
         self._min_importance_threshold = self._config.get("min_importance_threshold", 0.1)
 
+    async def initialize(self) -> None:
+        """初始化记忆管理器（启动自动缓存等）"""
+        if self._redis_url and self._auto_cache is None:
+            from yuanbot.infrastructure.cache_store import CacheStore
+
+            cache = CacheStore(redis_url=self._redis_url)
+            try:
+                await cache.initialize()
+                self._auto_cache = cache
+                logger.info("memory_manager_initialized", cache_backend=cache.backend)
+            except Exception as e:
+                logger.warning("memory_manager_cache_init_failed", error=str(e))
+                # Redis 不可用时，缓存已自动降级为内存模式
+                if cache.backend == "memory":
+                    self._auto_cache = cache
+                else:
+                    self._auto_cache = None
+
+    async def close(self) -> None:
+        """关闭记忆管理器，释放资源"""
+        if self._auto_cache is not None:
+            await self._auto_cache.close()
+            self._auto_cache = None
+
     @property
     def has_persistence(self) -> bool:
-        """是否启用了持久化存储"""
+        """是否启用了完整持久化存储（SQLite + 向量存储 + 缓存）"""
         return self._db is not None and self._db.is_initialized
+
+    @property
+    def has_cache(self) -> bool:
+        """是否启用了缓存存储（包括自动 Redis 缓存）"""
+        return self._cache is not None
+
+    @property
+    def _cache(self) -> Any:
+        """获取缓存存储（优先使用 db_manager 的，回退到 auto_cache）"""
+        if self._db is not None and self._db.is_initialized:
+            return self._db.cache
+        if self._auto_cache is not None and self._auto_cache.is_initialized:
+            return self._auto_cache
+        return None
 
     # ──────────────────────────────────────────
     # 工作记忆（第一层：会话级）
@@ -99,9 +143,9 @@ class MemoryManager:
             metadata=metadata or {},
         )
 
-        if self.has_persistence:
+        if self.has_cache and self._cache is not None:
             # 持久化模式：写入缓存
-            memories = await self._db.cache.get_working_memory(session_id)
+            memories = await self._cache.get_working_memory(session_id)
             # 转换为可序列化格式
             mem_dict = {
                 "id": node.id,
@@ -118,7 +162,7 @@ class MemoryManager:
             if len(memories) > self._working_memory_max_turns:
                 memories = memories[-self._working_memory_max_turns :]
 
-            await self._db.cache.set_working_memory(session_id, memories)
+            await self._cache.set_working_memory(session_id, memories)
         else:
             # 纯内存模式
             if session_id not in self._working_memories:
@@ -134,8 +178,8 @@ class MemoryManager:
 
     async def get_working_memory(self, session_id: str) -> list[MemoryNode]:
         """获取当前会话的工作记忆"""
-        if self.has_persistence:
-            memories = await self._db.cache.get_working_memory(session_id)
+        if self.has_cache and self._cache is not None:
+            memories = await self._cache.get_working_memory(session_id)
             return [self._dict_to_memory_node(m, MemoryType.WORKING) for m in memories]
         return self._working_memories.get(session_id, [])
 
@@ -151,8 +195,8 @@ class MemoryManager:
 
     async def clear_working_memory(self, session_id: str) -> None:
         """清除会话的工作记忆"""
-        if self.has_persistence:
-            await self._db.cache.clear_working_memory(session_id)
+        if self.has_cache and self._cache is not None:
+            await self._cache.clear_working_memory(session_id)
         else:
             self._working_memories.pop(session_id, None)
 
