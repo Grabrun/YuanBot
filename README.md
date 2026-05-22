@@ -306,7 +306,11 @@ YuanBot 支持 AWS Lambda 和阿里云函数计算部署，详见 [部署文档]
 
 ## 📖 文档索引
 
-- [总体架构 v1.4](docs/architecture-v1.4.md) — 系统架构设计文档
+- [总体架构 v1.5](docs/architecture-v1.5.md) — v1.5 系统架构设计文档（最新）
+- [总体架构 v1.4](docs/architecture-v1.4.md) — v1.4 系统架构设计文档
+- [AI 提供商适配系统 v2.0](docs/ai-provider-system-v2.md) — 适配器复用，配置文件定义 Provider
+- [用户界面系统](docs/user-interface-system.md) — TUI/WebUI 双界面设计
+- [语音合成系统](docs/tts-system.md) — TTS 语音输出系统
 - [记忆与情感系统](docs/memory-emotion-system.md) — 四层记忆与情感追踪
 - [人格与决策系统](docs/persona-decision-system.md) — 人设与对话决策
 - [接入与通信系统](docs/gateway-communication-system.md) — 通道适配与消息路由
