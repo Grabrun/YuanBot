@@ -36,6 +36,7 @@ dev = [
     "ruff>=0.4",
     "mypy>=1.10",
 ]
+mysql = ["aiomysql>=0.2"]
 openai = ["openai>=1.30"]
 anthropic = ["anthropic>=0.28"]
 milvus = ["pymilvus>=2.4"]
@@ -45,7 +46,7 @@ all-providers = [
     "yuanbot[openai,anthropic]",
 ]
 all = [
-    "yuanbot[openai,anthropic,milvus,graph,cli]",
+    "yuanbot[openai,anthropic,milvus,graph,cli,mysql]",
 ]
 
 [project.scripts]

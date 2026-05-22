@@ -10,6 +10,12 @@ from yuanbot.infrastructure.graph_store import GraphStore
 from yuanbot.infrastructure.sqlite_store import SQLiteStore
 from yuanbot.infrastructure.vector_store import VectorStore
 
+# aiomysql 为可选依赖
+try:
+    from yuanbot.infrastructure.mysql_store import MySQLStore
+except ImportError:
+    MySQLStore = None  # type: ignore[assignment,misc]
+
 __all__ = [
     "CacheStore",
     "ConfigLoader",
@@ -17,6 +23,7 @@ __all__ = [
     "DatabaseManager",
     "DatabaseType",
     "GraphStore",
+    "MySQLStore",
     "SQLiteStore",
     "VectorStore",
 ]

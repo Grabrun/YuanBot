@@ -16,6 +16,14 @@ from yuanbot.infrastructure.graph_store import GraphStore
 from yuanbot.infrastructure.sqlite_store import SQLiteStore
 from yuanbot.infrastructure.vector_store import VectorStore
 
+# aiomysql 为可选依赖
+try:
+    from yuanbot.infrastructure.mysql_store import MySQLStore
+
+    _HAS_MYSQL = True
+except ImportError:
+    _HAS_MYSQL = False
+
 logger = structlog.get_logger(__name__)
 
 
@@ -58,7 +66,7 @@ class DatabaseManager:
     """统一数据库管理器
 
     职责：
-    1. 管理 SQLite 存储（事实记忆、情景记忆元数据、用户画像、情感记录、身份映射）
+    1. 管理关系型存储（事实记忆、情景记忆元数据、用户画像、情感记录、身份映射）
     2. 管理向量存储（情景记忆向量、语义检索）
     3. 管理缓存存储（工作记忆、主动交互锁）
     4. 提供统一的初始化和关闭接口
@@ -77,9 +85,45 @@ class DatabaseManager:
     def __init__(self, config: DatabaseConfig | None = None):
         self._config = config or DatabaseConfig()
         self._initialized = False
+        self._mysql: MySQLStore | None = None
 
-        # 初始化各存储组件
-        self._sqlite = SQLiteStore(db_path=self._config.sqlite_path)
+        # 根据配置初始化关系型存储
+        if self._config.db_type == DatabaseType.MYSQL:
+            if not _HAS_MYSQL:
+                logger.warning(
+                    "mysql_not_available",
+                    message="aiomysql not installed, falling back to SQLite",
+                )
+                self._sqlite = SQLiteStore(db_path=self._config.sqlite_path)
+                self._config = DatabaseConfig(
+                    db_type=DatabaseType.SQLITE,
+                    sqlite_path=self._config.sqlite_path,
+                    host=self._config.host,
+                    port=self._config.port,
+                    database=self._config.database,
+                    username=self._config.username,
+                    password=self._config.password,
+                    pool_size=self._config.pool_size,
+                    echo=self._config.echo,
+                    use_milvus=self._config.use_milvus,
+                    milvus_uri=self._config.milvus_uri,
+                    redis_url=self._config.redis_url,
+                    working_memory_ttl=self._config.working_memory_ttl,
+                    graph_db_path=self._config.graph_db_path,
+                )
+            else:
+                self._sqlite = SQLiteStore(db_path=self._config.sqlite_path)  # placeholder
+                self._mysql = MySQLStore(
+                    host=self._config.host,
+                    port=self._config.port,
+                    database=self._config.database,
+                    user=self._config.username,
+                    password=self._config.password,
+                    pool_size=self._config.pool_size,
+                )
+        else:
+            self._sqlite = SQLiteStore(db_path=self._config.sqlite_path)
+
         self._vector = VectorStore(
             use_milvus=self._config.use_milvus,
             milvus_uri=self._config.milvus_uri,
@@ -99,6 +143,18 @@ class DatabaseManager:
     def sqlite(self) -> SQLiteStore:
         """SQLite 存储"""
         return self._sqlite
+
+    @property
+    def relational(self) -> SQLiteStore | MySQLStore:
+        """当前活动的关系型存储（SQLite 或 MySQL）"""
+        if self._mysql is not None:
+            return self._mysql
+        return self._sqlite
+
+    @property
+    def mysql(self) -> MySQLStore | None:
+        """MySQL 存储（仅当配置为 MySQL 时可用）"""
+        return self._mysql
 
     @property
     def vector(self) -> VectorStore:
@@ -133,8 +189,11 @@ class DatabaseManager:
             cache_backend="redis" if self._config.redis_url else "memory",
         )
 
-        # 初始化 SQLite
-        await self._sqlite.initialize()
+        # 初始化关系型存储
+        if self._mysql is not None:
+            await self._mysql.initialize()
+        else:
+            await self._sqlite.initialize()
 
         # 初始化向量存储
         await self._vector.initialize()
@@ -147,7 +206,10 @@ class DatabaseManager:
 
     async def close(self) -> None:
         """关闭所有存储组件"""
-        await self._sqlite.close()
+        if self._mysql is not None:
+            await self._mysql.close()
+        else:
+            await self._sqlite.close()
         await self._vector.close()
         await self._cache.close()
         await self._graph.close()
@@ -156,13 +218,26 @@ class DatabaseManager:
 
     def get_connection_info(self) -> dict[str, Any]:
         """获取数据库连接信息"""
+        relational_info: dict[str, Any] = {}
+        if self._mysql is not None:
+            relational_info = {
+                "type": "mysql",
+                "host": self._config.host,
+                "port": self._config.port,
+                "database": self._config.database,
+                "initialized": self._mysql.is_initialized,
+            }
+        else:
+            relational_info = {
+                "type": "sqlite",
+                "path": self._config.sqlite_path,
+                "initialized": self._sqlite.is_initialized,
+            }
+
         return {
             "db_type": self._config.db_type.value,
             "initialized": self._initialized,
-            "sqlite": {
-                "path": self._config.sqlite_path,
-                "initialized": self._sqlite.is_initialized,
-            },
+            "relational": relational_info,
             "vector": {
                 "backend": "milvus" if self._config.use_milvus else "memory",
                 "initialized": self._vector.is_initialized,
