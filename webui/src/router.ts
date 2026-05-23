@@ -1,0 +1,37 @@
+import { createRouter, createWebHistory } from 'vue-router'
+import { api } from './api/client'
+
+const router = createRouter({
+  history: createWebHistory(),
+  routes: [
+    {
+      path: '/login',
+      name: 'login',
+      component: () => import('./views/LoginView.vue'),
+    },
+    {
+      path: '/',
+      name: 'chat',
+      component: () => import('./views/ChatView.vue'),
+      meta: { requiresAuth: true },
+    },
+    {
+      path: '/admin',
+      name: 'admin',
+      component: () => import('./views/AdminView.vue'),
+      meta: { requiresAuth: true, requiresAdmin: true },
+    },
+  ],
+})
+
+router.beforeEach(async (to) => {
+  const token = api.getToken()
+  if (to.meta.requiresAuth && !token) {
+    return { name: 'login' }
+  }
+  if (to.name === 'login' && token) {
+    return { name: 'chat' }
+  }
+})
+
+export default router

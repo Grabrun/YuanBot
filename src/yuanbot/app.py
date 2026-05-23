@@ -248,6 +248,33 @@ def create_app(config: YuanBotConfig) -> FastAPI:
     # 注册请求指标中间件
     _register_metrics_middleware(app)
 
+    # 注册静态文件服务（WebUI）
+    static_dir = Path(__file__).parent / "static"
+    if static_dir.exists():
+        from fastapi.staticfiles import StaticFiles
+
+        app.mount("/assets", StaticFiles(directory=str(static_dir / "assets")), name="assets")
+
+        @app.get("/vite.svg")
+        async def serve_vite_svg():
+            from fastapi.responses import FileResponse
+
+            svg = static_dir / "vite.svg"
+            if svg.exists():
+                return FileResponse(svg)
+            return {"error": "not found"}
+
+    # SPA fallback: 所有未匹配的路由返回 index.html
+    @app.get("/{path:path}")
+    async def serve_spa(path: str):
+        """SPA fallback - 返回 index.html 让前端路由处理"""
+        from fastapi.responses import FileResponse
+
+        index = static_dir / "index.html" if static_dir.exists() else None
+        if index and index.exists():
+            return FileResponse(index)
+        return {"message": "YuanBot API is running. WebUI not built yet. Run: cd webui && npm run build"}
+
     # 注册 WebSocket 路由
     @app.websocket("/ws")
     async def websocket_endpoint(ws: WebSocket):

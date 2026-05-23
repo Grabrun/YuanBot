@@ -94,6 +94,12 @@ def main() -> None:
     # yuanbot version
     subparsers.add_parser("version", help="显示版本信息")
 
+    # yuanbot tui
+    tui_parser = subparsers.add_parser("tui", help="启动终端聊天界面")
+    tui_parser.add_argument("--host", default="http://localhost:8000", help="后端地址")
+    tui_parser.add_argument("--token", default=None, help="JWT Token")
+    tui_parser.add_argument("--api-key", default=None, help="API Key")
+
     # yuanbot provider
     provider_parser = subparsers.add_parser("provider", help="AI 提供商管理")
     provider_sub = provider_parser.add_subparsers(dest="provider_action")
@@ -173,6 +179,8 @@ def main() -> None:
             parser.parse_args(["memory", "--help"])
     elif args.command == "version":
         _run_version()
+    elif args.command == "tui":
+        _run_tui(args)
     elif args.command == "provider":
         if args.provider_action == "list":
             _run_provider_list(args)
@@ -594,6 +602,18 @@ def _run_version() -> None:
     from yuanbot import __version__
 
     print(f"缘·Bot (YuanBot) v{__version__}")
+
+
+# --------------------------------------------------------------------------- #
+# yuanbot tui
+# --------------------------------------------------------------------------- #
+
+
+def _run_tui(args: argparse.Namespace) -> None:
+    """启动 TUI 终端聊天界面"""
+    from yuanbot.tui.app import run_tui
+
+    run_tui(host=args.host, token=args.token, api_key=args.api_key)
 
 
 # --------------------------------------------------------------------------- #
