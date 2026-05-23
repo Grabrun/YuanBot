@@ -14,7 +14,10 @@
 from __future__ import annotations
 
 import os
+import shutil
 import sys
+from datetime import datetime
+from pathlib import Path
 from typing import Any
 
 import structlog
@@ -181,3 +184,118 @@ async def get_system_metrics(admin: User = Depends(require_admin)) -> dict:
             },
         },
     }
+
+
+# ── 备份与恢复 ──────────────────────────────
+
+
+@router.post("/backup")
+async def trigger_backup(admin: User = Depends(require_admin)) -> dict:
+    """触发系统备份
+
+    备份 data/ 目录和 configs/ 目录。
+    """
+    backup_dir = Path("data/backups")
+    backup_dir.mkdir(parents=True, exist_ok=True)
+
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    backup_name = f"backup_{timestamp}"
+    backup_path = backup_dir / backup_name
+    backup_path.mkdir()
+
+    # 备份 data 目录（排除 backups 自身）
+    data_dir = Path("data")
+    if data_dir.exists():
+        for item in data_dir.iterdir():
+            if item.name == "backups":
+                continue
+            dest = backup_path / "data" / item.name
+            if item.is_dir():
+                shutil.copytree(str(item), str(dest))
+            else:
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(str(item), str(dest))
+
+    # 备份 configs 目录
+    configs_dir = Path("configs")
+    if configs_dir.exists():
+        shutil.copytree(str(configs_dir), str(backup_path / "configs"))
+
+    # 创建备份元数据
+    meta = {
+        "timestamp": timestamp,
+        "created_by": admin.username,
+        "includes": ["data", "configs"],
+    }
+    import json
+
+    with open(backup_path / "meta.json", "w") as f:
+        json.dump(meta, f, indent=2)
+
+    logger.info("backup_created", path=str(backup_path), by=admin.username)
+    return {"status": "ok", "backup": backup_name, "path": str(backup_path)}
+
+
+@router.get("/backups")
+async def list_backups(admin: User = Depends(require_admin)) -> dict:
+    """列出所有备份"""
+    import json
+
+    backup_dir = Path("data/backups")
+    if not backup_dir.exists():
+        return {"backups": []}
+
+    backups = []
+    for d in sorted(backup_dir.iterdir(), reverse=True):
+        if d.is_dir():
+            meta_path = d / "meta.json"
+            meta = {}
+            if meta_path.exists():
+                with open(meta_path) as f:
+                    meta = json.load(f)
+            backups.append({
+                "name": d.name,
+                "path": str(d),
+                **meta,
+            })
+
+    return {"backups": backups}
+
+
+@router.post("/restore")
+async def restore_backup(request: dict, admin: User = Depends(require_admin)) -> dict:
+    """从备份恢复"""
+    backup_name = request.get("backup_name")
+    if not backup_name:
+        raise HTTPException(status_code=400, detail="backup_name is required")
+
+    backup_path = Path("data/backups") / backup_name
+    if not backup_path.exists():
+        raise HTTPException(status_code=404, detail=f"Backup '{backup_name}' not found")
+
+    # 恢复 data
+    backup_data = backup_path / "data"
+    if backup_data.exists():
+        data_dir = Path("data")
+        for item in backup_data.iterdir():
+            dest = data_dir / item.name
+            if dest.exists():
+                if dest.is_dir():
+                    shutil.rmtree(str(dest))
+                else:
+                    dest.unlink()
+            if item.is_dir():
+                shutil.copytree(str(item), str(dest))
+            else:
+                shutil.copy2(str(item), str(dest))
+
+    # 恢复 configs
+    backup_configs = backup_path / "configs"
+    if backup_configs.exists():
+        configs_dir = Path("configs")
+        if configs_dir.exists():
+            shutil.rmtree(str(configs_dir))
+        shutil.copytree(str(backup_configs), str(configs_dir))
+
+    logger.info("backup_restored", backup=backup_name, by=admin.username)
+    return {"status": "ok", "message": f"已从备份 '{backup_name}' 恢复"}

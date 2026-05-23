@@ -46,47 +46,65 @@ export const useChatStore = defineStore('chat', () => {
     await loadConversations()
   }
 
+  function addLocalMessage(role: 'user' | 'assistant', content: string) {
+    messages.value.push({
+      message_id: `local_${Date.now()}_${Math.random().toString(36).slice(2)}`,
+      role,
+      content,
+      timestamp: new Date().toISOString(),
+    })
+  }
+
   async function sendMessage(content: string) {
     sending.value = true
     try {
-      // 添加用户消息到本地
-      const userMsg: Message = {
-        message_id: `temp_${Date.now()}`,
-        role: 'user',
-        content,
-        timestamp: new Date().toISOString(),
-      }
-      messages.value.push(userMsg)
-
-      // 发送到后端
+      addLocalMessage('user', content)
       const result = await api.sendMessage(content, currentConvId.value || undefined)
 
-      // 更新会话 ID（新会话时）
+      // 更新用户消息 ID
+      const userIdx = messages.value.findIndex(
+        (m) => m.role === 'user' && m.content === content && m.message_id.startsWith('local_')
+      )
+      if (userIdx >= 0) {
+        messages.value[userIdx].message_id = result.user_message.message_id
+      }
+
+      addLocalMessage('assistant', result.ai_message.content)
+
       if (!currentConvId.value) {
         currentConvId.value = result.conversation_id
         await loadConversations()
+      } else {
+        await loadConversations()
       }
-
-      // 更新消息 ID
-      const idx = messages.value.findIndex((m) => m.message_id === userMsg.message_id)
-      if (idx >= 0) {
-        messages.value[idx].message_id = result.user_message.message_id
-      }
-
-      // 添加 AI 回复
-      messages.value.push({
-        message_id: result.ai_message.message_id,
-        role: 'assistant',
-        content: result.ai_message.content,
-        timestamp: new Date().toISOString(),
-      })
-
-      // 刷新会话列表（标题可能已更新）
-      await loadConversations()
     } catch (e) {
-      // 移除临时消息
-      messages.value = messages.value.filter((m) => !m.message_id.startsWith('temp_'))
+      // 移除临时用户消息
+      const idx = messages.value.findIndex(
+        (m) => m.role === 'user' && m.content === content && m.message_id.startsWith('local_')
+      )
+      if (idx >= 0) messages.value.splice(idx, 1)
       throw e
+    } finally {
+      sending.value = false
+    }
+  }
+
+  async function sendMessageFallback(content: string) {
+    // WebSocket 失败时回退到 REST
+    sending.value = true
+    try {
+      const result = await api.sendMessage(content, currentConvId.value || undefined)
+      // 替换流式消息为最终结果
+      const lastAiIdx = messages.value.length - 1
+      if (lastAiIdx >= 0 && messages.value[lastAiIdx].role === 'assistant') {
+        messages.value[lastAiIdx].content = result.ai_message.content
+        messages.value[lastAiIdx].message_id = result.ai_message.message_id
+      } else {
+        addLocalMessage('assistant', result.ai_message.content)
+      }
+      await loadConversations()
+    } catch (e: any) {
+      addLocalMessage('assistant', `⚠️ 发送失败: ${e.message}`)
     } finally {
       sending.value = false
     }
@@ -103,6 +121,8 @@ export const useChatStore = defineStore('chat', () => {
     selectConversation,
     createConversation,
     deleteConversation,
+    addLocalMessage,
     sendMessage,
+    sendMessageFallback,
   }
 })

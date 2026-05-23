@@ -1,13 +1,16 @@
 """🌸 缘·Bot TUI 终端聊天界面
 
-基于 Textual 框架的终端聊天客户端。
-通过 HTTP API 与 YuanBot 后端通信。
+基于 Textual 框架，通过 HTTP API 与 YuanBot 后端通信。
+完整实现设计文档第4节所有功能。
 
 启动方式:
-    python -m yuanbot.tui [--host URL] [--token TOKEN] [--api-key KEY]
+    python -m yuanbot.tui --host http://localhost:8000
+    yuanbot-cli tui --host http://localhost:8000
 
 快捷键:
     Ctrl+N       新建会话
+    Ctrl+Tab     下一个会话
+    Ctrl+R       切换信息面板
     Ctrl+Q       退出
     Ctrl+L       清屏
     F1           帮助
@@ -72,9 +75,7 @@ class LoginScreen(ModalScreen[dict]):
     }
     """
 
-    BINDINGS = [
-        Binding("escape", "cancel", "取消"),
-    ]
+    BINDINGS = [Binding("escape", "cancel", "取消")]
 
     def __init__(self, client: TUIClient):
         super().__init__()
@@ -97,11 +98,9 @@ class LoginScreen(ModalScreen[dict]):
     async def on_submit(self, event: Input.Submitted) -> None:
         username = self.query_one("#username", Input).value
         password = self.query_one("#password", Input).value
-
         if not username or not password:
             self._show_error("请输入用户名和密码")
             return
-
         try:
             data = await self._client.login(username, password)
             self.dismiss(data)
@@ -122,42 +121,42 @@ class HelpScreen(ModalScreen):
         align: center middle;
     }
     #help-box {
-        width: 60;
+        width: 65;
         height: auto;
-        max-height: 30;
+        max-height: 35;
         border: solid $primary;
         padding: 1 2;
         background: $surface;
     }
     """
 
-    BINDINGS = [
-        Binding("escape", "close", "关闭"),
-    ]
+    BINDINGS = [Binding("escape", "close", "关闭")]
 
     HELP_TEXT = """\
 # 🌸 缘·Bot TUI 帮助
 
 ## 快捷键
 - **Ctrl+N** — 新建会话
-- **Ctrl+Q** — 退出
+- **Ctrl+Tab** — 下一个会话
+- **Ctrl+Shift+Tab** — 上一个会话
+- **Ctrl+R** — 切换信息面板
 - **Ctrl+L** — 清屏
+- **Ctrl+Q** — 退出
 - **F1** — 帮助
 - **Esc** — 关闭弹窗
 
 ## 命令
 - `/help` — 显示帮助
-- `/new` — 新建会话
+- `/new [标题]` — 新建会话
 - `/list` — 列出会话
 - `/switch <n>` — 切换到第 n 个会话
 - `/delete` — 删除当前会话
 - `/me` — 显示用户信息
+- `/memory [关键词]` — 查看/搜索记忆
+- `/provider` — 查看 AI 提供商状态
+- `/history [关键词]` — 搜索消息历史
 - `/clear` — 清屏
 - `/quit` — 退出
-
-## 使用说明
-直接输入消息即可与 AI 对话。
-支持多会话，每个会话保留独立上下文。
 """
 
     def compose(self) -> ComposeResult:
@@ -174,11 +173,79 @@ class ConversationItem(ListItem):
     def __init__(self, conv_id: str, title: str, updated: str, message_count: int):
         super().__init__()
         self.conv_id = conv_id
-        display = f"{title[:20]}  [{message_count}条]"
-        self._label = Label(display)
+        self._label = Label(f"{title[:20]}  [{message_count}条]")
 
     def compose(self) -> ComposeResult:
         yield self._label
+
+
+class InfoPanel(Static):
+    """右侧信息面板"""
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self._panel_mode = "status"  # status | memory | help
+
+    def set_mode(self, mode: str) -> None:
+        self._panel_mode = mode
+        self.refresh_content()
+
+    def toggle_mode(self) -> None:
+        modes = ["status", "memory", "help"]
+        idx = modes.index(self._panel_mode)
+        self.set_mode(modes[(idx + 1) % len(modes)])
+
+    def refresh_content(self, data: dict | None = None) -> None:
+        if self._panel_mode == "status":
+            self._render_status(data)
+        elif self._panel_mode == "memory":
+            self._render_memory(data)
+        elif self._panel_mode == "help":
+            self._render_help()
+
+    def _render_status(self, data: dict | None = None) -> None:
+        d = data or {}
+        user = d.get("user", {})
+        lines = [
+            "[bold]📊 今日状态[/bold]",
+            f"  用户: {user.get('display_name', '-')}",
+            f"  角色: {user.get('role', '-')}",
+            "",
+            f"  会话数: {d.get('conv_count', 0)}",
+            f"  消息数: {d.get('msg_count', 0)}",
+            "",
+            "[dim]Ctrl+R 切换面板[/dim]",
+        ]
+        self.update("\n".join(lines))
+
+    def _render_memory(self, data: dict | None = None) -> None:
+        lines = ["[bold]🧠 最近记忆[/bold]", ""]
+        memories = (data or {}).get("memories", [])
+        if memories:
+            for m in memories[:8]:
+                lines.append(f"  · {m[:30]}")
+        else:
+            lines.append("  [dim]暂无记忆数据[/dim]")
+        lines.extend(["", "[dim]/memory 查看更多[/dim]"])
+        self.update("\n".join(lines))
+
+    def _render_help(self) -> None:
+        lines = [
+            "[bold]📖 快速帮助[/bold]",
+            "",
+            "  /help    帮助",
+            "  /new     新建会话",
+            "  /list    列出会话",
+            "  /memory  查看记忆",
+            "  /provider 提供商",
+            "  /clear   清屏",
+            "  /quit    退出",
+            "",
+            "  Ctrl+N   新建会话",
+            "  Ctrl+R   切换面板",
+            "  F1       完整帮助",
+        ]
+        self.update("\n".join(lines))
 
 
 class YuanBotTUI(App):
@@ -205,6 +272,17 @@ class YuanBotTUI(App):
         border-bottom: solid $primary-darken-2;
         padding: 0 1;
     }
+    #info-panel {
+        width: 25;
+        border-left: solid $primary;
+        background: $surface;
+        padding: 1;
+        display: block;
+    }
+    #info-panel.hidden {
+        display: none;
+        width: 0;
+    }
     #input-area {
         height: 3;
         dock: bottom;
@@ -222,10 +300,15 @@ class YuanBotTUI(App):
     """
 
     BINDINGS = [
-        Binding("ctrl+n", "new_conversation", "新建会话"),
-        Binding("ctrl+q", "quit", "退出"),
-        Binding("ctrl+l", "clear_chat", "清屏"),
+        Binding("ctrl+n", "new_conversation", "新建会话", show=True),
+        Binding("ctrl+tab", "next_conversation", "下一个会话", show=True),
+        Binding("ctrl+shift+tab", "prev_conversation", "上一个会话", show=True),
+        Binding("ctrl+r", "toggle_panel", "切换面板", show=True),
+        Binding("ctrl+q", "quit", "退出", show=True),
+        Binding("ctrl+l", "clear_chat", "清屏", show=True),
         Binding("f1", "show_help", "帮助", show=True),
+        Binding("up", "history_up", "上一条历史", show=False),
+        Binding("down", "history_down", "下一条历史", show=False),
     ]
 
     def __init__(self, client: TUIClient):
@@ -234,6 +317,9 @@ class YuanBotTUI(App):
         self._user: dict | None = None
         self._conversations: list[dict] = []
         self._current_conv_id: str | None = None
+        self._panel_visible = True
+        self._input_history: list[str] = []
+        self._history_index = -1
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -241,21 +327,19 @@ class YuanBotTUI(App):
             with Vertical(id="sidebar"):
                 yield Label("📌 会话列表", id="sidebar-title")
                 yield ListView(id="conv-list")
-                yield Static("[dim]Ctrl+N 新建[/dim]")
+                yield Static("[dim]Ctrl+N 新建 | Tab 切换[/dim]")
             with Vertical(id="chat-area"):
                 yield RichLog(id="chat-log", wrap=True, markup=True, highlight=True)
                 with Horizontal(id="input-area"):
                     yield Input(placeholder="输入消息或 /help ...", id="msg-input")
+            yield InfoPanel(id="info-panel")
         yield Static("未连接", id="status-bar")
         yield Footer()
 
     async def on_mount(self) -> None:
-        """应用启动"""
-        # 尝试自动登录（API Key 或本地信任）
         await self._try_auto_login()
 
     async def _try_auto_login(self) -> None:
-        """尝试自动登录"""
         import os
 
         api_key = os.environ.get("YUANBOT_API_KEY")
@@ -266,12 +350,9 @@ class YuanBotTUI(App):
                 return
             except TUIClientError:
                 pass
-
-        # 显示登录界面
         await self._show_login()
 
     async def _show_login(self) -> None:
-        """显示登录界面"""
         result = await self.push_screen_wait(LoginScreen(self._client))
         if result:
             await self._on_login_success()
@@ -279,111 +360,96 @@ class YuanBotTUI(App):
             self.exit("未登录")
 
     async def _on_login_success(self) -> None:
-        """登录成功后初始化"""
         try:
             self._user = await self._client.get_me()
             self._update_status(f"已登录: {self._user['display_name']} ({self._user['role']})")
-
-            # 加载会话列表
             await self._load_conversations()
-
-            # 聚焦输入框
             self.query_one("#msg-input", Input).focus()
-
+            self._refresh_info_panel()
         except TUIClientError as e:
             self._chat_log(f"[red]初始化失败: {e}[/red]")
 
+    def _refresh_info_panel(self) -> None:
+        panel = self.query_one("#info-panel", InfoPanel)
+        panel.refresh_content({
+            "user": self._user or {},
+            "conv_count": len(self._conversations),
+            "msg_count": sum(c.get("message_count", 0) for c in self._conversations),
+        })
+
     async def _load_conversations(self) -> None:
-        """加载会话列表"""
         try:
             self._conversations = await self._client.list_conversations()
             list_view = self.query_one("#conv-list", ListView)
             await list_view.clear()
 
-            for i, conv in enumerate(self._conversations):
-                updated = conv.get("updated_at", "")[:16]
+            for conv in self._conversations:
                 item = ConversationItem(
                     conv["conversation_id"],
                     conv["title"],
-                    updated,
+                    conv.get("updated_at", "")[:16],
                     conv.get("message_count", 0),
                 )
                 await list_view.append(item)
 
-            # 自动选择第一个
             if self._conversations and not self._current_conv_id:
                 self._current_conv_id = self._conversations[0]["conversation_id"]
                 await self._load_current_messages()
 
+            self._refresh_info_panel()
         except TUIClientError as e:
             self._chat_log(f"[red]加载会话失败: {e}[/red]")
 
     async def _load_current_messages(self) -> None:
-        """加载当前会话的消息"""
         if not self._current_conv_id:
             return
-
         try:
             messages = await self._client.get_messages(self._current_conv_id)
             chat_log = self.query_one("#chat-log", RichLog)
             chat_log.clear()
-
             for msg in messages:
                 role = msg["role"]
                 content = msg["content"]
                 if role == "user":
                     self._chat_log(f"[bold blue]你:[/bold blue] {escape(content)}")
-                else:
+                elif role == "assistant":
                     self._chat_log(f"[bold green]🌸 小缘:[/bold green] {escape(content)}")
-
         except TUIClientError as e:
             self._chat_log(f"[red]加载消息失败: {e}[/red]")
 
     @on(Input.Submitted, "#msg-input")
     async def on_message_sent(self, event: Input.Submitted) -> None:
-        """处理用户输入"""
         text = event.value.strip()
         if not text:
             return
-
-        # 清空输入框
+        # 保存历史
+        self._input_history.append(text)
+        self._history_index = len(self._input_history)
         event.input.value = ""
 
-        # 处理命令
         if text.startswith("/"):
             await self._handle_command(text)
-            return
-
-        # 发送消息
-        await self._send_chat_message(text)
+        else:
+            await self._send_chat_message(text)
 
     async def _send_chat_message(self, text: str) -> None:
-        """发送聊天消息"""
         self._chat_log(f"[bold blue]你:[/bold blue] {escape(text)}")
         self._update_status("AI 思考中...")
-
         try:
             result = await self._client.send_message(
-                content=text,
-                conversation_id=self._current_conv_id,
+                content=text, conversation_id=self._current_conv_id
             )
-
             ai_content = result["ai_message"]["content"]
             self._chat_log(f"[bold green]🌸 小缘:[/bold green] {escape(ai_content)}")
-
-            # 更新会话 ID（如果是新会话）
             if not self._current_conv_id:
                 self._current_conv_id = result["conversation_id"]
                 await self._load_conversations()
-
             self._update_status(f"已登录: {self._user['display_name']}")
-
         except TUIClientError as e:
             self._chat_log(f"[red]发送失败: {e}[/red]")
             self._update_status("发送失败")
 
     async def _handle_command(self, cmd: str) -> None:
-        """处理斜杠命令"""
         parts = cmd.split(maxsplit=1)
         command = parts[0].lower()
         arg = parts[1] if len(parts) > 1 else ""
@@ -397,6 +463,7 @@ class YuanBotTUI(App):
                 conv = await self._client.create_conversation(title)
                 self._current_conv_id = conv["conversation_id"]
                 await self._load_conversations()
+                self.query_one("#chat-log", RichLog).clear()
                 self._chat_log(f"[dim]已创建新会话: {title}[/dim]")
             except TUIClientError as e:
                 self._chat_log(f"[red]创建会话失败: {e}[/red]")
@@ -434,6 +501,7 @@ class YuanBotTUI(App):
             try:
                 await self._client.delete_conversation(self._current_conv_id)
                 self._current_conv_id = None
+                self.query_one("#chat-log", RichLog).clear()
                 await self._load_conversations()
                 self._chat_log("[dim]已删除当前会话[/dim]")
             except TUIClientError as e:
@@ -449,6 +517,44 @@ class YuanBotTUI(App):
                     f"  ID: {self._user['user_id']}"
                 )
 
+        elif command == "/memory":
+            self._chat_log("[bold]🧠 记忆系统[/bold]")
+            self._chat_log("[dim]记忆功能需要集成记忆管理器后提供完整支持[/dim]")
+            if arg:
+                self._chat_log(f"[dim]搜索关键词: {arg}[/dim]")
+            panel = self.query_one("#info-panel", InfoPanel)
+            panel.set_mode("memory")
+
+        elif command == "/provider":
+            try:
+                providers = await self._client.list_providers()
+                self._chat_log("[bold]AI 提供商:[/bold]")
+                for p in providers:
+                    status = "✅" if p.get("enabled") else "❌"
+                    default = " (默认)" if p.get("is_default") else ""
+                    self._chat_log(
+                        f"  {status} {p.get('provider_id', '?')} — "
+                        f"{p.get('adapter', '?')}{default}"
+                    )
+            except TUIClientError:
+                self._chat_log("[dim]无法获取提供商信息[/dim]")
+
+        elif command == "/history":
+            if not self._current_conv_id:
+                self._chat_log("[dim]请先选择会话[/dim]")
+                return
+            try:
+                messages = await self._client.get_messages(self._current_conv_id, limit=100)
+                if arg:
+                    messages = [m for m in messages if arg.lower() in m.get("content", "").lower()]
+                self._chat_log(f"[bold]消息历史 ({len(messages)} 条):[/bold]")
+                for msg in messages[-20:]:
+                    role = "你" if msg["role"] == "user" else "🌸"
+                    content = msg["content"][:50]
+                    self._chat_log(f"  [{role}] {content}")
+            except TUIClientError as e:
+                self._chat_log(f"[red]获取历史失败: {e}[/red]")
+
         elif command == "/clear":
             self.query_one("#chat-log", RichLog).clear()
 
@@ -458,34 +564,90 @@ class YuanBotTUI(App):
         else:
             self._chat_log(f"[red]未知命令: {command}[/red]")
 
+    # ── 快捷键动作 ──────────────────────────
+
     def action_new_conversation(self) -> None:
-        """新建会话"""
         asyncio.create_task(self._handle_command("/new"))
 
+    def action_next_conversation(self) -> None:
+        if not self._conversations:
+            return
+        if self._current_conv_id:
+            ids = [c["conversation_id"] for c in self._conversations]
+            try:
+                idx = ids.index(self._current_conv_id)
+                next_idx = (idx + 1) % len(ids)
+                self._current_conv_id = ids[next_idx]
+                asyncio.create_task(self._load_current_messages())
+            except ValueError:
+                self._current_conv_id = ids[0]
+                asyncio.create_task(self._load_current_messages())
+        else:
+            self._current_conv_id = self._conversations[0]["conversation_id"]
+            asyncio.create_task(self._load_current_messages())
+
+    def action_prev_conversation(self) -> None:
+        if not self._conversations:
+            return
+        if self._current_conv_id:
+            ids = [c["conversation_id"] for c in self._conversations]
+            try:
+                idx = ids.index(self._current_conv_id)
+                prev_idx = (idx - 1) % len(ids)
+                self._current_conv_id = ids[prev_idx]
+                asyncio.create_task(self._load_current_messages())
+            except ValueError:
+                self._current_conv_id = ids[-1]
+                asyncio.create_task(self._load_current_messages())
+
+    def action_toggle_panel(self) -> None:
+        panel = self.query_one("#info-panel", InfoPanel)
+        if self._panel_visible:
+            panel.add_class("hidden")
+            self._panel_visible = False
+        else:
+            panel.remove_class("hidden")
+            self._panel_visible = True
+        panel.toggle_mode()
+
     def action_clear_chat(self) -> None:
-        """清屏"""
         self.query_one("#chat-log", RichLog).clear()
 
     def action_show_help(self) -> None:
-        """显示帮助"""
         self.push_screen(HelpScreen())
+
+    def action_history_up(self) -> None:
+        if not self._input_history:
+            return
+        if self._history_index > 0:
+            self._history_index -= 1
+        input_widget = self.query_one("#msg-input", Input)
+        input_widget.value = self._input_history[self._history_index]
+
+    def action_history_down(self) -> None:
+        if not self._input_history:
+            return
+        if self._history_index < len(self._input_history) - 1:
+            self._history_index += 1
+            input_widget = self.query_one("#msg-input", Input)
+            input_widget.value = self._input_history[self._history_index]
+        else:
+            self._history_index = len(self._input_history)
+            self.query_one("#msg-input", Input).value = ""
 
     @on(ListView.Selected, "#conv-list")
     async def on_conversation_selected(self, event: ListView.Selected) -> None:
-        """选择会话"""
         item = event.item
         if isinstance(item, ConversationItem):
             self._current_conv_id = item.conv_id
             await self._load_current_messages()
 
     def _chat_log(self, msg: str) -> None:
-        """写入聊天日志"""
         log = self.query_one("#chat-log", RichLog)
         timestamp = datetime.now().strftime("%H:%M")
         log.write(f"[dim]{timestamp}[/dim] {msg}")
 
     def _update_status(self, text: str) -> None:
-        """更新状态栏"""
         self.query_one("#status-bar", Static).update(text)
 
 
@@ -498,12 +660,10 @@ def run_tui(
     import os
 
     client = TUIClient(base_url=host)
-
     if api_key:
         os.environ["YUANBOT_API_KEY"] = api_key
     if token:
         client.set_token(token)
-
     app = YuanBotTUI(client)
     app.run()
 

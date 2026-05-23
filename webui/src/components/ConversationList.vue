@@ -1,10 +1,18 @@
 <script setup lang="ts">
+import { ref, computed } from 'vue'
 import { useChatStore } from '../stores/chat'
 import { useDialog, useMessage } from 'naive-ui'
 
 const chat = useChatStore()
 const dialog = useDialog()
 const message = useMessage()
+const searchText = ref('')
+
+const filteredConversations = computed(() => {
+  if (!searchText.value) return chat.conversations
+  const q = searchText.value.toLowerCase()
+  return chat.conversations.filter((c) => c.title.toLowerCase().includes(q))
+})
 
 function selectConv(convId: string) {
   chat.selectConversation(convId)
@@ -29,9 +37,16 @@ function deleteConv(convId: string, title: string) {
 </script>
 
 <template>
+  <n-input
+    v-model:value="searchText"
+    placeholder="搜索会话..."
+    size="small"
+    clearable
+    style="margin-bottom: 8px"
+  />
   <n-list hoverable clickable>
     <n-list-item
-      v-for="conv in chat.conversations"
+      v-for="conv in filteredConversations"
       :key="conv.conversation_id"
       :class="{ active: conv.conversation_id === chat.currentConvId }"
       @click="selectConv(conv.conversation_id)"

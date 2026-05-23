@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import os
 from contextlib import asynccontextmanager
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -184,6 +185,20 @@ def create_app(config: YuanBotConfig) -> FastAPI:
         await user_store.initialize()
         await conv_store.initialize()
 
+        # 首次启动自动创建管理员
+        if user_store.user_count == 0:
+            import os
+
+            admin_password = os.environ.get("YUANBOT_ADMIN_PASSWORD", "admin123")
+            user_store.create_user(
+                username="admin",
+                password=admin_password,
+                display_name="管理员",
+                role="admin",
+            )
+            print("🌸 已自动创建管理员账号 (admin / {pw})".format(pw=admin_password))
+            print("   请通过环境变量 YUANBOT_ADMIN_PASSWORD 设置安全密码")
+
         # 启动 Web 适配器
         async def on_message(msg: Any) -> BotResponse:
             return await orchestrator.process_message(msg)
@@ -214,6 +229,17 @@ def create_app(config: YuanBotConfig) -> FastAPI:
         description="AI 虚拟伴侣系统",
         version=config.version,
         lifespan=lifespan,
+    )
+
+    # CORS 配置
+    from fastapi.middleware.cors import CORSMiddleware
+
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
     )
 
     # 将组件存储到 app.state 供外部访问
@@ -289,9 +315,18 @@ def create_app(config: YuanBotConfig) -> FastAPI:
             ws://host:port/ws/chat?token=<jwt>
 
         消息格式：
-            {"type": "message", "text": "你好"}
+            {"type": "message", "text": "你好", "conversation_id": "xxx"}
             {"type": "ping"}
+            {"type": "subscribe", "conversation_id": "xxx"}
+
+        服务端推送：
+            {"type": "response", "text": "...", "conversation_id": "..."}
+            {"type": "stream_start", "conversation_id": "..."}
+            {"type": "stream_delta", "delta": "..."}
+            {"type": "stream_end", "conversation_id": "..."}
         """
+        import json
+
         from yuanbot.auth.middleware import get_current_user_from_ws
 
         user = await get_current_user_from_ws(ws)
@@ -299,16 +334,14 @@ def create_app(config: YuanBotConfig) -> FastAPI:
             await ws.close(code=4001, reason="Unauthorized")
             return
 
-        # 注入用户信息到会话
         await ws.accept()
         session_id = f"ws_{user.user_id}"
+        active_conv_id: str | None = None
         logger.info("ws_chat_connected", user_id=user.user_id, username=user.username)
 
         try:
             while True:
                 raw = await ws.receive_text()
-                import json
-
                 try:
                     data = json.loads(raw)
                 except json.JSONDecodeError:
@@ -316,24 +349,111 @@ def create_app(config: YuanBotConfig) -> FastAPI:
                     continue
 
                 msg_type = data.get("type", "message")
+
                 if msg_type == "ping":
                     await ws.send_text(json.dumps({"type": "pong"}))
                     continue
 
+                if msg_type == "subscribe":
+                    active_conv_id = data.get("conversation_id")
+                    await ws.send_text(json.dumps({
+                        "type": "subscribed",
+                        "conversation_id": active_conv_id,
+                    }))
+                    continue
+
                 if msg_type == "message":
                     text = data.get("text", "")
-                    if text:
-                        # 处理聊天消息
+                    conv_id = data.get("conversation_id") or active_conv_id
+                    if not text:
+                        continue
+
+                    # 保存用户消息到会话
+                    conv_store_inst = app.state.conv_store
+                    if conv_id:
+                        conv_store_inst.add_message(conv_id, user.user_id, "user", text)
+
+                    # 通知开始生成
+                    await ws.send_text(json.dumps({
+                        "type": "stream_start",
+                        "conversation_id": conv_id,
+                    }))
+
+                    try:
                         response = await orchestrator.process_message(
                             _make_user_message(user, text, session_id)
                         )
+                        reply_text = response.content.text if response.content else "收到~"
+
+                        # 模拟流式推送（逐句发送）
+                        sentences = reply_text.replace("。", "。\n").replace("！", "！\n").replace("？", "？\n").split("\n")
+                        for sent in sentences:
+                            if sent.strip():
+                                await ws.send_text(json.dumps({
+                                    "type": "stream_delta",
+                                    "delta": sent,
+                                }, ensure_ascii=False))
+
+                        # 保存 AI 回复
+                        if conv_id:
+                            conv_store_inst.add_message(conv_id, user.user_id, "assistant", reply_text)
+
                         await ws.send_text(json.dumps({
-                            "type": "response",
-                            "content_type": "text",
-                            "text": response.content.text if response.content else "",
+                            "type": "stream_end",
+                            "conversation_id": conv_id,
+                            "full_text": reply_text,
                         }, ensure_ascii=False))
+
+                    except Exception as e:
+                        logger.error("ws_chat_error", error=str(e))
+                        await ws.send_text(json.dumps({
+                            "type": "error",
+                            "message": "AI 服务暂时不可用",
+                        }))
+
         except Exception as e:
             logger.info("ws_chat_disconnected", user_id=user.user_id, error=str(e))
+
+    @app.websocket("/ws/logs")
+    async def websocket_logs_endpoint(ws: WebSocket):
+        """WebSocket 实时日志流（仅管理员）"""
+        import json
+
+        from yuanbot.auth.middleware import get_current_user_from_ws
+
+        user = await get_current_user_from_ws(ws)
+        if not user or user.role.value != "admin":
+            await ws.close(code=4003, reason="Admin access required")
+            return
+
+        await ws.accept()
+        logger.info("ws_logs_connected", user_id=user.user_id)
+        try:
+            # 简单实现：定期推送系统状态
+            import asyncio
+
+            while True:
+                await asyncio.sleep(5)
+                try:
+                    import psutil
+
+                    status = {
+                        "type": "log",
+                        "level": "info",
+                        "message": f"CPU: {psutil.cpu_percent(interval=0.1)}% | "
+                                    f"Memory: {psutil.virtual_memory().percent}%",
+                        "timestamp": datetime.now().isoformat(),
+                    }
+                except ImportError:
+                    status = {
+                        "type": "log",
+                        "level": "info",
+                        "message": "系统运行正常",
+                        "timestamp": datetime.now().isoformat(),
+                    }
+                await ws.send_text(json.dumps(status))
+        except Exception:
+            pass
 
     return app
 
