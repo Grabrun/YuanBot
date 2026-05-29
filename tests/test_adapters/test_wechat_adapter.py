@@ -17,13 +17,14 @@ from yuanbot.adapters.channel.wechat_adapter import (
     MessageState,
 )
 from yuanbot.adapters.channel.wechat_cdn import (
+    UploadMediaType,
     aes_ecb_decrypt,
     aes_ecb_encrypt,
     aes_ecb_padded_size,
     compute_md5,
     generate_aes_key,
     generate_file_key,
-    parse_aes_key,
+    parse_aes_key_from_item,
 )
 from yuanbot.core.types import ChannelConfig, ContentType, MessageContent
 
@@ -56,17 +57,21 @@ class TestAesEcb:
         assert aes_ecb_padded_size(17) == 32
 
     def test_parse_aes_key_raw(self):
-        """解析 raw 16 字节 base64 密钥"""
+        """解析 raw 16 字节 base64 密钥（图片 item）"""
         key_bytes = os.urandom(16)
         key_b64 = base64.b64encode(key_bytes).decode()
-        assert parse_aes_key(key_b64, use_hex_decode=False) == key_bytes
+        item = {"image_item": {"media": {"aes_key": key_b64}}}
+        result = parse_aes_key_from_item(item, UploadMediaType.IMAGE)
+        assert result == key_bytes
 
     def test_parse_aes_key_hex(self):
-        """解析 hex 编码的 base64 密钥"""
+        """解析 hex 编码的 base64 密钥（文件 item）"""
         key_bytes = os.urandom(16)
         hex_str = key_bytes.hex()
         key_b64 = base64.b64encode(hex_str.encode()).decode()
-        assert parse_aes_key(key_b64, use_hex_decode=True) == key_bytes
+        item = {"file_item": {"media": {"aes_key": key_b64}}}
+        result = parse_aes_key_from_item(item, UploadMediaType.FILE)
+        assert result == key_bytes
 
     def test_generate_aes_key(self):
         """生成 AES 密钥"""

@@ -10,6 +10,7 @@ import asyncio
 import time
 import uuid
 from collections.abc import Awaitable, Callable
+from pathlib import Path
 from typing import Any
 
 import httpx
@@ -366,9 +367,72 @@ class WeixinAdapter(BaseChannelAdapter):
         item: dict[str, Any],
         raw_msg: dict[str, Any],
     ) -> None:
-        """处理媒体消息（下载 + 转发）"""
-        # 暂不实现媒体下载，记录日志
-        logger.info("wechat_media_received", type=content_type.value, from_user=from_user_id)
+        """处理媒体消息（CDN 下载 + 转发到 AI 管道）"""
+        from yuanbot.adapters.channel.wechat_cdn import (
+            UploadMediaType,
+            download_media_file,
+        )
+
+        item_type = {
+            ContentType.IMAGE: UploadMediaType.IMAGE,
+            ContentType.VOICE: UploadMediaType.VOICE,
+            ContentType.FILE: UploadMediaType.FILE,
+            ContentType.VIDEO: UploadMediaType.VIDEO,
+        }.get(content_type, UploadMediaType.FILE)
+
+        # 提取 CDN 媒体引用
+        item_key = {
+            UploadMediaType.IMAGE: "image_item",
+            UploadMediaType.VOICE: "voice_item",
+            UploadMediaType.FILE: "file_item",
+            UploadMediaType.VIDEO: "video_item",
+        }.get(item_type, "")
+
+        item_data = item.get(item_key, {})
+        media = item_data.get("media", {})
+        encrypt_query_param = media.get("encrypt_query_param", "")
+        aes_key_b64 = media.get("aes_key", "")
+        full_url = media.get("full_url", "")
+
+        media_path = ""
+
+        if encrypt_query_param or full_url:
+            # CDN 下载
+            plaintext = await download_media_file(
+                encrypt_query_param=encrypt_query_param,
+                aes_key_b64=aes_key_b64,
+                item_type=item_type,
+                cdn_base_url=self._cdn_base_url,
+                full_url=full_url,
+            )
+
+            if plaintext:
+                # 保存到临时文件
+                import tempfile
+                suffix = {
+                    ContentType.IMAGE: ".jpg",
+                    ContentType.VOICE: ".wav",
+                    ContentType.VIDEO: ".mp4",
+                    ContentType.FILE: "",
+                }.get(content_type, "")
+
+                with tempfile.NamedTemporaryFile(
+                    delete=False, suffix=suffix, prefix="yuanbot_wechat_"
+                ) as f:
+                    f.write(plaintext)
+                    media_path = f.name
+
+                logger.info(
+                    "wechat_media_downloaded",
+                    type=content_type.value,
+                    size=len(plaintext),
+                    path=media_path,
+                )
+            else:
+                logger.warning(
+                    "wechat_media_download_failed",
+                    type=content_type.value,
+                )
 
         if not self._callback:
             return
@@ -376,13 +440,21 @@ class WeixinAdapter(BaseChannelAdapter):
         yuanbot_uid = self._resolve_yuanbot_user_id(from_user_id)
         session_id = self._build_session_id(from_user_id)
 
+        # 构建消息文本
+        text = f"[{content_type.value}消息]"
+        if content_type == ContentType.VOICE:
+            voice_text = item_data.get("text", "")
+            if voice_text:
+                text = f"[语音] {voice_text}"
+
         user_msg = UserMessage(
             platform="wechat",
             platform_user_id=from_user_id,
             yuanbot_user_id=yuanbot_uid,
             session_id=session_id,
             content_type=content_type,
-            text=f"[{content_type.value}消息]",
+            text=text,
+            media_url=media_path if media_path else None,
             metadata={
                 "message_id": raw_msg.get("message_id"),
                 "context_token": raw_msg.get("context_token", ""),
@@ -447,14 +519,199 @@ class WeixinAdapter(BaseChannelAdapter):
         content: MessageContent,
         context_token: str = "",
     ) -> SendResult:
-        """发送媒体消息（图片/文件/语音/视频）"""
-        # 暂不实现 CDN 上传，回退为文本提示
-        logger.warning(
-            "wechat_media_send_not_implemented", type=content.content_type.value
+        """发送媒体消息（图片/文件/语音/视频）
+
+        完整流程：
+        1. 读取文件数据（本地路径或远程 URL）
+        2. CDN 上传（加密 + 上传）
+        3. 构造 MessageItem
+        4. 调用 sendMessage API
+        """
+        assert self._client is not None
+
+        file_data: bytes | None = None
+        file_name = ""
+        mime_type = "application/octet-stream"
+
+        # 1. 获取文件数据
+        if content.media_data:
+            file_data = content.media_data
+        elif content.media_url:
+            file_data, file_name, mime_type = await self._load_media_data(
+                content.media_url
+            )
+        elif content.text:
+            # text 字段可能是本地路径
+            path = Path(content.text)
+            if path.exists():
+                file_data = path.read_bytes()
+                file_name = path.name
+                from yuanbot.adapters.channel.wechat_cdn import extension_to_mime
+                mime_type = extension_to_mime(path.suffix)
+
+        if not file_data:
+            return SendResult(success=False, error="No media data available")
+
+        # 2. 确定媒体类型
+        from yuanbot.adapters.channel.wechat_cdn import (
+            get_media_ref_from_upload,
+            mime_to_media_type,
+            upload_media_file,
         )
-        return await self._send_text(
-            target_id, f"[{content.content_type.value}消息暂不支持发送]", context_token
+
+        media_type = mime_to_media_type(mime_type)
+
+        # 3. CDN 上传
+        upload_result = await upload_media_file(
+            http_client=self._client,
+            base_url=self._base_url,
+            cdn_base_url=self._cdn_base_url,
+            headers=self._build_headers(),
+            base_info=self._build_base_info(),
+            file_data=file_data,
+            media_type=media_type,
+            to_user_id=target_id,
         )
+
+        if not upload_result:
+            return SendResult(success=False, error="CDN upload failed")
+
+        # 4. 构造 MessageItem 并发送
+        media_ref = get_media_ref_from_upload(upload_result)
+        return await self._send_media_message(
+            target_id, media_type, media_ref, context_token,
+            file_name=file_name,
+            file_size=upload_result.file_size_plain,
+        )
+
+    async def _load_media_data(
+        self, media_url: str
+    ) -> tuple[bytes, str, str]:
+        """加载媒体数据（本地文件或远程 URL）
+
+        Returns:
+            (file_data, file_name, mime_type)
+        """
+        from yuanbot.adapters.channel.wechat_cdn import extension_to_mime
+
+        if media_url.startswith("http://") or media_url.startswith("https://"):
+            # 远程 URL，下载到本地
+            try:
+                async with httpx.AsyncClient(timeout=30) as client:
+                    resp = await client.get(media_url)
+                    resp.raise_for_status()
+                    file_data = resp.content
+                    # 从 URL 推断文件名和 MIME
+                    from urllib.parse import urlparse
+                    parsed = urlparse(media_url)
+                    file_name = Path(parsed.path).name or "media"
+                    ext = Path(file_name).suffix
+                    mime_type = extension_to_mime(ext)
+                    return file_data, file_name, mime_type
+            except Exception as exc:
+                logger.error("media_download_error", url=media_url, error=str(exc))
+                return b"", "", ""
+        elif media_url.startswith("file://"):
+            path = Path(media_url[7:])
+        else:
+            path = Path(media_url)
+
+        if path.exists():
+            file_data = path.read_bytes()
+            file_name = path.name
+            mime_type = extension_to_mime(path.suffix)
+            return file_data, file_name, mime_type
+
+        logger.error("media_file_not_found", path=media_url)
+        return b"", "", ""
+
+    async def _send_media_message(
+        self,
+        target_id: str,
+        media_type: int,
+        media_ref: Any,
+        context_token: str = "",
+        file_name: str = "",
+        file_size: int = 0,
+    ) -> SendResult:
+        """构造媒体 MessageItem 并调用 sendMessage API"""
+        assert self._client is not None
+
+        from yuanbot.adapters.channel.wechat_cdn import UploadMediaType
+
+        client_id = f"yuanbot-wechat:{int(time.time() * 1000)}-{uuid.uuid4().hex[:8]}"
+
+        # 根据媒体类型构造 item
+        media_item: dict[str, Any] = {
+            "encrypt_query_param": media_ref.encrypt_query_param,
+            "aes_key": media_ref.aes_key_b64,
+            "encrypt_type": media_ref.encrypt_type,
+        }
+
+        if media_type == UploadMediaType.IMAGE:
+            item = {
+                "type": 2,
+                "image_item": {
+                    "media": media_item,
+                    "mid_size": file_size,
+                },
+            }
+        elif media_type == UploadMediaType.VIDEO:
+            item = {
+                "type": 5,
+                "video_item": {
+                    "media": media_item,
+                    "video_size": file_size,
+                },
+            }
+        elif media_type == UploadMediaType.VOICE:
+            item = {
+                "type": 3,
+                "voice_item": {
+                    "media": media_item,
+                },
+            }
+        else:  # FILE
+            item = {
+                "type": 4,
+                "file_item": {
+                    "media": media_item,
+                    "file_name": file_name or "file",
+                    "len": str(file_size),
+                },
+            }
+
+        body = {
+            "msg": {
+                "from_user_id": "",
+                "to_user_id": target_id,
+                "client_id": client_id,
+                "message_type": 2,  # BOT
+                "message_state": 2,  # FINISH
+                "context_token": context_token,
+                "item_list": [item],
+            },
+            "base_info": self._build_base_info(),
+        }
+
+        try:
+            resp = await self._client.post(
+                f"{self._base_url}/ilink/bot/sendmessage",
+                json=body,
+                headers=self._build_headers(),
+                timeout=API_TIMEOUT_S,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+
+            if data.get("ret", 0) != 0:
+                return SendResult(success=False, error=data.get("errmsg", "Unknown error"))
+
+            return SendResult(success=True, message_id=client_id)
+
+        except Exception as exc:
+            logger.error("wechat_send_media_error", error=str(exc))
+            return SendResult(success=False, error=str(exc))
 
     async def _deliver_response(self, target_id: str, response: BotResponse) -> None:
         """投递 AI 回复到微信"""
