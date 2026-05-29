@@ -1,352 +1,233 @@
 # 🌸 缘·Bot (YuanBot)
 
-> 一个开源的、高度可定制的 AI 虚拟伴侣系统
+> 有记忆、有情感、有主动性的 AI 虚拟伴侣系统
 
 [![Python 3.12+](https://img.shields.io/badge/Python-3.12+-blue.svg)](https://python.org)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-[![FastAPI](https://img.shields.io/badge/FastAPI-0.110+-009688.svg)](https://fastapi.tiangolo.com)
 
-YuanBot 是一个有记忆、有情感、有主动性的长期陪伴型 AI 角色。它不只是一次性的问答机器人——它记得你、理解你、主动关心你。
-
----
-
-## ✨ 特性亮点
-
-| 特性 | 说明 |
-|------|------|
-| 🧠 **记忆优先架构** | 四层记忆模型（工作/事实/情景/语义），跨时间跨平台记住用户的一切 |
-| 💕 **情感感知** | 实时情感分析，情感驱动的对话策略，交互风格自然一致 |
-| 🤖 **主动陪伴** | 定时问候、事件驱动关怀、静默检测，根据用户状态主动发起互动 |
-| 🔌 **多平台支持** | Telegram、Discord、企业微信、Web Chat 即插即用 |
-| 🎭 **人设系统** | 可定制的 AI 角色人格，意图识别 → 情感分析 → 对话决策流水线 |
-| 🔧 **可扩展** | 模块化架构，Skills/Tools 三层渐进式加载，Y.E.S. 扩展规范 |
-| 🔒 **隐私优先** | 全部数据自托管，零供应商锁定，GDPR 合规 |
-| 📊 **可观测性** | Prometheus 指标、结构化日志、健康检查端点 |
+**缘·Bot** 不只是问答机器人——它记得你、理解你、主动关心你。跨平台、跨时间的长期陪伴型 AI 角色。
 
 ---
 
-## 🚀 快速开始
+## 🚀 5 分钟快速部署
 
-### Docker 部署（推荐）
+### 方式一：Docker Compose（推荐）
 
 ```bash
-# 克隆项目
-git clone https://github.com/Grabrun/YuanBot.git
-cd YuanBot
+# 1. 克隆项目
+git clone https://github.com/Grabrun/YuanBot.git && cd YuanBot
 
-# 配置环境变量
+# 2. 配置 API Key
 cp .env.example .env
-# 编辑 .env，填入你的 API Key
+# 编辑 .env，填入你的 AI 提供商 API Key（任选其一即可）
+#   YUAN_AI_API_KEY=sk-xxx
+#   YUAN_AI_PROVIDER=openai
 
-# 启动服务
+# 3. 一键启动
 docker-compose up -d
+
+# 4. 打开浏览器访问
+#    WebUI:  http://localhost:8000
+#    健康检查: http://localhost:8000/healthz
 ```
 
-服务启动后访问 http://localhost:8000/healthz 检查状态。
-
-### 本地开发
+### 方式二：本地安装
 
 ```bash
-# 克隆项目
-git clone https://github.com/Grabrun/YuanBot.git
-cd YuanBot
-
-# 安装依赖
+# 1. 安装（需要 Python 3.12+）
 pip install -e ".[dev]"
 
-# 初始化配置
+# 2. 初始化配置
 yuanbot config init
 
-# 编辑 configs/Providers/openai.yaml，填入 API Key
+# 3. 编辑 API Key
+#    编辑 configs/Providers/openai.yaml，填入 api_key
 
-# 启动服务
+# 4. 启动
 yuanbot start
-
-# 或使用热重载开发模式
-yuanbot start --reload
+# 浏览器打开 http://localhost:8000
 ```
 
-### 环境要求
-
-- **Python** >= 3.12
-- **Redis** （可选，用于工作记忆缓存）
-- **AI 提供商 API Key**（OpenAI / DeepSeek / Claude / Ollama 任选其一）
-
----
-
-## 🏗️ 架构概览
-
-YuanBot 采用八大核心系统协同工作的架构：
-
-```
-┌─────────────────────────────────────────────────────────┐
-│                    消息通道层                              │
-│   Telegram │ Discord │ 企业微信 │ Web Chat │ WebSocket   │
-└───────────────────────┬─────────────────────────────────┘
-                        │
-┌───────────────────────▼─────────────────────────────────┐
-│                   接入网关层                              │
-│   AdapterManager │ Auth │ Privacy │ PushDispatcher      │
-└───────────────────────┬─────────────────────────────────┘
-                        │
-┌───────────────────────▼─────────────────────────────────┐
-│                   编排引擎层                              │
-│   IntentEngine │ EmotionEngine │ DialogueDecision       │
-│   ContextBuilder │ TokenBudget │ OrchestratorEngine     │
-└───────────────────────┬─────────────────────────────────┘
-                        │
-        ┌───────────────┼───────────────┐
-        ▼               ▼               ▼
-┌──────────────┐ ┌──────────────┐ ┌──────────────┐
-│  AI 提供商   │ │  能力系统    │ │  记忆系统    │
-│  OpenAI      │ │  Skills      │ │  工作记忆    │
-│  DeepSeek    │ │  Tools       │ │  事实记忆    │
-│  Claude      │ │  Orchestrator│ │  情景记忆    │
-│  Ollama      │ │              │ │  语义记忆    │
-└──────────────┘ └──────────────┘ └──────────────┘
-                        │
-┌───────────────────────▼─────────────────────────────────┐
-│                   主动陪伴系统                            │
-│   ProactiveScheduler │ EventEngine │ ProactiveStrategy  │
-└───────────────────────┬─────────────────────────────────┘
-                        │
-┌───────────────────────▼─────────────────────────────────┐
-│                   基础设施层                              │
-│   SQLite/MySQL │ Milvus │ Redis │ Kuzu/Neo4j            │
-│   ConfigWatcher │ EventQueue │ CacheStore               │
-└─────────────────────────────────────────────────────────┘
-```
-
-### 八大系统
-
-| 系统 | 模块路径 | 职责 |
-|------|----------|------|
-| **记忆与情感系统** | `memory/` | 四层记忆模型、情感追踪、遗忘曲线、记忆固化 |
-| **人格与决策系统** | `persona/` | 人设配置、意图识别、情感引擎、对话决策 |
-| **接入与通信系统** | `gateway/` | 通道适配管理、身份认证、隐私保护、消息推送 |
-| **AI 提供商系统** | `providers/` + `adapters/ai/` | 多提供商统一接口、模型路由、流式响应 |
-| **能力与工具系统** | `skills/` + `tools/` | Skill/Tool 加载、沙箱执行、能力编排 |
-| **主动陪伴系统** | `proactive/` | 定时任务、事件引擎、主动策略 |
-| **编排引擎** | `orchestrator/` | 消息处理流水线、上下文构建、Token 预算 |
-| **基础设施** | `infrastructure/` | 数据库、缓存、向量存储、图存储、配置热加载 |
-
----
-
-## 📁 配置说明
-
-所有配置文件位于 `configs/` 目录：
-
-```
-configs/
-├── bot.yaml                  # 根配置（AI 提供商、通道、主动交互、编排引擎）
-├── database.yaml             # 数据库配置（SQLite/MySQL、Milvus、Redis、Kuzu/Neo4j）
-├── memory.yaml               # 记忆系统参数（四层记忆、遗忘曲线、固化策略）
-├── default.yaml              # 默认配置（向后兼容）
-├── extensions.yaml           # 已安装扩展列表
-├── serverless.yaml           # Serverless 部署专用配置
-├── Providers/                # AI 提供商配置
-│   ├── openai.yaml
-│   ├── deepseek.yaml
-│   ├── claude.yaml
-│   └── ollama.yaml
-├── Channels/                 # 消息通道配置
-│   ├── telegram.yaml
-│   ├── discord.yaml
-│   ├── webchat.yaml
-│   └── wecom.yaml
-├── Personas/                 # 人设配置
-│   └── default.yaml
-└── Plugins/                  # 插件配置
-    ├── skills/
-    │   ├── daily_chat.yaml
-    │   ├── creative_storytelling.yaml
-    │   └── emotional_comfort.yaml
-    └── tools/
-        ├── get_weather.yaml
-        └── set_reminder.yaml
-```
-
-**配置加载优先级**：环境变量 > 配置文件 > 默认值
-
----
-
-## 🔧 CLI 命令
+### 方式三：TUI 终端聊天
 
 ```bash
-# 服务管理
-yuanbot start                    # 启动服务
-yuanbot start --port 8080        # 指定端口
-yuanbot start --host 127.0.0.1   # 指定监听地址
-yuanbot start --reload           # 开发模式热重载
-
-# 系统诊断
-yuanbot doctor                   # 检查系统组件连通性
-
-# 配置管理
-yuanbot config show              # 显示当前配置
-yuanbot config init              # 初始化配置目录
-
-# 记忆管理
-yuanbot memory stats             # 显示记忆统计
-yuanbot memory clear --user-id <id>  # 清除用户记忆
-
-# 扩展管理
-yuanbot create --type skill --name my-skill    # 创建扩展脚手架
-yuanbot validate <path>         # 验证扩展是否符合 Y.E.S. 规范
-yuanbot test <path>             # 运行扩展测试
-yuanbot build <path>            # 打包扩展为 .yuanbot 文件
-yuanbot publish <path>          # 发布扩展到社区市场
-
-# 版本信息
-yuanbot version                  # 显示版本号
+# 启动后，用终端界面直接聊天
+yuanbot tui
 ```
 
 ---
 
-## 🌐 API 端点
+## 🔑 AI 提供商配置
 
-### 健康检查
+YuanBot 支持多家 AI 提供商，通过配置文件切换，**零代码改动**。
 
-| 端点 | 方法 | 说明 |
-|------|------|------|
-| `/healthz` | GET | Liveness probe（Kubernetes 用） |
-| `/readyz` | GET | Readiness probe（检查所有依赖） |
-| `/health` | GET | 健康检查（向后兼容） |
-| `/metrics` | GET | Prometheus 监控指标 |
+| 提供商 | 配置文件 | 默认模型 | 说明 |
+|--------|----------|----------|------|
+| OpenAI | `configs/Providers/openai.yaml` | gpt-4o | 需要 API Key |
+| DeepSeek | `configs/Providers/deepseek.yaml` | deepseek-chat | 国产高性价比 |
+| 智谱 GLM | `configs/Providers/glm.yaml` | glm-4 | 国产，中文优秀 |
+| 通义千问 | `configs/Providers/qwen.yaml` | qwen-max | 阿里云 |
+| 混元 | `configs/Providers/hunyuan.yaml` | hunyuan-pro | 腾讯 |
+| Mimo | `configs/Providers/mimo.yaml` | mimo-chat | 小米 |
+| Ollama | `configs/Providers/ollama.yaml` | 本地模型 | 无需 API Key |
+| Anthropic | `configs/Providers/anthropic.yaml` | claude-sonnet-4 | Claude 系列 |
 
-### 对话接口
+**切换提供商**：编辑 `configs/bot.yaml`：
 
-| 端点 | 方法 | 说明 |
-|------|------|------|
-| `/api/chat` | POST | 文本对话（Web Chat 通道） |
-| `/ws` | WebSocket | 实时 WebSocket 聊天 |
+```yaml
+ai:
+  default_provider: deepseek  # 改成你想用的提供商 ID
+```
 
-### 数据接口
-
-| 端点 | 方法 | 说明 |
-|------|------|------|
-| `/api/memory/{user_id}` | GET | 查看用户记忆 |
-| `/api/proactive/tasks` | GET | 查看主动任务列表 |
-| `/api/proactive/stats` | GET | 查看主动交互统计 |
-| `/api/providers` | GET | 查看 AI 提供商状态 |
-| `/api/capabilities` | GET | 查看已加载的 Skills/Tools |
-
-### 扩展管理
-
-| 端点 | 方法 | 说明 |
-|------|------|------|
-| `/api/extensions` | GET | 列出已安装扩展 |
-| `/api/extensions/{ext_id}` | GET | 获取扩展详情 |
-| `/api/extensions/install` | POST | 安装扩展 |
-| `/api/extensions/uninstall` | POST | 卸载扩展 |
-
-### GDPR 合规
-
-| 端点 | 方法 | 说明 |
-|------|------|------|
-| `/api/gdpr/export?user_id=xxx` | GET | 导出用户数据 |
-| `/api/gdpr/delete` | POST | 删除用户数据 |
+所有兼容 OpenAI 接口的提供商共用同一个适配器，添加新提供商只需一个 YAML 文件。
 
 ---
 
-## 🐳 部署方式
+## 💬 消息通道
 
-### Docker Compose
+| 通道 | 配置文件 | 支持场景 |
+|------|----------|----------|
+| Web Chat | `configs/Channels/webchat.yaml` | 浏览器直接聊天 |
+| 微信 | `configs/Channels/wechat.yaml` | 私聊 |
+| QQ | `configs/Channels/qq.yaml` | 单聊 / 群聊 / 频道 |
+| Telegram | `configs/Channels/telegram.yaml` | 私聊 / 群组 |
+| Discord | `configs/Channels/discord.yaml` | 私聊 / 服务器 |
+| 企业微信 | `configs/Channels/wecom.yaml` | 私聊 / 群聊 |
+
+### 微信接入
+
+1. 编辑 `configs/Channels/wechat.yaml`，设置 `enabled: true`
+2. 启动服务，扫描终端中的二维码完成登录
+3. 开始聊天
+
+### QQ 接入
+
+1. 在 [QQ 开放平台](https://q.qq.com) 注册机器人，获取 `app_id` 和 `app_secret`
+2. 编辑 `configs/Channels/qq.yaml`，填入凭据
+3. 启动服务即可
+
+---
+
+## 🌐 WebUI 管理界面
+
+启动服务后访问 `http://localhost:8000`，使用管理员账号登录。
+
+### 默认管理员
+
+首次使用需要创建管理员：
 
 ```bash
-# 最简部署
-docker-compose up -d
-
-# 查看日志
-docker-compose logs -f yuanbot
-
-# 停止服务
-docker-compose down
+# 通过 CLI 创建
+yuanbot config init   # 如果还没有初始化配置
+# 然后通过 API 或 WebUI 注册
 ```
 
-### Kubernetes
+### WebUI 功能
+
+| 页面 | 路由 | 功能 |
+|------|------|------|
+| 💬 聊天 | `/` | WebSocket 流式对话，Markdown 渲染 |
+| 🔌 Provider | `/providers` | 查看/管理 AI 提供商 |
+| 🧠 记忆 | `/memory` | 浏览事实记忆、情景记忆、用户画像 |
+| 🧩 插件 | `/plugins` | 管理 Skills 和 Tools |
+| 📋 日志 | `/logs` | 实时日志流 |
+| ⚙️ 配置 | `/config` | 在线编辑配置文件 |
+| 📊 管理 | `/admin` | 仪表盘、用户管理 |
+
+支持暗色主题、移动端响应式适配。
+
+---
+
+## 🧠 记忆系统
+
+YuanBot 的核心是 **记忆优先** 架构：
+
+| 记忆层 | 说明 | 存储 |
+|--------|------|------|
+| 工作记忆 | 当前会话上下文 | Redis / 内存 |
+| 事实记忆 | 用户偏好、习惯、重要事实 | SQLite / MySQL |
+| 情景记忆 | 过往对话摘要（语义检索） | Milvus Lite |
+| 语义记忆 | 深层认知与关系理解 | Kuzu / Neo4j |
+
+记忆系统自动运行：对话摘要生成、遗忘曲线淘汰、记忆固化，无需手动管理。
+
+---
+
+## 🔧 常用命令
 
 ```bash
-# 创建命名空间和 Secret
-kubectl create namespace yuanbot
-kubectl create secret generic yuanbot-secrets \
-  --from-literal=OPENAI_API_KEY=sk-xxx \
-  -n yuanbot
+# 服务
+yuanbot start                      # 启动服务
+yuanbot start --reload             # 开发模式（热重载）
+yuanbot doctor                     # 系统诊断
 
-# 部署
-kubectl apply -f k8s/
+# WebUI & TUI
+yuanbot webui                      # 启动 WebUI 开发服务器
+yuanbot tui                        # 启动终端聊天界面
 
-# 查看状态
-kubectl get pods -n yuanbot
+# 配置
+yuanbot config show                # 查看当前配置
+yuanbot config init                # 初始化配置目录
+yuanbot config edit bot.yaml       # 编辑配置文件
+
+# 提供商
+yuanbot provider list              # 列出所有提供商
+yuanbot provider info openai       # 查看提供商详情
+yuanbot provider set default deepseek  # 切换默认提供商
+yuanbot provider create            # 创建新提供商
+
+# 插件
+yuanbot list channels              # 列出通道
+yuanbot list providers             # 列出提供商
+yuanbot list plugins               # 列出 Skills/Tools
+
+# 记忆
+yuanbot memory stats               # 记忆统计
+yuanbot memory clear --user-id xxx # 清除用户记忆
+
+# 扩展开发
+yuanbot create --type skill --name my-skill  # 创建扩展
+yuanbot validate <path>            # 验证扩展规范
+yuanbot build <path>               # 打包扩展
+
+# 日志
+yuanbot logs                       # 查看最近日志
+yuanbot logs -f                    # 实时跟踪日志
+yuanbot logs -n 100 --level error  # 查看最近 100 条错误日志
 ```
 
-### Serverless
+---
 
-YuanBot 支持 AWS Lambda 和阿里云函数计算部署，详见 [部署文档](docs/deployment.md)。
+## 📖 设计文档
+
+| 文档 | 说明 |
+|------|------|
+| [总体架构 v1.5](docs/architecture-v1.5.md) | 系统架构设计（最新） |
+| [AI 提供商适配系统](docs/ai-provider-system-v2.md) | 适配器复用，配置即 Provider |
+| [记忆与情感系统](docs/memory-emotion-system.md) | 四层记忆与情感追踪 |
+| [人格与决策系统](docs/persona-decision-system.md) | 人设与对话决策流水线 |
+| [用户界面系统](docs/user-interface-system.md) | TUI/WebUI 双界面 |
+| [TTS 语音合成](docs/tts-system.md) | 语音输出系统 |
+| [接入与通信系统](docs/gateway-communication-system.md) | 通道适配与消息路由 |
+| [能力与工具系统](docs/capability-tool-system.md) | Skills/Tools 管理 |
+| [主动陪伴系统](docs/proactive-companion-system.md) | 定时任务与事件驱动 |
+| [部署指南](docs/deployment.md) | Docker / K8s / Serverless |
 
 ---
 
 ## 🛠️ 技术栈
 
-| 组件 | 技术选择 | 说明 |
-|------|----------|------|
-| 核心语言 | Python 3.12+ | 生态丰富，AI/LLM 库支持好 |
-| Web 框架 | FastAPI | 原生异步、WebSocket 支持 |
-| 配置管理 | Pydantic + YAML | 类型安全 + 文件化配置 |
-| 关系数据库 | SQLite (默认) / MySQL (可选) | 本地优先 |
-| 向量数据库 | Milvus Lite | 嵌入式向量存储 |
-| 图数据库 | Kuzu / Neo4j | 知识图谱 |
-| 缓存 | Redis | 工作记忆、会话状态 |
-| AI 提供商 | OpenAI / DeepSeek / Ollama / Claude | 统一适配接口 |
-| 监控 | Prometheus | 指标采集与暴露 |
-| 测试 | pytest + pytest-asyncio | 完整测试覆盖 |
-| 代码质量 | ruff | lint + format |
-
----
-
-## 📖 文档索引
-
-- [总体架构 v1.5](docs/architecture-v1.5.md) — v1.5 系统架构设计文档（最新）
-- [总体架构 v1.4](docs/architecture-v1.4.md) — v1.4 系统架构设计文档
-- [AI 提供商适配系统 v2.0](docs/ai-provider-system-v2.md) — 适配器复用，配置文件定义 Provider
-- [用户界面系统](docs/user-interface-system.md) — TUI/WebUI 双界面设计
-- [语音合成系统](docs/tts-system.md) — TTS 语音输出系统
-- [记忆与情感系统](docs/memory-emotion-system.md) — 四层记忆与情感追踪
-- [人格与决策系统](docs/persona-decision-system.md) — 人设与对话决策
-- [接入与通信系统](docs/gateway-communication-system.md) — 通道适配与消息路由
-- [AI 提供商系统](docs/ai-provider-system.md) — 多提供商统一接口
-- [能力与工具系统](docs/capability-tool-system.md) — Skills/Tools 管理
-- [主动陪伴系统](docs/proactive-companion-system.md) — 定时任务与事件驱动
-- [基础架构与部署系统](docs/infrastructure-deployment-system.md) — 数据库与部署
-- [AI 适配器规范](docs/adapter-ai-spec.md) — AI 提供商适配器接口规范
-- [通道适配器规范](docs/adapter-channel-spec.md) — 消息通道适配器接口规范
-- [开发规范](docs/development.md) — 开发环境与编码规范
-
----
-
-## 🤝 参与贡献
-
-1. Fork 本仓库
-2. 创建功能分支 (`git checkout -b feature/amazing-feature`)
-3. 提交更改 (`git commit -m 'feat: add amazing feature'`)
-4. 推送到分支 (`git push origin feature/amazing-feature`)
-5. 提交 Pull Request
-
-### 开发环境搭建
-
-```bash
-# 克隆并安装开发依赖
-git clone https://github.com/Grabrun/YuanBot.git
-cd YuanBot
-pip install -e ".[dev]"
-
-# 运行测试
-pytest
-
-# 代码检查
-ruff check src/ tests/
-ruff format src/ tests/
-```
+| 组件 | 技术 |
+|------|------|
+| 核心 | Python 3.12+ / FastAPI |
+| 前端 | Vue 3 + Naive UI + Vite |
+| 数据库 | SQLite (默认) / MySQL |
+| 向量存储 | Milvus Lite |
+| 图存储 | Kuzu / Neo4j |
+| 缓存 | Redis |
+| TTS | Edge-TTS / OpenAI TTS |
+| 监控 | Prometheus |
+| 测试 | pytest (941 用例全通过) |
 
 ---
 
@@ -357,5 +238,5 @@ MIT License — 详见 [LICENSE](LICENSE)
 ---
 
 <p align="center">
-  用 ❤️ 构建 — 缘·Bot 让 AI 陪伴更有温度
+  🌸 缘·Bot — 让 AI 陪伴更有温度
 </p>
