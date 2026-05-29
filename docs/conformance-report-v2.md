@@ -200,7 +200,7 @@
 | 真实工具执行器 | `src/yuanbot/tools/builtin.py` |
 | CapabilityOrchestrator | `src/yuanbot/services/capability_orchestrator.py` |
 | Docker 沙盒 | `src/yuanbot/tools/sandbox.py` |
-| gRPC 沙盒框架 | `src/yuanbot/capabilities/grpc_sandbox.py` |
+| gRPC 沙盒框架 | `src/yuanbot/tools/grpc_sandbox.py` |
 | Y.E.S. 规范 | `src/yuanbot/services/extension_standard.py` |
 | 内置 Search 工具 | `configs/Plugins/tools/search.yaml` (Bing/SerpAPI/DuckDuckGo) |
 | 内置 Weather 工具 | `configs/Plugins/tools/get_weather.yaml` (和风天气/OWM/wttr.in) |

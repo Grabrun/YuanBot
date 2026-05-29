@@ -243,7 +243,7 @@
 | SkillManager | `src/yuanbot/skills/manager.py` | 扫描 YAML 配置、加载 prompt_template |
 | ToolManager | `src/yuanbot/tools/manager.py` | 扫描 YAML 配置、加载 schema |
 | CapabilityOrchestrator | `src/yuanbot/services/capability_orchestrator.py` | Skills 注入 + Tools 执行循环 |
-| gRPC 沙盒框架 | `src/yuanbot/capabilities/grpc_sandbox.py` | Server/Client，gRPC 可选依赖 |
+| gRPC 沙盒框架 | `src/yuanbot/tools/grpc_sandbox.py` | Server/Client，gRPC 可选依赖 |
 | Docker 沙盒执行器 | `src/yuanbot/tools/sandbox.py` | 容器隔离、资源限制、超时控制 |
 | Skills 配置 | `configs/Plugins/skills/` | emotional_comfort, daily_chat, creative_storytelling |
 | Tools 配置 | `configs/Plugins/tools/` | get_weather, set_reminder |

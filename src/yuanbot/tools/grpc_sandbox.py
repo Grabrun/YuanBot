@@ -43,8 +43,8 @@ except ImportError:
 # protobuf 生成的代码（可选）
 try:
     # 当 protobuf 文件编译后可用
-    # from yuanbot.capabilities.proto import tool_sandbox_pb2 as pb2
-    # from yuanbot.capabilities.proto import tool_sandbox_pb2_grpc as pb2_grpc
+    # from yuanbot.tools.proto import tool_sandbox_pb2 as pb2
+    # from yuanbot.tools.proto import tool_sandbox_pb2_grpc as pb2_grpc
     _HAS_PROTO = False  # 设为 True 当 proto 编译后
 except ImportError:
     _HAS_PROTO = False
