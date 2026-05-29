@@ -16,7 +16,7 @@ from yuanbot.adapters.channel.wechat_adapter import (
     MessageType,
     MessageState,
 )
-from yuanbot.adapters.channel.wechat_cdn import (
+from yuanbot.adapters.channel.weixin_cdn import (
     UploadMediaType,
     aes_ecb_decrypt,
     aes_ecb_encrypt,

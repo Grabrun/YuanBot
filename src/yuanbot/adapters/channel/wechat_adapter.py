@@ -368,7 +368,7 @@ class WeixinAdapter(BaseChannelAdapter):
         raw_msg: dict[str, Any],
     ) -> None:
         """处理媒体消息（CDN 下载 + 转发到 AI 管道）"""
-        from yuanbot.adapters.channel.wechat_cdn import (
+        from yuanbot.adapters.channel.weixin_cdn import (
             UploadMediaType,
             download_media_file,
         )
@@ -546,14 +546,14 @@ class WeixinAdapter(BaseChannelAdapter):
             if path.exists():
                 file_data = path.read_bytes()
                 file_name = path.name
-                from yuanbot.adapters.channel.wechat_cdn import extension_to_mime
+                from yuanbot.adapters.channel.weixin_cdn import extension_to_mime
                 mime_type = extension_to_mime(path.suffix)
 
         if not file_data:
             return SendResult(success=False, error="No media data available")
 
         # 2. 确定媒体类型
-        from yuanbot.adapters.channel.wechat_cdn import (
+        from yuanbot.adapters.channel.weixin_cdn import (
             get_media_ref_from_upload,
             mime_to_media_type,
             upload_media_file,
@@ -592,7 +592,7 @@ class WeixinAdapter(BaseChannelAdapter):
         Returns:
             (file_data, file_name, mime_type)
         """
-        from yuanbot.adapters.channel.wechat_cdn import extension_to_mime
+        from yuanbot.adapters.channel.weixin_cdn import extension_to_mime
 
         if media_url.startswith("http://") or media_url.startswith("https://"):
             # 远程 URL，下载到本地
@@ -637,7 +637,7 @@ class WeixinAdapter(BaseChannelAdapter):
         """构造媒体 MessageItem 并调用 sendMessage API"""
         assert self._client is not None
 
-        from yuanbot.adapters.channel.wechat_cdn import UploadMediaType
+        from yuanbot.adapters.channel.weixin_cdn import UploadMediaType
 
         client_id = f"yuanbot-wechat:{int(time.time() * 1000)}-{uuid.uuid4().hex[:8]}"
 

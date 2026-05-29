@@ -1,6 +1,6 @@
 """AI 提供商适配系统
 
-提供商管理器、适配器注册表和统一 AI API。
+提供商管理器和适配器注册表。
 """
 
 from yuanbot.providers.manager import ProviderManager

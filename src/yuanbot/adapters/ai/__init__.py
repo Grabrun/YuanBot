@@ -1,15 +1,12 @@
-"""YuanBot AI 提供商适配器"""
+"""AI 提供商适配器
 
-from yuanbot.adapters.ai.anthropic_adapter import AnthropicAdapter
+各 AI 服务提供商的适配器实现。
+"""
+
 from yuanbot.adapters.ai.base import BaseAIProvider
-from yuanbot.adapters.ai.deepseek_adapter import DeepSeekAdapter
-from yuanbot.adapters.ai.ollama_adapter import OllamaAdapter
 from yuanbot.adapters.ai.openai_adapter import OpenAIAdapter
 
 __all__ = [
     "BaseAIProvider",
     "OpenAIAdapter",
-    "AnthropicAdapter",
-    "DeepSeekAdapter",
-    "OllamaAdapter",
 ]
