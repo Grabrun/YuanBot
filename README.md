@@ -1,11 +1,11 @@
 # 🌸 缘·Bot (YuanBot)
 
-> 有记忆、有情感、有主动性的 AI 虚拟伴侣系统
+> 一个开源的、有记忆、有情感、会主动关心你的 AI 虚拟伴侣系统。支持微信、QQ、Telegram 等多平台接入，8 家 AI 提供商一键切换，自托管、零锁定、数据完全属于你。
 
 [![Python 3.12+](https://img.shields.io/badge/Python-3.12+-blue.svg)](https://python.org)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-**缘·Bot** 不只是问答机器人——它记得你、理解你、主动关心你。跨平台、跨时间的长期陪伴型 AI 角色。
+它不只是问答机器人——它会记住你、理解你、主动关心你。跨平台、跨时间的长期陪伴，让 AI 真正融入你的生活。
 
 ---
 
