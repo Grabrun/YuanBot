@@ -1,0 +1,31 @@
+# YuanBot TTS 语音合成配置
+
+tts:
+  enabled: true
+  default_engine: edge-tts
+  default_voice: zh-CN-XiaoxiaoNeural
+  streaming: true
+
+  cache:
+    memory_size: 100
+    file_cache_path: "data/tts_cache"
+    file_cache_max_mb: 500
+
+  engines:
+    edge-tts:
+      enabled: true
+
+    openai:
+      enabled: false
+      api_key: "${OPENAI_API_KEY}"
+      model: "tts-1"
+      base_url: null
+
+    piper:
+      enabled: false
+      model_dir: "data/piper_models"
+
+    azure:
+      enabled: false
+      subscription_key: "${AZURE_SPEECH_KEY}"
+      region: "eastus"
