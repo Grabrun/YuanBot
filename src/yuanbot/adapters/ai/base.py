@@ -25,7 +25,9 @@ def sanitize_log_data(data: dict[str, Any]) -> dict[str, Any]:
     """脱敏日志数据，将敏感字段替换为 ****"""
     sanitized = {}
     for key, value in data.items():
-        if isinstance(key, str) and (_SENSITIVE_PATTERN.search(key) or key.lower() in _SENSITIVE_KEYS):
+        if isinstance(key, str) and (
+            _SENSITIVE_PATTERN.search(key) or key.lower() in _SENSITIVE_KEYS
+        ):
             if isinstance(value, str) and len(value) > 0:
                 sanitized[key] = "****"
             else:

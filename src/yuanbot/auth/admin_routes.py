@@ -13,19 +13,16 @@
 
 from __future__ import annotations
 
-import os
 import shutil
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Any
 
 import structlog
-from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel
+from fastapi import APIRouter, Depends, HTTPException
 
-from yuanbot.auth.middleware import get_current_user, require_admin
-from yuanbot.auth.models import CreateUserRequest, User, UserRole
+from yuanbot.auth.middleware import require_admin
+from yuanbot.auth.models import CreateUserRequest, User
 from yuanbot.auth.store import ConversationStore, UserStore
 
 logger = structlog.get_logger(__name__)

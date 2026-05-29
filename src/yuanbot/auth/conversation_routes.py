@@ -13,10 +13,8 @@
 
 from __future__ import annotations
 
-from typing import Any
-
 import structlog
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
 from yuanbot.auth.middleware import get_current_user
@@ -219,10 +217,8 @@ async def _generate_ai_reply(user: User, message: str, conversation_id: str) -> 
     """
     try:
         # 尝试获取编排引擎（从 app.state）
-        from fastapi import Request
 
         # 通过全局引用获取
-        from yuanbot.auth.middleware import get_auth_manager
 
         # 这里需要一个方式访问 app.state，暂时用兜底
         # 实际集成时通过依赖注入

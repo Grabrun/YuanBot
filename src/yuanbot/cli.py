@@ -111,7 +111,9 @@ def main() -> None:
     set_parser.add_argument("provider_id", help="提供商 ID")
     create_parser = provider_sub.add_parser("create", help="交互式创建新的 Provider 配置")
     create_parser.add_argument("--id", help="Provider ID")
-    create_parser.add_argument("--adapter", default="openai-adapter", help="适配器 (默认 openai-adapter)")
+    create_parser.add_argument(
+        "--adapter", default="openai-adapter", help="适配器 (默认 openai-adapter)"
+    )
     create_parser.add_argument("--base-url", help="API Base URL")
     create_parser.add_argument("--name", help="显示名称")
 

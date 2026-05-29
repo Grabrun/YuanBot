@@ -22,7 +22,7 @@ import asyncio
 from datetime import datetime
 
 from rich.markup import escape
-from textual import on, work
+from textual import on
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical

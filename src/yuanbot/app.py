@@ -19,11 +19,11 @@ from starlette.websockets import WebSocket
 
 from yuanbot.adapters.channel.web_adapter import WebAdapter
 from yuanbot.auth.admin_routes import init_admin_stores
+from yuanbot.auth.admin_routes import router as admin_router
 from yuanbot.auth.conversation_routes import init_conversation_store
+from yuanbot.auth.conversation_routes import router as conversation_router
 from yuanbot.auth.middleware import AuthManager, init_auth_manager
 from yuanbot.auth.routes import router as auth_router
-from yuanbot.auth.conversation_routes import router as conversation_router
-from yuanbot.auth.admin_routes import router as admin_router
 from yuanbot.auth.store import ConversationStore, UserStore
 from yuanbot.config import YuanBotConfig
 from yuanbot.core.types import BotResponse
@@ -196,7 +196,7 @@ def create_app(config: YuanBotConfig) -> FastAPI:
                 display_name="管理员",
                 role="admin",
             )
-            print("🌸 已自动创建管理员账号 (admin / {pw})".format(pw=admin_password))
+            print(f"🌸 已自动创建管理员账号 (admin / {admin_password})")
             print("   请通过环境变量 YUANBOT_ADMIN_PASSWORD 设置安全密码")
 
         # 启动 Web 适配器
@@ -299,7 +299,9 @@ def create_app(config: YuanBotConfig) -> FastAPI:
         index = static_dir / "index.html" if static_dir.exists() else None
         if index and index.exists():
             return FileResponse(index)
-        return {"message": "YuanBot API is running. WebUI not built yet. Run: cd webui && npm run build"}
+        return {
+            "message": "YuanBot API is running. WebUI not built yet. Run: cd webui && npm run build"
+        }
 
     # 注册 WebSocket 路由
     @app.websocket("/ws")
@@ -327,7 +329,11 @@ def create_app(config: YuanBotConfig) -> FastAPI:
         """
         import json
 
+        import structlog
+
         from yuanbot.auth.middleware import get_current_user_from_ws
+
+        logger = structlog.get_logger("websocket")
 
         user = await get_current_user_from_ws(ws)
         if not user:
@@ -386,7 +392,13 @@ def create_app(config: YuanBotConfig) -> FastAPI:
                         reply_text = response.content.text if response.content else "收到~"
 
                         # 模拟流式推送（逐句发送）
-                        sentences = reply_text.replace("。", "。\n").replace("！", "！\n").replace("？", "？\n").split("\n")
+                        sentences = (
+                            reply_text
+                            .replace("。", "。\n")
+                            .replace("！", "！\n")
+                            .replace("？", "？\n")
+                            .split("\n")
+                        )
                         for sent in sentences:
                             if sent.strip():
                                 await ws.send_text(json.dumps({
@@ -396,7 +408,9 @@ def create_app(config: YuanBotConfig) -> FastAPI:
 
                         # 保存 AI 回复
                         if conv_id:
-                            conv_store_inst.add_message(conv_id, user.user_id, "assistant", reply_text)
+                            conv_store_inst.add_message(
+                                conv_id, user.user_id, "assistant", reply_text
+                            )
 
                         await ws.send_text(json.dumps({
                             "type": "stream_end",
@@ -419,7 +433,11 @@ def create_app(config: YuanBotConfig) -> FastAPI:
         """WebSocket 实时日志流（仅管理员）"""
         import json
 
+        import structlog
+
         from yuanbot.auth.middleware import get_current_user_from_ws
+
+        logger = structlog.get_logger("websocket")
 
         user = await get_current_user_from_ws(ws)
         if not user or user.role.value != "admin":

@@ -8,14 +8,12 @@
 
 from __future__ import annotations
 
-import time
 from dataclasses import dataclass
-from datetime import datetime
 from typing import Any
 
 import structlog
-from fastapi import Cookie, Depends, HTTPException, Request, WebSocket, status
-from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from fastapi import Depends, HTTPException, Request, WebSocket, status
+from fastapi.security import HTTPBearer
 
 from yuanbot.auth.models import User, UserRole
 from yuanbot.gateway.jwt_auth import (

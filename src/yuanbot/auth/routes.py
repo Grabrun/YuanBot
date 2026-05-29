@@ -13,7 +13,7 @@
 from __future__ import annotations
 
 import structlog
-from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 
 from yuanbot.auth.middleware import get_auth_manager, get_current_user
 from yuanbot.auth.models import (

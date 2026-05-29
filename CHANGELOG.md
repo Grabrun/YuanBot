@@ -2,6 +2,17 @@
 
 本项目遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.1.1] - 2026-05-29
+
+### 🐛 修复
+
+- 修复 `app.py` WebSocket 路由中 `logger` 未定义导致的运行时 NameError (F821)
+- 修复 AI 适配器 `base.py` 中敏感字段过滤逻辑行过长问题
+- 修复 `auth/store.py`、`cli.py` 等文件 Ruff lint 行过长问题
+- 自动修复 23 个 Ruff lint 问题（未使用导入、导入排序、f-string 等）
+- 将 `bcrypt` 和 `PyJWT` 加入 dev 依赖，避免新环境测试收集失败
+- 补全测试依赖，全部 877 个测试通过
+
 ## [1.1.0] - 2026-05-22
 
 ### ✨ 新增功能

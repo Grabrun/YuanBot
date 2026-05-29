@@ -8,7 +8,6 @@
 from __future__ import annotations
 
 import json
-import time
 import uuid
 from datetime import datetime
 from pathlib import Path
@@ -352,7 +351,9 @@ class ConversationStore:
         self._save_conversations()
         return conv
 
-    def get_conversation(self, conversation_id: str, user_id: str | None = None) -> Conversation | None:
+    def get_conversation(
+        self, conversation_id: str, user_id: str | None = None
+    ) -> Conversation | None:
         """获取会话（可选校验归属）
 
         Args:
