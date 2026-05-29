@@ -20,3 +20,4 @@ schema:
 executor:
   type: local_thread
   timeout: 10
+  handler: yuanbot.tools.builtin.weather_executor

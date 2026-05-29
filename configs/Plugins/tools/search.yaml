@@ -1,0 +1,27 @@
+tool_id: search
+name: "联网搜索"
+version: "1.0.0"
+category: knowledge_query
+capability_tags: ["search", "搜索", "查询", "联网", "web", "internet"]
+permission_level: readonly
+enabled: true
+schema:
+  type: function
+  function:
+    name: search
+    description: "在互联网上搜索信息，返回摘要和链接。可用于查询新闻、知识、实时信息等。"
+    parameters:
+      type: object
+      properties:
+        query:
+          type: string
+          description: "搜索关键词，如 '今日天气' 或 'Python 教程'"
+        max_results:
+          type: integer
+          description: "返回结果数量，默认 5"
+          default: 5
+      required: ["query"]
+executor:
+  type: local_thread
+  timeout: 15
+  handler: yuanbot.tools.builtin.search_executor
