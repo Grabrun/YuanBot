@@ -15,12 +15,12 @@
 | 3. 语音合成系统 (TTS) | 70% | ⚠️ 部分实现 |
 | 4. 人格与行为决策系统 | 80% | ⚠️ 部分实现 |
 | 5. 记忆与情感系统 | 75% | ⚠️ 部分实现 |
-| 6. 能力与工具扩展系统 | 65% | ⚠️ 部分实现 |
+| 6. 能力与工具扩展系统 | 75% | ⚠️ 部分实现 |
 | 7. AI 提供商适配系统 | 90% | ✅ 基本完全实现 |
 | 8. 主动陪伴与自动化系统 | 75% | ⚠️ 部分实现 |
 | 9. 统一开发标准与社区生态 | 60% | ⚠️ 部分实现 |
 | 10. 基础架构与部署系统 | 75% | ⚠️ 部分实现 |
-| **总体** | **~77%** | **⚠️ 部分实现** |
+| **总体** | **~78%** | **⚠️ 部分实现** |
 
 ---
 
@@ -259,13 +259,18 @@
 | Tool 执行权限检查 (JWT scope) | JWT 模块在 | `jwt_auth.py` 有 scopes，但与 ToolManager 的集成需验证 |
 | gRPC protobuf 定义 | 目录在 | `capabilities/proto/` 为空，`_HAS_PROTO = False` |
 
+### ✅ 已实现
+
+| 功能 | 实现文件 | 说明 |
+|------|----------|------|
+| 内置 Search 插件 | `configs/Plugins/tools/search.yaml` + `src/yuanbot/tools/builtin.py` | 支持 Bing/SerpAPI/DuckDuckGo |
+| 内置 Weather 插件 | `configs/Plugins/tools/get_weather.yaml` + `builtin.py` | 和风天气/OpenWeatherMap/wttr.in |
+| 内置 bedtime_story 技能 | `configs/Plugins/skills/bedtime_story.yaml` | 睡前故事 prompt_template |
+
 ### ❌ 未实现
 
 | 功能 | 设计要求 |
 |------|----------|
-| 内置 Search 插件（Bing/SerpAPI/SearXNG） | v1.5 要求开箱即用的搜索工具 |
-| 内置 Weather 插件（OpenWeatherMap/和风天气） | v1.5 要求开箱即用的天气工具 |
-| 内置 bedtime_story 技能 | v1.5 要求内置安抚/故事技能 |
 | WASM 沙盒执行器 | 设计要求 WASM 中等隔离级别 |
 | Skill 链式组合 | 多 Skill 组成流水线 |
 
