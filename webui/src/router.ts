@@ -39,6 +39,18 @@ const router = createRouter({
       component: () => import('./views/PluginView.vue'),
       meta: { requiresAuth: true },
     },
+    {
+      path: '/logs',
+      name: 'logs',
+      component: () => import('./views/LogView.vue'),
+      meta: { requiresAuth: true },
+    },
+    {
+      path: '/config',
+      name: 'config',
+      component: () => import('./views/ConfigView.vue'),
+      meta: { requiresAuth: true, requiresAdmin: true },
+    },
   ],
 })
 

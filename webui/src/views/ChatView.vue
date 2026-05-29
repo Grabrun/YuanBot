@@ -147,6 +147,12 @@ function handleRegenerate(_messageId: string) {
             <n-button text @click="router.push('/plugins')">
               🧩 插件管理
             </n-button>
+            <n-button text @click="router.push('/logs')">
+              📋 实时日志
+            </n-button>
+            <n-button text @click="router.push('/config')" v-if="showAdminLink">
+              ⚙️ 配置编辑
+            </n-button>
             <n-button text @click="router.push('/admin')" v-if="showAdminLink">
               📊 管理面板
             </n-button>
