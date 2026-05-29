@@ -15,17 +15,30 @@ const chat = useChatStore()
 
 const inputText = ref('')
 const chatContainer = ref<HTMLElement | null>(null)
-const isDark = ref(false)
+const isDark = ref(localStorage.getItem('yuanbot_theme') === 'dark')
 const streamingText = ref('')
 const isStreaming = ref(false)
 const showAdminLink = computed(() => auth.isAdmin)
 
 const theme = computed(() => (isDark.value ? darkTheme : undefined))
 
-// 注入主题到根
+// 主题切换（持久化）
 const toggleTheme = () => {
   isDark.value = !isDark.value
+  localStorage.setItem('yuanbot_theme', isDark.value ? 'dark' : 'light')
   document.documentElement.setAttribute('data-theme', isDark.value ? 'dark' : 'light')
+}
+
+const providers = ref<any[]>([])
+const activeProvider = ref('')
+
+// 加载 Provider 列表
+async function loadProviders() {
+  try {
+    providers.value = await api.listProviders() as any[]
+    const active = providers.value.find((p: any) => p.is_default)
+    if (active) activeProvider.value = active.provider_id
+  } catch {}
 }
 
 onMounted(async () => {
@@ -35,8 +48,12 @@ onMounted(async () => {
     return
   }
   await chat.loadConversations()
-  // 检测系统主题偏好
-  isDark.value = window.matchMedia('(prefers-color-scheme: dark)').matches
+  loadProviders()
+  // 检测系统主题偏好（已有 localStorage 值则不覆盖）
+  if (!localStorage.getItem('yuanbot_theme')) {
+    isDark.value = window.matchMedia('(prefers-color-scheme: dark)').matches
+  }
+  document.documentElement.setAttribute('data-theme', isDark.value ? 'dark' : 'light')
 })
 
 watch(
@@ -157,6 +174,17 @@ function handleRegenerate(_messageId: string) {
               📊 管理面板
             </n-button>
           </n-space>
+
+          <!-- 当前 Provider -->
+          <div style="margin-bottom: 12px" v-if="providers.length > 0">
+            <n-text depth="3" style="font-size: 12px; display: block; margin-bottom: 4px">当前 Provider</n-text>
+            <n-select
+              v-model:value="activeProvider"
+              :options="providers.filter((p: any) => p.enabled).map((p: any) => ({ label: p.name || p.provider_id, value: p.provider_id }))"
+              size="small"
+              @update:value="(val: string) => { activeProvider = val; message.info('切换需重启服务生效') }"
+            />
+          </div>
 
           <!-- 用户信息 + 主题切换 -->
           <n-space justify="space-between" align="center">

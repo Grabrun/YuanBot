@@ -1,6 +1,14 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import MarkdownIt from 'markdown-it'
 import type { Message } from '../api/client'
+
+const md = new MarkdownIt({
+  html: false,
+  linkify: true,
+  typographer: true,
+  breaks: true,
+})
 
 const props = defineProps<{
   message: Message
@@ -15,6 +23,10 @@ const isUser = computed(() => props.message.role === 'user')
 const timeStr = computed(() => {
   const d = new Date(props.message.timestamp)
   return d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+})
+const renderedHtml = computed(() => {
+  if (isUser.value) return ''
+  return md.render(props.message.content)
 })
 
 function handleCopy() {
@@ -37,9 +49,12 @@ function handleRegenerate() {
         <span class="bubble-name">{{ isUser ? '你' : '小缘' }}</span>
         <span class="bubble-time">{{ timeStr }}</span>
       </div>
-      <div class="bubble-text" :class="{ 'bubble-user': isUser, 'bubble-ai': !isUser }">
+      <!-- 用户消息：纯文本 -->
+      <div v-if="isUser" class="bubble-text bubble-user">
         {{ message.content }}
       </div>
+      <!-- AI 消息：Markdown 渲染 -->
+      <div v-else class="bubble-text bubble-ai markdown-body" v-html="renderedHtml" />
       <div class="bubble-actions">
         <n-button text size="tiny" @click="handleCopy">复制</n-button>
         <n-button v-if="!isUser" text size="tiny" @click="handleRegenerate">重新生成</n-button>
@@ -96,6 +111,72 @@ function handleRegenerate() {
   background: var(--n-card-color);
   border: 1px solid var(--n-border-color);
   border-bottom-left-radius: 4px;
+}
+/* Markdown 渲染样式 */
+.markdown-body :deep(p) {
+  margin: 0.4em 0;
+}
+.markdown-body :deep(code) {
+  background: rgba(102, 126, 234, 0.1);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 0.9em;
+  font-family: 'Courier New', monospace;
+}
+.markdown-body :deep(pre) {
+  background: #1e1e1e;
+  color: #d4d4d4;
+  padding: 12px 16px;
+  border-radius: 8px;
+  overflow-x: auto;
+  margin: 8px 0;
+  position: relative;
+}
+.markdown-body :deep(pre code) {
+  background: none;
+  padding: 0;
+  color: inherit;
+  font-size: 0.85em;
+}
+.markdown-body :deep(blockquote) {
+  border-left: 3px solid #667eea;
+  padding-left: 12px;
+  margin: 8px 0;
+  color: var(--n-text-color-3);
+}
+.markdown-body :deep(ul), .markdown-body :deep(ol) {
+  padding-left: 20px;
+  margin: 4px 0;
+}
+.markdown-body :deep(h1), .markdown-body :deep(h2), .markdown-body :deep(h3) {
+  margin: 12px 0 4px;
+  font-weight: 600;
+}
+.markdown-body :deep(table) {
+  border-collapse: collapse;
+  margin: 8px 0;
+  width: 100%;
+}
+.markdown-body :deep(th), .markdown-body :deep(td) {
+  border: 1px solid var(--n-border-color);
+  padding: 6px 10px;
+  text-align: left;
+}
+.markdown-body :deep(th) {
+  background: var(--n-card-color);
+  font-weight: 600;
+}
+.markdown-body :deep(a) {
+  color: #667eea;
+  text-decoration: none;
+}
+.markdown-body :deep(a:hover) {
+  text-decoration: underline;
+}
+.markdown-body :deep(hr) {
+  border: none;
+  border-top: 1px solid var(--n-border-color);
+  margin: 12px 0;
 }
 .bubble-actions {
   margin-top: 4px;
