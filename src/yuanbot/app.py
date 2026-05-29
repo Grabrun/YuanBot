@@ -142,7 +142,24 @@ def create_app(config: YuanBotConfig) -> FastAPI:
     # ── 8. Web 通道适配器 ─────────────────────
     web_adapter = WebAdapter()
 
-    # ── 8. 配置热加载监听器 ─────────────────────
+    # ── 8. TTS 系统 ─────────────────────────────
+    from yuanbot.tts.manager import TTSManager
+
+    tts_manager = TTSManager()
+    try:
+        from yuanbot.tts.edge_tts_adapter import EdgeTTSAdapter
+
+        tts_manager.register_adapter(EdgeTTSAdapter())
+    except Exception:
+        pass
+    try:
+        from yuanbot.tts.openai_tts_adapter import OpenAITTSAdapter
+
+        tts_manager.register_adapter(OpenAITTSAdapter())
+    except Exception:
+        pass
+
+    # ── 9. 配置热加载监听器 ─────────────────────
     config_dir = Path("configs")
     config_watcher = ConfigWatcher(config_dir=config_dir)
 
@@ -258,6 +275,7 @@ def create_app(config: YuanBotConfig) -> FastAPI:
     app.state.auth_manager = auth_manager
     app.state.user_store = user_store
     app.state.conv_store = conv_store
+    app.state.tts_manager = tts_manager
 
     # 初始化隐私管理器
     privacy_manager = PrivacyManager(memory_manager=memory_manager)
@@ -273,6 +291,9 @@ def create_app(config: YuanBotConfig) -> FastAPI:
 
     # 注册请求指标中间件
     _register_metrics_middleware(app)
+
+    # 将 Prometheus 指标注入 AIService
+    ai_service._metrics = getattr(app.state, "metrics", {})
 
     # 注册静态文件服务（WebUI）
     static_dir = Path(__file__).parent / "static"
@@ -1009,6 +1030,84 @@ def _register_routes(
             "skills": sm.get_all_skills(),
             "tools": tm.get_all_tools(),
         }
+
+    # ── TTS 语音合成 API ─────────────────────────
+
+    @app.post("/api/tts")
+    async def tts_synthesize(request: dict[str, Any]):
+        """语音合成接口
+
+        请求体:
+            {
+                "text": "你好世界",         // 必填，待合成文本
+                "engine": "edge-tts",       // 可选，指定引擎
+                "voice": "zh-CN-XiaoxiaoNeural", // 可选，指定音色
+                "persona_id": "default",    // 可选，人设 ID
+                "rate": 1.0,                // 可选，语速倍率
+                "pitch": 1.0,               // 可选，音调倍率
+                "format": "mp3"             // 可选，输出格式
+            }
+
+        响应: 音频文件 (audio/mpeg)
+        """
+        from fastapi.responses import JSONResponse, Response
+
+        tts = app.state.tts_manager
+        text = request.get("text", "")
+        if not text:
+            return JSONResponse(
+                status_code=400,
+                content={"error": "text is required"},
+            )
+
+        try:
+            audio = await tts.synthesize(
+                text=text,
+                engine=request.get("engine"),
+                voice=request.get("voice"),
+                persona_id=request.get("persona_id"),
+                rate=request.get("rate"),
+                pitch=request.get("pitch"),
+                output_format=request.get("format", "mp3"),
+            )
+            return Response(
+                content=audio,
+                media_type="audio/mpeg",
+                headers={"Content-Disposition": "inline; filename=tts.mp3"},
+            )
+        except Exception as e:
+            return JSONResponse(
+                status_code=500,
+                content={"error": str(e)},
+            )
+
+    @app.get("/api/tts/voices")
+    async def tts_voices(engine: str | None = None):
+        """列出可用音色
+
+        Args:
+            engine: 可选，指定引擎名称过滤
+        """
+        tts = app.state.tts_manager
+        voices = tts.list_voices(engine)
+        return {
+            "voices": [
+                {
+                    "id": v.id,
+                    "name": v.name,
+                    "language": v.language,
+                    "gender": v.gender,
+                }
+                for v in voices
+            ],
+            "engines": tts.list_engines(),
+        }
+
+    @app.get("/api/tts/status")
+    async def tts_status():
+        """查看 TTS 系统状态"""
+        tts = app.state.tts_manager
+        return await tts.get_status()
 
     # ── 扩展市场 API ────────────────────────────
 

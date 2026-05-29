@@ -12,15 +12,15 @@
 |------|--------|------|
 | 1. 接入与通信系统 | 85% | ⚠️ 部分实现 |
 | 2. 用户界面系统 | 50% | ⚠️ 部分实现 |
-| 3. 语音合成系统 (TTS) | 60% | ⚠️ 部分实现 |
+| 3. 语音合成系统 (TTS) | 70% | ⚠️ 部分实现 |
 | 4. 人格与行为决策系统 | 80% | ⚠️ 部分实现 |
 | 5. 记忆与情感系统 | 75% | ⚠️ 部分实现 |
 | 6. 能力与工具扩展系统 | 65% | ⚠️ 部分实现 |
 | 7. AI 提供商适配系统 | 90% | ✅ 基本完全实现 |
 | 8. 主动陪伴与自动化系统 | 75% | ⚠️ 部分实现 |
 | 9. 统一开发标准与社区生态 | 60% | ⚠️ 部分实现 |
-| 10. 基础架构与部署系统 | 70% | ⚠️ 部分实现 |
-| **总体** | **~75%** | **⚠️ 部分实现** |
+| 10. 基础架构与部署系统 | 75% | ⚠️ 部分实现 |
+| **总体** | **~77%** | **⚠️ 部分实现** |
 
 ---
 
@@ -53,7 +53,7 @@
 | 跨平台身份关联（数据库持久化） | 内存映射 | `IdentityService` 使用内存字典，未持久化到 SQLite/MySQL |
 | 通道配置热加载 | 框架在 | `ConfigWatcher` 存在但未与 `AdapterManager` 完整集成 |
 | 事件队列 Redis Streams | 框架在 | `RedisEventQueue` 有实现但需验证 Redis 连接可靠性 |
-| Prometheus 监控指标 | 未见 | 设计要求 `/metrics` 端点，未找到实现 |
+| Prometheus 监控指标 | ✅ 已实现 | `/metrics` 端点已实现，含请求计数/延迟/AI调用/记忆操作/主动任务指标 |
 
 ### ❌ 未实现
 
@@ -135,7 +135,7 @@
 |------|------|----------|
 | Piper TTS 适配器 | 未实现 | 需要 piper 库和本地模型文件 |
 | Azure TTS 适配器 | 未实现 | 需要 Azure 订阅 |
-| TTS REST API (/api/tts) | 未实现 | 设计要求独立 REST 端点 |
+| TTS REST API (/api/tts) | ✅ 已实现 | POST /api/tts 合成 + GET /api/tts/voices + GET /api/tts/status |
 | 流式缓冲区（按标点分句触发） | 未实现 | 设计要求文本缓冲区在句末标点处触发合成 |
 | 缓存预热 | 未实现 | 启动时预加载人格常用问候语 |
 | 音频缓存隔离（按用户目录） | 未实现 | 设计要求不同用户缓存分目录 |
@@ -414,8 +414,8 @@
 |------|------|----------|
 | 结构化 JSON 日志 | structlog 在 | 但日志文件轮转、Loki 集成未见 |
 | 日志级别动态调整 API | 未见 | 设计要求 `/admin/logging/level` 端点 |
-| Prometheus /metrics 端点 | 未见 | 设计要求完整的指标暴露 |
-| /healthz 和 /readyz 端点 | 框架在 | `app.py` 有健康检查但详细 readiness 检查需完善 |
+| Prometheus /metrics 端点 | ✅ 已实现 | 完整实现，含 7 类指标：请求/延迟/连接/AI调用/记忆/主动任务 |
+| /healthz 和 /readyz 端点 | ✅ 已实现 | `/healthz` liveness + `/readyz` readiness (AI/调度器/事件引擎) + `/health` 向后兼容 |
 | 告警机制 | 未见 | AI 调用失败、磁盘空间不足告警 |
 | 迁移工具 | 未见 | `yuanbot-cli migrate` SQLite→MySQL |
 | 备份/恢复 CLI | 未见 | `yuanbot-cli backup/restore` |
@@ -484,17 +484,17 @@
    - 实现聊天界面、会话管理、登录流程
    - 工作量：约 5-8 天
 
-2. **健康检查与监控端点** (`api-reference.md`, `infrastructure-deployment-system.md`)
-   - 实现 `/healthz`, `/readyz`, `/metrics` 端点
-   - Prometheus 指标暴露
-   - 工作量：约 1-2 天
+2. ~~**健康检查与监控端点**~~ ✅ 已完成
+   - ~~实现 `/healthz`, `/readyz`, `/metrics` 端点~~ ✅
+   - ~~Prometheus 指标暴露~~ ✅（7类指标，已接入 AIService）
 
-3. **TTS 系统完善** (`tts-system.md`) — 已完成基础框架
+3. **TTS 系统完善** (`tts-system.md`) — 大部分已完成
    - ~~创建 `src/yuanbot/tts/` 模块~~ ✅
    - ~~实现 TTSAdapter 接口 + TTSManager~~ ✅
    - ~~实现 Edge-TTS 适配器~~ ✅
    - ~~创建 `configs/tts.yaml`~~ ✅
-   - 剩余：Piper/Azure 适配器、REST API、流式缓冲区
+   - ~~REST API (/api/tts)~~ ✅
+   - 剩余：Piper/Azure 适配器、流式缓冲区
 
 ### 🟡 P1 - 重要缺失（影响完整性）
 
@@ -530,9 +530,11 @@
 
 ## 总结
 
-YuanBot 项目在核心后端架构上实现了设计文档的 **约 75%** 的要求。**最成功的部分**是 AI 提供商适配系统（90%），完整实现了 v2.0 的适配器复用机制和配置文件驱动的 Provider 模型。**接入与通信系统**（85%）和**人格与行为决策系统**（80%）也达到了较高完成度。
+YuanBot 项目在核心后端架构上实现了设计文档的 **约 77%** 的要求。**最成功的部分**是 AI 提供商适配系统（90%），完整实现了 v2.0 的适配器复用机制和配置文件驱动的 Provider 模型。**接入与通信系统**（85%）和**人格与行为决策系统**（80%）也达到了较高完成度。
 
-**TTS 系统**从 10% 提升到 60%，实现了 TTSAdapter 接口、TTSManager、Edge-TTS 适配器、OpenAI TTS 适配器和双层音频缓存。
+**TTS 系统**从 10% 提升到 70%，实现了 TTSAdapter 接口、TTSManager、Edge-TTS 适配器、OpenAI TTS 适配器、双层音频缓存和 REST API 端点（/api/tts, /api/tts/voices, /api/tts/status）。
+
+**监控系统**从 0% 提升到完整实现，Prometheus 指标端点已就绪，包含请求计数、延迟、AI 调用、记忆操作、主动任务等 7 类指标，且已接入 AIService 自动记录。
 
 **最大的差距**在于：
 1. **WebUI 前端**（50%中的大部分）— 仅有静态壳，无完整 SPA

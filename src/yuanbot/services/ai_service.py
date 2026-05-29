@@ -109,9 +109,11 @@ class AIService:
         self,
         provider_manager: ProviderManager,
         config: dict[str, Any] | None = None,
+        metrics: dict[str, Any] | None = None,
     ):
         self._pm = provider_manager
         self._config = config or {}
+        self._metrics = metrics or {}
 
         # 重试配置
         self._max_retries = self._config.get("max_retries", _DEFAULT_MAX_RETRIES)
@@ -185,11 +187,13 @@ class AIService:
                     system_prompt=system_prompt,
                 )
                 self._circuit_breaker.record_success(provider_id)
+                self._record_ai_call(provider_id, actual_model, "success")
                 return response
 
             except Exception as e:
                 last_error = e
                 self._circuit_breaker.record_failure(provider_id)
+                self._record_ai_call(provider_id, actual_model, "failure")
                 if attempt < self._max_retries:
                     wait_seconds = min(2**attempt, 8)
                     logger.warning(
@@ -244,8 +248,10 @@ class AIService:
             ):
                 yield chunk
             self._circuit_breaker.record_success(provider_id)
+            self._record_ai_call(provider_id, actual_model, "success")
         except Exception:
             self._circuit_breaker.record_failure(provider_id)
+            self._record_ai_call(provider_id, actual_model, "failure")
             raise
 
     async def embed(
@@ -294,6 +300,18 @@ class AIService:
         except Exception:
             self._circuit_breaker.record_failure(pid)
             raise
+
+    # ── 指标记录 ──────────────────────────────
+
+    def _record_ai_call(
+        self, provider_id: str, model: str, status: str
+    ) -> None:
+        """记录 AI 调用指标到 Prometheus 计数器（如果已配置）"""
+        ai_call_count = self._metrics.get("ai_call_count")
+        if ai_call_count:
+            ai_call_count.labels(
+                provider=provider_id, model=model, status=status
+            ).inc()
 
     # ── 速率限制 ──────────────────────────────
 
