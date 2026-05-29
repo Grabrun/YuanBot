@@ -31,6 +31,14 @@ const toggleTheme = () => {
 
 const providers = ref<any[]>([])
 const activeProvider = ref('')
+const sidebarVisible = ref(window.innerWidth > 768)
+const isMobile = ref(window.innerWidth <= 768)
+
+// 响应式监听
+window.addEventListener('resize', () => {
+  isMobile.value = window.innerWidth <= 768
+  if (!isMobile.value) sidebarVisible.value = true
+})
 
 // 加载 Provider 列表
 async function loadProviders() {
@@ -115,6 +123,7 @@ async function handleSend() {
 
 function handleNewConversation() {
   chat.createConversation()
+  if (isMobile.value) sidebarVisible.value = false
 }
 
 function handleLogout() {
@@ -137,7 +146,16 @@ function handleRegenerate(_messageId: string) {
   <n-config-provider :theme="theme">
     <n-layout has-sider style="height: 100vh">
       <!-- 左侧边栏 -->
-      <n-layout-sider bordered :width="260" :native-scrollbar="false">
+      <n-layout-sider
+        bordered
+        :width="isMobile ? 280 : 260"
+        :native-scrollbar="false"
+        :show-trigger="false"
+        :collapsed="!sidebarVisible"
+        :collapsed-width="0"
+        :position="'absolute'"
+        :style="isMobile ? 'z-index: 1000; position: fixed; height: 100vh' : ''"
+      >
         <div style="padding: 16px; display: flex; flex-direction: column; height: 100%">
           <div style="text-align: center; margin-bottom: 16px">
             <n-text strong style="font-size: 18px">🌸 缘·Bot</n-text>
@@ -199,11 +217,21 @@ function handleRegenerate(_messageId: string) {
         </div>
       </n-layout-sider>
 
+      <!-- 移动端遮罩层 -->
+      <div
+        v-if="isMobile && sidebarVisible"
+        class="sidebar-overlay"
+        @click="sidebarVisible = false"
+      />
+
       <!-- 右侧聊天区 -->
       <n-layout-content style="display: flex; flex-direction: column; height: 100vh">
         <!-- 顶部栏 -->
-        <n-layout-header bordered style="padding: 12px 20px; display: flex; align-items: center">
-          <n-text strong style="font-size: 16px">
+        <n-layout-header bordered style="padding: 12px 20px; display: flex; align-items: center; gap: 8px">
+          <n-button text @click="sidebarVisible = !sidebarVisible" style="font-size: 20px">
+            {{ sidebarVisible && isMobile ? '✕' : '☰' }}
+          </n-button>
+          <n-text strong style="font-size: 16px; flex: 1">
             {{ chat.currentConversation?.title || '选择或创建会话' }}
           </n-text>
           <div style="flex: 1" />
@@ -216,7 +244,7 @@ function handleRegenerate(_messageId: string) {
         <n-layout-content
           ref="chatContainer"
           :native-scrollbar="false"
-          style="flex: 1; padding: 20px; overflow-y: auto"
+          :style="{ flex: 1, padding: isMobile ? '12px' : '20px', overflowY: 'auto' }"
         >
           <n-empty
             v-if="!chat.currentConvId"
@@ -250,13 +278,13 @@ function handleRegenerate(_messageId: string) {
         </n-layout-content>
 
         <!-- 输入区域 -->
-        <n-layout-footer bordered style="padding: 12px 20px">
-          <n-space :size="8">
+        <n-layout-footer bordered :style="{ padding: isMobile ? '8px 12px' : '12px 20px' }">
+          <n-space :size="8" style="width: 100%">
             <n-input
               v-model:value="inputText"
               type="textarea"
               :autosize="{ minRows: 1, maxRows: 4 }"
-              placeholder="输入消息... (Enter 发送, Shift+Enter 换行)"
+              placeholder="输入消息... (Enter 发送)"
               style="flex: 1"
               @keydown.enter.exact.prevent="handleSend"
             />
@@ -271,6 +299,14 @@ function handleRegenerate(_messageId: string) {
 </template>
 
 <style scoped>
+/* 移动端适配 */
+@media (max-width: 768px) {
+  .bubble-content { max-width: 85%; }
+  .bubble-text { padding: 8px 12px; font-size: 14px; }
+  .bubble-avatar { width: 30px; height: 30px; font-size: 14px; }
+  .chat-bubble-row { gap: 8px; margin-bottom: 12px; }
+}
+
 .chat-bubble-row {
   display: flex;
   gap: 10px;
@@ -300,5 +336,23 @@ function handleRegenerate(_messageId: string) {
   background: var(--n-card-color);
   border: 1px solid var(--n-border-color);
   border-bottom-left-radius: 4px;
+}
+
+/* 移动端遮罩层 */
+.sidebar-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 999;
+}
+
+/* 移动端适配 */
+@media (max-width: 768px) {
+  .bubble-content { max-width: 85%; }
+  .bubble-text { padding: 8px 12px; font-size: 14px; }
+  .bubble-avatar { width: 30px; height: 30px; font-size: 14px; }
 }
 </style>

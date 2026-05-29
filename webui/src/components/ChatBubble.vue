@@ -186,4 +186,12 @@ function handleRegenerate() {
 .chat-bubble-row:hover .bubble-actions {
   opacity: 1;
 }
+
+/* 移动端适配 */
+@media (max-width: 768px) {
+  .bubble-content { max-width: 85%; }
+  .bubble-text { padding: 8px 12px; font-size: 14px; }
+  .bubble-avatar { width: 30px; height: 30px; font-size: 14px; }
+  .chat-bubble-row { gap: 8px; margin-bottom: 12px; }
+}
 </style>

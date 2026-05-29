@@ -8,6 +8,7 @@ const router = useRouter()
 const message = useMessage()
 const loading = ref(true)
 const activeTab = ref('facts')
+const isMobile = ref(window.innerWidth <= 768)
 const factMemories = ref<any[]>([])
 const episodicMemories = ref<any[]>([])
 const userProfiles = ref<any[]>([])
@@ -131,7 +132,7 @@ function formatTime(ts: string) {
 
           <!-- 用户画像 -->
           <n-tab-pane name="profiles" :tab="`👤 用户画像 (${userProfiles.length})`">
-            <n-grid :cols="2" :x-gap="16" :y-gap="16" style="margin-top: 16px">
+            <n-grid :cols="isMobile ? 1 : 2" :x-gap="16" :y-gap="16" style="margin-top: 16px">
               <n-gi v-for="profile in userProfiles" :key="profile.user_id">
                 <n-card :title="profile.nickname || profile.user_id">
                   <n-descriptions :column="1" bordered>

@@ -15,7 +15,10 @@ const users = ref<User[]>([])
 const loading = ref(true)
 const activeTab = ref('dashboard')
 const showCreateUser = ref(false)
+const isMobile = ref(window.innerWidth <= 768)
 const newUser = ref({ username: '', password: '', display_name: '', role: 'user' as string })
+
+window.addEventListener('resize', () => { isMobile.value = window.innerWidth <= 768 })
 
 onMounted(async () => {
   if (!auth.isAdmin) {
@@ -111,7 +114,7 @@ async function handleBackup() {
         <n-tabs v-model:value="activeTab" type="line" animated>
           <!-- 仪表盘 -->
           <n-tab-pane name="dashboard" tab="仪表盘">
-            <n-grid :cols="4" :x-gap="16" :y-gap="16" style="margin-top: 16px">
+            <n-grid :cols="isMobile ? 2 : 4" :x-gap="16" :y-gap="16" style="margin-top: 16px">
               <n-gi>
                 <n-card title="用户数">
                   <n-statistic :value="metrics?.yuanbot?.users?.total || 0" />
@@ -134,7 +137,7 @@ async function handleBackup() {
               </n-gi>
             </n-grid>
 
-            <n-grid :cols="2" :x-gap="16" style="margin-top: 16px">
+            <n-grid :cols="isMobile ? 1 : 2" :x-gap="16" style="margin-top: 16px">
               <n-gi>
                 <n-card title="系统信息">
                   <n-descriptions :column="1" bordered>
