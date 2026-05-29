@@ -172,6 +172,62 @@ class ProactiveStrategy:
         self._daily_counts: dict[str, int] = {}
         self._last_reset_date: str | None = None
 
+        # 用户反馈自动降频（设计参考: proactive-companion-system.md 4.2节）
+        # key=user_id, value=冷却到期时间戳
+        self._feedback_cooldowns: dict[str, float] = {}
+        # 反馈检测关键词
+        self._negative_feedback_patterns = (
+            "别发了", "不要发了", "别再发了", "别烦我", "别打扰我",
+            "安静", "闭嘴", "别说了", "不想听", "别主动",
+            "stop", "don't send", "be quiet", "shut up",
+        )
+
+    # ── 用户反馈自动降频 ────────────────────────
+
+    def handle_user_feedback(self, user_id: str, message_text: str) -> bool:
+        """检测用户对主动消息的负面反馈，自动降频
+
+        设计参考: proactive-companion-system.md 4.2节
+        检测用户消息中的负面反馈关键词，如 "别发了"、"别打扰我" 等，
+        若匹配则自动设置冷却期（24小时内不再发送主动消息）。
+
+        Args:
+            user_id: 用户 ID
+            message_text: 用户发送的消息文本
+
+        Returns:
+            True 如果检测到负面反馈并已设置冷却
+        """
+        text_lower = message_text.lower().strip()
+        if any(pattern in text_lower for pattern in self._negative_feedback_patterns):
+            import time as _time
+            cooldown_seconds = 86400  # 24 小时冷却期
+            self._feedback_cooldowns[user_id] = _time.time() + cooldown_seconds
+            logger.info(
+                "proactive_feedback_cooldown",
+                user_id=user_id,
+                message_preview=message_text[:50],
+                cooldown_hours=24,
+            )
+            return True
+        return False
+
+    def _check_feedback_cooldown(self, user_id: str) -> bool:
+        """检查用户是否在反馈冷却期中
+
+        Returns:
+            True 如果在冷却期（不应发送）
+        """
+        import time as _time
+        expire = self._feedback_cooldowns.get(user_id)
+        if expire is None:
+            return False
+        if _time.time() > expire:
+            # 冷却期已过
+            del self._feedback_cooldowns[user_id]
+            return False
+        return True
+
     # ── 用户级配置解析 ────────────────────────
 
     async def _get_user_config(self, user_id: str) -> dict[str, Any]:
@@ -238,6 +294,11 @@ class ProactiveStrategy:
         # 1. 全局开关
         if not self._config.enabled:
             logger.debug("proactive_disabled", user_id=user_id)
+            return False
+
+        # 1.5 用户反馈冷却期检查（"别发了"等负面反馈自动降频）
+        if self._check_feedback_cooldown(user_id):
+            logger.debug("proactive_feedback_cooldown", user_id=user_id)
             return False
 
         # 2. 获取用户级配置

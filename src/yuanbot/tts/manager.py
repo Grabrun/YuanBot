@@ -1,10 +1,12 @@
-"""TTS 管理器 — 引擎选择、缓存、流式合成"""
+"""TTS 管理器 — 引擎选择、缓存、流式合成、流式缓冲区"""
 
 from __future__ import annotations
 
 import hashlib
 import logging
+import re
 from collections import OrderedDict
+from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -314,3 +316,166 @@ class TTSManager:
     def clear_cache(self) -> None:
         """清空音频缓存"""
         self._cache.clear()
+
+    # ------------------------------------------------------------------
+    # 流式缓冲区：收集 LLM 输出的文本 token，当检测到句末标点或超过
+    # 阈值长度时触发合成，实现「边生成边播放」。
+    # 设计参考: docs/tts-system.md 第9节
+    # ------------------------------------------------------------------
+
+    _SENTENCE_END_RE = re.compile(r"[。！？!?；;\n]")
+    _SENTENCE_SPLIT_RE = re.compile(r"([。！？!?；;\n])")
+
+    async def synthesize_streaming_buffered(
+        self,
+        text_stream: AsyncIterator[str],
+        engine: str | None = None,
+        voice: str | None = None,
+        persona_id: str | None = None,
+        rate: float | None = None,
+        pitch: float | None = None,
+        output_format: str = "mp3",
+        buffer_threshold: int = 20,
+    ) -> AsyncIterator[bytes]:
+        """流式缓冲合成：收集 token，在句子边界处触发合成
+
+        设计要求（tts-system.md 第9节）：
+        - 收集 LLM 推送的文本 token
+        - 检测到句末标点（。！？）、逗号或缓冲区超过阈值时触发合成
+        - 产出音频块供前端按序播放
+
+        Args:
+            text_stream: 异步文本 token 迭代器
+            engine/voice/persona_id/rate/pitch/output_format: 同 synthesize
+            buffer_threshold: 缓冲区字符数阈值（默认 20）
+
+        Yields:
+            音频字节块
+        """
+        if not self._config.enabled:
+            raise RuntimeError("TTS 系统未启用")
+
+        adapter, resolved_voice, resolved_rate, resolved_pitch = \
+            self._resolve_engine(engine, persona_id)
+        final_voice = voice or resolved_voice
+        final_rate = rate if rate is not None else resolved_rate
+        final_pitch = pitch if pitch is not None else resolved_pitch
+
+        buffer = ""
+
+        async for token in text_stream:
+            buffer += token
+
+            # 在句末标点或超过阈值时触发合成
+            should_flush = False
+            if self._SENTENCE_END_RE.search(token):
+                should_flush = True
+            elif len(buffer) >= buffer_threshold:
+                # 超过阈值但没有标点，也在逗号处切分
+                should_flush = True
+
+            if should_flush and buffer.strip():
+                # 按句末标点切分，合成完整句子
+                parts = self._SENTENCE_SPLIT_RE.split(buffer)
+                complete = ""
+                remainder = ""
+                for i, part in enumerate(parts):
+                    if self._SENTENCE_END_RE.fullmatch(part):
+                        complete += part
+                    elif i < len(parts) - 1:
+                        # 中间段且后面还有标点 → 包含在完整部分
+                        complete += part
+                    else:
+                        remainder = part
+
+                if complete.strip():
+                    # 查缓存
+                    cached = self._cache.get(adapter.engine_id, final_voice, complete)
+                    if cached is not None:
+                        yield cached
+                    else:
+                        try:
+                            audio = await adapter.synthesize(
+                                complete, final_voice, final_rate, final_pitch,
+                                output_format,
+                            )
+                            if audio:
+                                self._cache.put(
+                                    adapter.engine_id, final_voice, complete, audio,
+                                )
+                                yield audio
+                        except Exception as e:
+                            logger.warning(
+                                "streaming_buffer_synthesize_failed",
+                                text_preview=complete[:50],
+                                error=str(e),
+                            )
+                buffer = remainder
+
+        # 处理剩余缓冲区
+        if buffer.strip():
+            try:
+                audio = await adapter.synthesize(
+                    buffer.strip(), final_voice, final_rate, final_pitch,
+                    output_format,
+                )
+                if audio:
+                    yield audio
+            except Exception as e:
+                logger.warning(
+                    "streaming_buffer_final_synthesize_failed",
+                    text_preview=buffer[:50],
+                    error=str(e),
+                )
+
+    # ------------------------------------------------------------------
+    # 缓存预热：启动时预加载人格常用问候语到 L1 缓存
+    # 设计参考: docs/tts-system.md 第10节
+    # ------------------------------------------------------------------
+
+    async def prewarm_cache(
+        self,
+        greeting_texts: list[str] | None = None,
+        engine: str | None = None,
+        voice: str | None = None,
+        persona_id: str | None = None,
+    ) -> int:
+        """预热 TTS 缓存：预加载常用问候语到 L1 内存
+
+        Args:
+            greeting_texts: 要预热的文本列表。为 None 时使用默认问候语。
+            engine: 指定引擎
+            voice: 指定音色
+            persona_id: 人设 ID
+
+        Returns:
+            成功预热的条目数
+        """
+        if not self._config.enabled:
+            return 0
+
+        default_greetings = [
+            "你好呀～有什么我能帮你的吗？",
+            "早上好！今天心情怎么样？",
+            "晚上好～今天过得怎么样呀？",
+            "好久不见！最近还好吗？",
+            "嗯嗯，我在听呢，你继续说～",
+        ]
+        texts = greeting_texts or default_greetings
+
+        warmed = 0
+        for text in texts:
+            try:
+                await self.synthesize(
+                    text,
+                    engine=engine,
+                    voice=voice,
+                    persona_id=persona_id,
+                    use_cache=True,
+                )
+                warmed += 1
+            except Exception as e:
+                logger.debug("cache_prewarm_failed", text=text[:30], error=str(e))
+
+        logger.info("TTS 缓存预热完成: %d/%d 条", warmed, len(texts))
+        return warmed

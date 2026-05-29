@@ -261,7 +261,13 @@ class MemoryManager:
         category: str = "general",
         confidence: float = 1.0,
     ) -> MemoryNode:
-        """添加事实记忆（用户偏好、习惯、重要事实）"""
+        """添加事实记忆（用户偏好、习惯、重要事实）
+
+        冲突解决策略（设计参考: memory-emotion-system.md 第3.2节）：
+        - 用户明确陈述 (confidence=1.0) 优先于推断 (0.6-0.8)
+        - 同 confidence 时取较新内容，保留较高 importance
+        - 冲突记录存入 metadata.conflict_history 供审计
+        """
         node = MemoryNode(
             memory_type=MemoryType.FACT,
             content=content,
@@ -277,21 +283,13 @@ class MemoryManager:
             },
         )
 
-        # 检查是否已存在相似的事实（避免重复）
+        # 检查是否已存在相似的事实（冲突解决）
         existing_facts = await self.get_fact_memories(user_id)
         for existing in existing_facts:
             if self._is_similar_fact(existing, node):
-                # 更新现有事实
-                existing.content = content
-                existing.importance_score = max(existing.importance_score, importance)
-                existing.last_accessed = datetime.now()
-                existing.access_count += 1
-
-                if self.has_persistence:
-                    await self._persist_fact_memory(user_id, existing)
-
-                logger.info("fact_memory_updated", user_id=user_id, node_id=existing.id)
-                return existing
+                return await self._resolve_fact_conflict(
+                    user_id, existing, node, content, importance, confidence,
+                )
 
         if self.has_persistence:
             await self._persist_fact_memory(user_id, node)
@@ -305,6 +303,166 @@ class MemoryManager:
 
         logger.info("fact_memory_added", user_id=user_id, node_id=node.id)
         return node
+
+    async def _resolve_fact_conflict(
+        self,
+        user_id: str,
+        existing: MemoryNode,
+        new_node: MemoryNode,
+        new_content: str,
+        new_importance: float,
+        new_confidence: float,
+    ) -> MemoryNode:
+        """解决同一 key 的事实记忆冲突
+
+        策略：
+        1. 新 confidence > 旧 confidence → 用新内容覆盖
+        2. 新 confidence == 旧 confidence → 更新内容，保留较高 importance
+        3. 新 confidence < 旧 confidence → 保留旧内容，记录冲突历史
+        """
+        old_confidence = existing.metadata.get("confidence", 1.0)
+        conflict_entry = {
+            "old_content": existing.content,
+            "new_content": new_content,
+            "old_confidence": old_confidence,
+            "new_confidence": new_confidence,
+            "resolution": "pending",
+            "timestamp": datetime.now().isoformat(),
+        }
+
+        if new_confidence > old_confidence:
+            # 新信息置信度更高，覆盖
+            existing.content = new_content
+            existing.importance_score = max(existing.importance_score, new_importance)
+            existing.metadata["confidence"] = new_confidence
+            conflict_entry["resolution"] = "new_wins"
+            logger.info(
+                "fact_conflict_new_wins",
+                user_id=user_id,
+                old_conf=old_confidence,
+                new_conf=new_confidence,
+            )
+        elif new_confidence == old_confidence:
+            # 同置信度，更新内容，保留较高重要性
+            existing.content = new_content
+            existing.importance_score = max(existing.importance_score, new_importance)
+            conflict_entry["resolution"] = "updated_same_confidence"
+            logger.info(
+                "fact_conflict_updated",
+                user_id=user_id,
+                confidence=new_confidence,
+            )
+        else:
+            # 旧信息置信度更高，保留旧内容
+            conflict_entry["resolution"] = "existing_wins"
+            logger.info(
+                "fact_conflict_existing_wins",
+                user_id=user_id,
+                old_conf=old_confidence,
+                new_conf=new_confidence,
+            )
+
+        # 记录冲突历史（保留最近 5 条）
+        if "conflict_history" not in existing.metadata:
+            existing.metadata["conflict_history"] = []
+        history: list = existing.metadata["conflict_history"]
+        history.append(conflict_entry)
+        existing.metadata["conflict_history"] = history[-5:]
+
+        existing.last_accessed = datetime.now()
+        existing.access_count += 1
+
+        if self.has_persistence:
+            await self._persist_fact_memory(user_id, existing)
+
+        return existing
+
+    async def detect_important_dates(self, user_id: str) -> list[dict[str, Any]]:
+        """检测用户的重要日期（生日、纪念日等）
+
+        扫描 category='important_date' 或 key 包含日期模式的事实记忆，
+        返回即将来临的重要日期列表，供主动陪伴系统触发祝福。
+
+        设计参考: memory-emotion-system.md 3.2节
+
+        Returns:
+            列表，每项包含 {"key", "value", "category", "days_until", "description"}
+        """
+        facts = await self.get_fact_memories(user_id)
+        important_dates: list[dict[str, Any]] = []
+
+        today = datetime.now().date()
+
+        for fact in facts:
+            is_date = False
+            category = fact.metadata.get("category", "")
+
+            # 1. category 为 important_date 或 personal_info
+            if category in ("important_date", "personal_info"):
+                is_date = True
+
+            # 2. key 包含日期相关关键词
+            date_keywords = ("birthday", "anniversary", "interview_date",
+                             "生日", "纪念日", "面试")
+            all_entities = " ".join(fact.key_entities) if fact.key_entities else ""
+            if any(kw in all_entities for kw in date_keywords):
+                is_date = True
+
+            if not is_date:
+                continue
+
+            # 尝试解析日期值
+            value = fact.content
+            try:
+                # 尝试多种日期格式
+                parsed_date = self._parse_date_value(value)
+                if parsed_date is None:
+                    continue
+
+                # 计算距今天数（忽略年份，只比较月-日）
+                this_year = parsed_date.replace(year=today.year)
+                if this_year < today:
+                    this_year = this_year.replace(year=today.year + 1)
+                days_until = (this_year - today).days
+
+                important_dates.append({
+                    "key": fact.key_entities[0] if fact.key_entities else "unknown",
+                    "value": value,
+                    "category": category,
+                    "days_until": days_until,
+                    "date": this_year.isoformat(),
+                    "description": (
+                        f"{fact.key_entities[0] if fact.key_entities else '重要日期'}:"
+                        f" {value}"
+                    ),
+                })
+            except Exception:
+                continue
+
+        # 按距今天数排序
+        important_dates.sort(key=lambda x: x["days_until"])
+        return important_dates
+
+    @staticmethod
+    def _parse_date_value(value: str) -> datetime | None:
+        """尝试解析多种日期格式"""
+        from datetime import datetime as dt
+
+        formats = [
+            "%Y-%m-%d",
+            "%Y/%m/%d",
+            "%m-%d",
+            "%m/%d",
+            "%Y年%m月%d日",
+            "%m月%d日",
+        ]
+        for fmt in formats:
+            try:
+                parsed = dt.strptime(value.strip(), fmt)
+                return parsed
+            except ValueError:
+                continue
+        return None
 
     async def get_fact_memories(
         self,
