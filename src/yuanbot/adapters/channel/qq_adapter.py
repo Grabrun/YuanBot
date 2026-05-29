@@ -10,9 +10,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import json
-import os
 import time
-import uuid
 from collections.abc import Awaitable, Callable
 from typing import Any
 
@@ -97,7 +95,10 @@ class QQAdapter(BaseChannelAdapter):
 
     @property
     def supported_content_types(self) -> list[ContentType]:
-        return [ContentType.TEXT, ContentType.IMAGE, ContentType.VOICE, ContentType.VIDEO, ContentType.FILE]
+        return [
+            ContentType.TEXT, ContentType.IMAGE,
+            ContentType.VOICE, ContentType.VIDEO, ContentType.FILE,
+        ]
 
     async def initialize(self, config: ChannelConfig) -> None:
         """初始化适配器"""
@@ -152,10 +153,14 @@ class QQAdapter(BaseChannelAdapter):
 
         if content.content_type == ContentType.TEXT:
             return await self._send_text(scene, openid, content.text or "")
-        elif content.content_type in (ContentType.IMAGE, ContentType.VOICE, ContentType.VIDEO, ContentType.FILE):
+        elif content.content_type in (
+            ContentType.IMAGE, ContentType.VOICE, ContentType.VIDEO, ContentType.FILE
+        ):
             return await self._send_media(scene, openid, content)
         else:
-            return SendResult(success=False, error=f"Unsupported content type: {content.content_type}")
+            return SendResult(
+                success=False, error=f"Unsupported content type: {content.content_type}"
+            )
 
     def get_platform_user_id(self, raw_event: Any) -> str:
         """从原始事件中提取用户 ID"""
@@ -242,7 +247,11 @@ class QQAdapter(BaseChannelAdapter):
             data = resp.json()
             return SendResult(success=True, message_id=data.get("id", ""))
         except httpx.HTTPStatusError as exc:
-            logger.error("qq_send_text_http_error", status=exc.response.status_code, body=exc.response.text)
+            logger.error(
+                "qq_send_text_http_error",
+                status=exc.response.status_code,
+                body=exc.response.text,
+            )
             return SendResult(success=False, error=f"HTTP {exc.response.status_code}")
         except Exception as exc:
             logger.error("qq_send_text_error", error=str(exc))
@@ -311,7 +320,9 @@ class QQAdapter(BaseChannelAdapter):
             logger.error("qq_send_media_error", error=str(exc))
             return SendResult(success=False, error=str(exc))
 
-    async def _deliver_response(self, scene: str, openid: str, msg_id: str, response: BotResponse) -> None:
+    async def _deliver_response(
+        self, scene: str, openid: str, msg_id: str, response: BotResponse,
+    ) -> None:
         """投递 AI 回复"""
         if response.content.content_type == ContentType.TEXT:
             text = response.content.text or ""
@@ -398,7 +409,9 @@ class QQAdapter(BaseChannelAdapter):
                 logger.error("qq_ws_expected_hello", got=hello.get("op"))
                 return
 
-            self._ws_heartbeat_interval = hello.get("d", {}).get("heartbeat_interval", 45000) // 1000
+            self._ws_heartbeat_interval = (
+                hello.get("d", {}).get("heartbeat_interval", 45000) // 1000
+            )
             logger.info("qq_ws_hello", heartbeat_interval=self._ws_heartbeat_interval)
 
             # 2. 发送 Identify (OpCode 2)
