@@ -59,19 +59,21 @@ export const useChatStore = defineStore('chat', () => {
     sending.value = true
     try {
       addLocalMessage('user', content)
-      const result = await api.sendMessage(content, currentConvId.value || undefined)
+      const result = await api.sendMessage(content, currentConvId.value || undefined) as any
 
       // 更新用户消息 ID
       const userIdx = messages.value.findIndex(
         (m) => m.role === 'user' && m.content === content && m.message_id.startsWith('local_')
       )
-      if (userIdx >= 0) {
+      if (userIdx >= 0 && result.user_message) {
         messages.value[userIdx].message_id = result.user_message.message_id
       }
 
-      addLocalMessage('assistant', result.ai_message.content)
+      if (result.ai_message) {
+        addLocalMessage('assistant', result.ai_message.content)
+      }
 
-      if (!currentConvId.value) {
+      if (!currentConvId.value && result.conversation_id) {
         currentConvId.value = result.conversation_id
         await loadConversations()
       } else {
@@ -93,13 +95,13 @@ export const useChatStore = defineStore('chat', () => {
     // WebSocket 失败时回退到 REST
     sending.value = true
     try {
-      const result = await api.sendMessage(content, currentConvId.value || undefined)
+      const result = await api.sendMessage(content, currentConvId.value || undefined) as any
       // 替换流式消息为最终结果
       const lastAiIdx = messages.value.length - 1
-      if (lastAiIdx >= 0 && messages.value[lastAiIdx].role === 'assistant') {
+      if (lastAiIdx >= 0 && messages.value[lastAiIdx].role === 'assistant' && result.ai_message) {
         messages.value[lastAiIdx].content = result.ai_message.content
         messages.value[lastAiIdx].message_id = result.ai_message.message_id
-      } else {
+      } else if (result.ai_message) {
         addLocalMessage('assistant', result.ai_message.content)
       }
       await loadConversations()

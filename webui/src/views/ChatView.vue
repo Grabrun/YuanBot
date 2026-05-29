@@ -64,20 +64,20 @@ async function handleSend() {
       chat.addLocalMessage('user', text)
 
       api.connectWS(chat.currentConvId, {
-        onStart: () => {
+        onStart: (_convId: string) => {
           streamingText.value = ''
         },
-        onDelta: (delta) => {
+        onDelta: (delta: string) => {
           streamingText.value += delta
         },
-        onEnd: (fullText, convId) => {
+        onEnd: (fullText: string, _convId: string) => {
           chat.addLocalMessage('assistant', fullText || streamingText.value)
           streamingText.value = ''
           isStreaming.value = false
           api.disconnectWS()
           chat.loadConversations()
         },
-        onError: (errMsg) => {
+        onError: (_errMsg: string) => {
           // 回退到 REST API
           isStreaming.value = false
           api.disconnectWS()
@@ -111,7 +111,7 @@ function handleCopyMessage(content: string) {
   message.success('已复制')
 }
 
-function handleRegenerate(messageId: string) {
+function handleRegenerate(_messageId: string) {
   message.info('重新生成功能开发中')
 }
 </script>
@@ -138,6 +138,15 @@ function handleRegenerate(messageId: string) {
 
           <!-- 记忆快捷入口 -->
           <n-space vertical :size="8" style="margin-bottom: 12px">
+            <n-button text @click="router.push('/memory')">
+              🧠 记忆浏览器
+            </n-button>
+            <n-button text @click="router.push('/providers')">
+              🔌 Provider 管理
+            </n-button>
+            <n-button text @click="router.push('/plugins')">
+              🧩 插件管理
+            </n-button>
             <n-button text @click="router.push('/admin')" v-if="showAdminLink">
               📊 管理面板
             </n-button>

@@ -89,7 +89,7 @@ async function handleGenerateApiKey(userId: string) {
 
 async function handleBackup() {
   try {
-    const resp = await api.triggerBackup()
+    const resp = await api.triggerBackup() as any
     message.success(`备份完成: ${resp.backup}`)
   } catch (e: any) {
     message.error(e.message || '备份失败')

@@ -21,6 +21,24 @@ const router = createRouter({
       component: () => import('./views/AdminView.vue'),
       meta: { requiresAuth: true, requiresAdmin: true },
     },
+    {
+      path: '/providers',
+      name: 'providers',
+      component: () => import('./views/ProviderView.vue'),
+      meta: { requiresAuth: true },
+    },
+    {
+      path: '/memory',
+      name: 'memory',
+      component: () => import('./views/MemoryView.vue'),
+      meta: { requiresAuth: true },
+    },
+    {
+      path: '/plugins',
+      name: 'plugins',
+      component: () => import('./views/PluginView.vue'),
+      meta: { requiresAuth: true },
+    },
   ],
 })
 
