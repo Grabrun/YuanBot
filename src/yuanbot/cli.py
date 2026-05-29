@@ -13,6 +13,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 from pathlib import Path
 
@@ -100,6 +101,35 @@ def main() -> None:
     tui_parser.add_argument("--token", default=None, help="JWT Token")
     tui_parser.add_argument("--api-key", default=None, help="API Key")
 
+    # yuanbot webui
+    webui_parser = subparsers.add_parser("webui", help="启动 WebUI 服务")
+    webui_parser.add_argument("--host", default="0.0.0.0", help="监听地址")
+    webui_parser.add_argument("--port", type=int, default=3000, help="监听端口 (默认 3000)")
+    webui_parser.add_argument("--backend", default="http://localhost:8000", help="后端 API 地址")
+
+    # yuanbot logs
+    logs_parser = subparsers.add_parser("logs", help="查看实时日志")
+    logs_parser.add_argument("--follow", "-f", action="store_true", help="持续输出新日志")
+    logs_parser.add_argument("--lines", "-n", type=int, default=50, help="显示行数 (默认 50)")
+    logs_parser.add_argument(
+        "--level",
+        choices=["debug", "info", "warning", "error"],
+        help="过滤日志级别",
+    )
+
+    # yuanbot list
+    list_parser = subparsers.add_parser("list", help="列出已安装的扩展")
+    list_sub = list_parser.add_subparsers(dest="list_target")
+    list_sub.add_parser("channels", help="列出通道")
+    list_sub.add_parser("providers", help="列出提供商")
+    list_sub.add_parser("plugins", help="列出插件 (Skills/Tools)")
+
+    # yuanbot config edit
+    config_edit_parser = config_sub.add_parser("edit", help="在默认编辑器中打开配置文件")
+    config_edit_parser.add_argument(
+        "file", nargs="?", default="bot.yaml", help="配置文件名 (默认 bot.yaml)"
+    )
+
     # yuanbot provider
     provider_parser = subparsers.add_parser("provider", help="AI 提供商管理")
     provider_sub = provider_parser.add_subparsers(dest="provider_action")
@@ -170,6 +200,8 @@ def main() -> None:
             _run_config_show(args)
         elif args.config_action == "init":
             _run_config_init(args)
+        elif args.config_action == "edit":
+            _run_config_edit(args)
         else:
             parser.parse_args(["config", "--help"])
     elif args.command == "memory":
@@ -183,6 +215,19 @@ def main() -> None:
         _run_version()
     elif args.command == "tui":
         _run_tui(args)
+    elif args.command == "webui":
+        _run_webui(args)
+    elif args.command == "logs":
+        _run_logs(args)
+    elif args.command == "list":
+        if args.list_target == "channels":
+            _run_list_channels(args)
+        elif args.list_target == "providers":
+            _run_provider_list(args)
+        elif args.list_target == "plugins":
+            _run_list_plugins(args)
+        else:
+            parser.parse_args(["list", "--help"])
     elif args.command == "provider":
         if args.provider_action == "list":
             _run_provider_list(args)
@@ -1141,6 +1186,186 @@ def _run_publish(args: argparse.Namespace) -> None:
     print("  3. 提交 Pull Request")
     print()
     print(f"  {_c('文档: https://docs.yuanbot.app/marketplace/publish', _CYAN)}")
+    print()
+
+
+# --------------------------------------------------------------------------- #
+# yuanbot webui
+# --------------------------------------------------------------------------- #
+
+
+def _run_webui(args: argparse.Namespace) -> None:
+    """启动 WebUI 开发服务器"""
+    import subprocess
+
+    webui_dir = Path(__file__).parent.parent.parent / "webui"
+    if not webui_dir.exists():
+        _fail("webui/ 目录不存在")
+        return
+
+    if not (webui_dir / "node_modules").exists():
+        _info("首次启动，安装依赖中...")
+        subprocess.run(["npm", "install"], cwd=str(webui_dir), check=True)
+
+    _header("启动 WebUI")
+    print(f"  地址: {_c(f'{args.host}:{args.port}', _CYAN)}")
+    print(f"  后端: {args.backend}")
+    print()
+
+    env = os.environ.copy()
+    env["VITE_API_BASE"] = args.backend
+
+    subprocess.run(
+        ["npm", "run", "dev", "--", "--host", args.host, "--port", str(args.port)],
+        cwd=str(webui_dir),
+        env=env,
+    )
+
+
+# --------------------------------------------------------------------------- #
+# yuanbot logs
+# --------------------------------------------------------------------------- #
+
+
+def _run_logs(args: argparse.Namespace) -> None:
+    """查看实时日志"""
+    logs_dir = Path("logs")
+    if not logs_dir.exists():
+        _fail("logs/ 目录不存在")
+        return
+
+    # 查找最新的日志文件
+    log_files = sorted(logs_dir.glob("*.log"), key=lambda f: f.stat().st_mtime, reverse=True)
+    if not log_files:
+        _warn("未找到日志文件")
+        return
+
+    log_file = log_files[0]
+    _header(f"日志: {log_file.name}")
+
+    if args.follow:
+        # tail -f 模式
+        import subprocess
+
+        cmd = ["tail", "-f", str(log_file)]
+        if args.lines:
+            cmd = ["tail", "-n", str(args.lines), "-f", str(log_file)]
+        try:
+            subprocess.run(cmd)
+        except KeyboardInterrupt:
+            print()
+    else:
+        # 显示最后 N 行
+        lines = log_file.read_text(encoding="utf-8", errors="replace").splitlines()
+        if args.level:
+            level = args.level.upper()
+            lines = [line for line in lines if level in line]
+        for line in lines[-args.lines:]:
+            print(f"  {line}")
+
+
+# --------------------------------------------------------------------------- #
+# yuanbot config edit
+# --------------------------------------------------------------------------- #
+
+
+def _run_config_edit(args: argparse.Namespace) -> None:
+    """在默认编辑器中打开配置文件"""
+    import os
+    import subprocess
+
+    file_name = args.file
+    file_path = Path("configs") / file_name
+
+    if not file_path.exists():
+        _fail(f"配置文件不存在: {file_path}")
+        _info("运行 yuanbot config init 初始化配置目录")
+        return
+
+    editor = os.environ.get("EDITOR", os.environ.get("VISUAL", "vi"))
+    _info(f"使用编辑器: {editor}")
+    subprocess.run([editor, str(file_path)])
+
+
+# --------------------------------------------------------------------------- #
+# yuanbot list channels
+# --------------------------------------------------------------------------- #
+
+
+def _run_list_channels(args: argparse.Namespace) -> None:
+    """列出已配置的通道"""
+    _header("通道列表")
+
+    channels_dir = Path("configs/Channels")
+    if not channels_dir.exists():
+        _info("configs/Channels/ 目录不存在")
+        return
+
+    import yaml
+
+    for yaml_file in sorted(channels_dir.glob("*.yaml")):
+        try:
+            with open(yaml_file) as f:
+                config = yaml.safe_load(f) or {}
+            platform = config.get("platform", yaml_file.stem)
+            enabled = config.get("enabled", True)
+            display = config.get("display_name", platform)
+            status = _c("✅", "") if enabled else _c("❌", "")
+            print(f"  {status} {display:20s} ({platform})  [{yaml_file.name}]")
+        except Exception as e:
+            print(f"  ❌ {yaml_file.name}: {e}")
+
+    print()
+
+
+# --------------------------------------------------------------------------- #
+# yuanbot list plugins
+# --------------------------------------------------------------------------- #
+
+
+def _run_list_plugins(args: argparse.Namespace) -> None:
+    """列出已安装的 Skills 和 Tools"""
+    _header("插件列表")
+
+    import yaml
+
+    # Skills
+    skills_dir = Path("configs/Plugins/skills")
+    if skills_dir.exists():
+        print(f"  {_c('🎯 Skills:', _BOLD)}")
+        for yaml_file in sorted(skills_dir.glob("*.yaml")):
+            try:
+                with open(yaml_file) as f:
+                    config = yaml.safe_load(f) or {}
+                name = config.get("name", yaml_file.stem)
+                category = config.get("category", "-")
+                enabled = config.get("enabled", True)
+                status = _c("✅", "") if enabled else _c("❌", "")
+                print(f"    {status} {name:20s} 分类: {category}")
+            except Exception:
+                print(f"    ❌ {yaml_file.name}")
+    else:
+        _info("无 Skills 配置")
+
+    # Tools
+    tools_dir = Path("configs/Plugins/tools")
+    if tools_dir.exists():
+        print(f"\n  {_c('🔧 Tools:', _BOLD)}")
+        for yaml_file in sorted(tools_dir.glob("*.yaml")):
+            try:
+                with open(yaml_file) as f:
+                    config = yaml.safe_load(f) or {}
+                name = config.get("name", yaml_file.stem)
+                category = config.get("category", "-")
+                executor = config.get("executor", {}).get("type", "-")
+                enabled = config.get("enabled", True)
+                status = _c("✅", "") if enabled else _c("❌", "")
+                print(f"    {status} {name:20s} 分类: {category}  执行器: {executor}")
+            except Exception:
+                print(f"    ❌ {yaml_file.name}")
+    else:
+        _info("无 Tools 配置")
+
     print()
 
 
