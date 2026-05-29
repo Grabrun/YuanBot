@@ -171,10 +171,16 @@ class TestProactiveStrategyShouldSend:
     @pytest.mark.asyncio
     async def test_should_send_greeting_blocked_in_quiet_hours(self):
         """greeting 类型在免打扰时段应被阻止"""
-        # 使用跨越当前时间的免打扰时段（23:00-07:00 跨午夜）
+        from unittest.mock import patch
+
+        # 固定时间为凌晨 2:00，在 23:00-07:00 免打扰时段内
+        fixed_time = datetime(2026, 5, 23, 2, 0, 0)
         config = {"enabled": True, "quiet_hours_start": 23, "quiet_hours_end": 7, "max_per_day": 10}
         strategy = ProactiveStrategy(config=config)
-        result = await strategy.should_send("user1", "greeting")
+        with patch("yuanbot.proactive.strategy.datetime") as mock_dt:
+            mock_dt.now.return_value = fixed_time
+            mock_dt.side_effect = lambda *a, **kw: datetime(*a, **kw)
+            result = await strategy.should_send("user1", "greeting")
         assert result is False
 
 

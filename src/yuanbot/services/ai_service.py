@@ -109,9 +109,11 @@ class AIService:
         self,
         provider_manager: ProviderManager,
         config: dict[str, Any] | None = None,
+        metrics: dict[str, Any] | None = None,
     ):
         self._pm = provider_manager
         self._config = config or {}
+        self._metrics = metrics or {}
 
         # 重试配置
         self._max_retries = self._config.get("max_retries", _DEFAULT_MAX_RETRIES)
@@ -185,11 +187,13 @@ class AIService:
                     system_prompt=system_prompt,
                 )
                 self._circuit_breaker.record_success(provider_id)
+                self._record_ai_call(provider_id, actual_model, "success")
                 return response
 
             except Exception as e:
                 last_error = e
                 self._circuit_breaker.record_failure(provider_id)
+                self._record_ai_call(provider_id, actual_model, "failure")
                 if attempt < self._max_retries:
                     wait_seconds = min(2**attempt, 8)
                     logger.warning(
@@ -244,8 +248,10 @@ class AIService:
             ):
                 yield chunk
             self._circuit_breaker.record_success(provider_id)
+            self._record_ai_call(provider_id, actual_model, "success")
         except Exception:
             self._circuit_breaker.record_failure(provider_id)
+            self._record_ai_call(provider_id, actual_model, "failure")
             raise
 
     async def embed(
@@ -295,6 +301,18 @@ class AIService:
             self._circuit_breaker.record_failure(pid)
             raise
 
+    # ── 指标记录 ──────────────────────────────
+
+    def _record_ai_call(
+        self, provider_id: str, model: str, status: str
+    ) -> None:
+        """记录 AI 调用指标到 Prometheus 计数器（如果已配置）"""
+        ai_call_count = self._metrics.get("ai_call_count")
+        if ai_call_count:
+            ai_call_count.labels(
+                provider=provider_id, model=model, status=status
+            ).inc()
+
     # ── 速率限制 ──────────────────────────────
 
     def _check_rate_limit(self) -> None:
@@ -316,40 +334,13 @@ class AIService:
     def _resolve_model(self, model: str | None) -> tuple[str, str]:
         """解析模型参数，返回 (provider_id, model_id)
 
+        委托给 ProviderManager.resolve_model()。
         支持格式：
         - None: 使用默认提供商的默认模型
-        - "gpt-4o": 在当前提供商中查找
+        - "gpt-4o": 在默认提供商中查找
         - "openai/gpt-4o": 指定提供商+模型
         """
-        if model is None:
-            default_config = self._pm.get_default_provider()
-            if not default_config:
-                raise ValueError("No default AI provider configured")
-            default_model = default_config.default_model
-            if not default_model:
-                # 使用第一个 chat 模型
-                chat_models = self._pm.get_models(
-                    default_config.provider_id, model_type="chat"
-                )
-                if chat_models:
-                    default_model = chat_models[0].id
-                else:
-                    raise ValueError(
-                        f"No chat model found for provider '{default_config.provider_id}'"
-                    )
-            return default_config.provider_id, default_model
-
-        # 检查是否包含提供商前缀
-        if "/" in model:
-            pid, mid = model.split("/", 1)
-            return pid, mid
-
-        # 在默认提供商中查找
-        default_config = self._pm.get_default_provider()
-        if default_config:
-            return default_config.provider_id, model
-
-        raise ValueError(f"Cannot resolve model '{model}'")
+        return self._pm.resolve_model(model)
 
     async def _get_healthy_adapter(self, provider_id: str) -> AIProviderAdapter:
         """获取健康的适配器实例（检查熔断器状态）"""

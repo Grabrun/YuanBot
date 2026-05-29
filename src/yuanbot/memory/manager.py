@@ -543,10 +543,14 @@ class MemoryManager:
                 session_id="current",
             )
 
-        # 获取用户所有记忆
-        episodic = await self.get_episodic_memories(user_id)
-        fact = await self.get_fact_memories(user_id)
-        semantic = await self.get_semantic_memories(user_id)
+        # 获取用户所有记忆（并发查询减少延迟）
+        import asyncio
+
+        episodic, fact, semantic = await asyncio.gather(
+            self.get_episodic_memories(user_id),
+            self.get_fact_memories(user_id),
+            self.get_semantic_memories(user_id),
+        )
 
         all_memories = episodic + fact + semantic
 

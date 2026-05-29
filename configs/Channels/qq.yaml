@@ -1,0 +1,14 @@
+adapter: qq-open-adapter
+enabled: false
+config:
+  # QQ 开放平台 AppID
+  app_id: ""
+
+  # QQ 开放平台 AppSecret
+  app_secret: ""
+
+  # 启用的消息场景
+  # c2c: 单聊, group: 群聊, guild: 频道
+  enabled_scenes:
+    - c2c
+    - group

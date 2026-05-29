@@ -150,9 +150,51 @@ class ToolManager:
     def _sync_execute(self, tool_id: str, params: dict) -> ToolResult:
         """同步执行（在线程池中运行）
 
-        注意：实际工具实现需要在 executor 配置中指定 handler。
-        当前为占位实现，返回配置信息。
+        根据 executor.handler 配置动态导入并调用对应的执行器函数。
+        handler 格式: "yuanbot.tools.builtin.search_executor"
         """
+        config = self._tool_configs.get(tool_id, {})
+        executor_cfg = config.get("executor", {})
+        handler_path = executor_cfg.get("handler")
+
+        if handler_path:
+            try:
+                module_path, func_name = handler_path.rsplit(".", 1)
+                import importlib
+                module = importlib.import_module(module_path)
+                handler_func = getattr(module, func_name)
+
+                # handler 可能是同步或异步函数
+                import asyncio
+                if asyncio.iscoroutinefunction(handler_func):
+                    loop = asyncio.new_event_loop()
+                    try:
+                        result = loop.run_until_complete(handler_func(params))
+                    finally:
+                        loop.close()
+                else:
+                    result = handler_func(params)
+
+                return ToolResult(
+                    tool_id=tool_id,
+                    success=result.get("success", True),
+                    output=result,
+                    error=result.get("error"),
+                )
+            except Exception as exc:
+                logger.error(
+                    "tool_handler_error",
+                    tool_id=tool_id,
+                    handler=handler_path,
+                    error=str(exc),
+                )
+                return ToolResult(
+                    tool_id=tool_id,
+                    success=False,
+                    error=f"Handler error: {exc}",
+                )
+
+        # Fallback: 占位实现
         schema = self._tool_schemas.get(tool_id, {})
         func_name = schema.get("function", {}).get("name", tool_id)
 
@@ -162,7 +204,7 @@ class ToolManager:
             output={
                 "function": func_name,
                 "params": params,
-                "note": "Local executor placeholder - connect real handler via executor.handler",
+                "note": "No handler configured",
             },
         )
 

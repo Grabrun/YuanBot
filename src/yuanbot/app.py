@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import os
 from contextlib import asynccontextmanager
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -17,6 +18,13 @@ from fastapi import FastAPI
 from starlette.websockets import WebSocket
 
 from yuanbot.adapters.channel.web_adapter import WebAdapter
+from yuanbot.auth.admin_routes import init_admin_stores
+from yuanbot.auth.admin_routes import router as admin_router
+from yuanbot.auth.conversation_routes import init_conversation_store
+from yuanbot.auth.conversation_routes import router as conversation_router
+from yuanbot.auth.middleware import AuthManager, init_auth_manager
+from yuanbot.auth.routes import router as auth_router
+from yuanbot.auth.store import ConversationStore, UserStore
 from yuanbot.config import YuanBotConfig
 from yuanbot.core.types import BotResponse
 from yuanbot.gateway.privacy import PrivacyManager
@@ -114,10 +122,44 @@ def create_app(config: YuanBotConfig) -> FastAPI:
         memory_manager=memory_manager,
     )
 
-    # ── 7. Web 通道适配器 ─────────────────────
+    # ── 7. 认证与用户系统 ───────────────────────
+    import hashlib
+
+    auth_secret = hashlib.sha256(
+        f"yuanbot-{config.app_name}-{config.version}".encode()
+    ).hexdigest()
+    auth_manager = AuthManager(
+        secret_key=auth_secret,
+        token_expire_hours=24,
+    )
+    user_store = UserStore(data_dir="data")
+    conv_store = ConversationStore(data_dir="data")
+    auth_manager.set_user_store(user_store)
+    init_auth_manager(auth_manager)
+    init_conversation_store(conv_store)
+    init_admin_stores(user_store, conv_store)
+
+    # ── 8. Web 通道适配器 ─────────────────────
     web_adapter = WebAdapter()
 
-    # ── 8. 配置热加载监听器 ─────────────────────
+    # ── 8. TTS 系统 ─────────────────────────────
+    from yuanbot.tts.manager import TTSManager
+
+    tts_manager = TTSManager()
+    try:
+        from yuanbot.tts.edge_tts_adapter import EdgeTTSAdapter
+
+        tts_manager.register_adapter(EdgeTTSAdapter())
+    except Exception:
+        pass
+    try:
+        from yuanbot.tts.openai_tts_adapter import OpenAITTSAdapter
+
+        tts_manager.register_adapter(OpenAITTSAdapter())
+    except Exception:
+        pass
+
+    # ── 9. 配置热加载监听器 ─────────────────────
     config_dir = Path("configs")
     config_watcher = ConfigWatcher(config_dir=config_dir)
 
@@ -156,6 +198,24 @@ def create_app(config: YuanBotConfig) -> FastAPI:
         # 初始化记忆管理器（包括自动 Redis 缓存）
         await memory_manager.initialize()
 
+        # 初始化用户与会话存储
+        await user_store.initialize()
+        await conv_store.initialize()
+
+        # 首次启动自动创建管理员
+        if user_store.user_count == 0:
+            import os
+
+            admin_password = os.environ.get("YUANBOT_ADMIN_PASSWORD", "admin123")
+            user_store.create_user(
+                username="admin",
+                password=admin_password,
+                display_name="管理员",
+                role="admin",
+            )
+            print(f"🌸 已自动创建管理员账号 (admin / {admin_password})")
+            print("   请通过环境变量 YUANBOT_ADMIN_PASSWORD 设置安全密码")
+
         # 启动 Web 适配器
         async def on_message(msg: Any) -> BotResponse:
             return await orchestrator.process_message(msg)
@@ -188,6 +248,17 @@ def create_app(config: YuanBotConfig) -> FastAPI:
         lifespan=lifespan,
     )
 
+    # CORS 配置
+    from fastapi.middleware.cors import CORSMiddleware
+
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+
     # 将组件存储到 app.state 供外部访问
     app.state.memory_manager = memory_manager
     app.state.skill_manager = skill_manager
@@ -201,10 +272,19 @@ def create_app(config: YuanBotConfig) -> FastAPI:
     app.state.proactive_strategy = proactive_strategy
     app.state.event_engine = event_engine
     app.state.config_watcher = config_watcher
+    app.state.auth_manager = auth_manager
+    app.state.user_store = user_store
+    app.state.conv_store = conv_store
+    app.state.tts_manager = tts_manager
 
     # 初始化隐私管理器
     privacy_manager = PrivacyManager(memory_manager=memory_manager)
     app.state.privacy_manager = privacy_manager
+
+    # 注册认证和会话路由
+    app.include_router(auth_router)
+    app.include_router(conversation_router)
+    app.include_router(admin_router)
 
     # 注册路由
     _register_routes(app, orchestrator, memory_manager, config)
@@ -212,20 +292,207 @@ def create_app(config: YuanBotConfig) -> FastAPI:
     # 注册请求指标中间件
     _register_metrics_middleware(app)
 
+    # 将 Prometheus 指标注入 AIService
+    ai_service._metrics = getattr(app.state, "metrics", {})
+
+    # 注册静态文件服务（WebUI）
+    static_dir = Path(__file__).parent / "static"
+    if static_dir.exists():
+        from fastapi.staticfiles import StaticFiles
+
+        app.mount("/assets", StaticFiles(directory=str(static_dir / "assets")), name="assets")
+
+        @app.get("/vite.svg")
+        async def serve_vite_svg():
+            from fastapi.responses import FileResponse
+
+            svg = static_dir / "vite.svg"
+            if svg.exists():
+                return FileResponse(svg)
+            return {"error": "not found"}
+
+    # SPA fallback: 所有未匹配的路由返回 index.html
+    @app.get("/{path:path}")
+    async def serve_spa(path: str):
+        """SPA fallback - 返回 index.html 让前端路由处理"""
+        from fastapi.responses import FileResponse
+
+        index = static_dir / "index.html" if static_dir.exists() else None
+        if index and index.exists():
+            return FileResponse(index)
+        return {
+            "message": "YuanBot API is running. WebUI not built yet. Run: cd webui && npm run build"
+        }
+
     # 注册 WebSocket 路由
     @app.websocket("/ws")
     async def websocket_endpoint(ws: WebSocket):
-        """WebSocket 聊天端点
+        """WebSocket 聊天端点（无认证，向后兼容）"""
+        await web_adapter.handle_websocket(ws)
 
-        连接后即可通过 JSON 消息进行实时对话：
+    @app.websocket("/ws/chat")
+    async def websocket_chat_endpoint(ws: WebSocket):
+        """WebSocket 认证聊天端点
 
-            ws://host:port/ws
+        连接时需要在 URL 参数中携带 JWT token:
+            ws://host:port/ws/chat?token=<jwt>
 
         消息格式：
-            {"type": "message", "text": "你好"}
+            {"type": "message", "text": "你好", "conversation_id": "xxx"}
             {"type": "ping"}
+            {"type": "subscribe", "conversation_id": "xxx"}
+
+        服务端推送：
+            {"type": "response", "text": "...", "conversation_id": "..."}
+            {"type": "stream_start", "conversation_id": "..."}
+            {"type": "stream_delta", "delta": "..."}
+            {"type": "stream_end", "conversation_id": "..."}
         """
-        await web_adapter.handle_websocket(ws)
+        import json
+
+        import structlog
+
+        from yuanbot.auth.middleware import get_current_user_from_ws
+
+        logger = structlog.get_logger("websocket")
+
+        user = await get_current_user_from_ws(ws)
+        if not user:
+            await ws.close(code=4001, reason="Unauthorized")
+            return
+
+        await ws.accept()
+        session_id = f"ws_{user.user_id}"
+        active_conv_id: str | None = None
+        logger.info("ws_chat_connected", user_id=user.user_id, username=user.username)
+
+        try:
+            while True:
+                raw = await ws.receive_text()
+                try:
+                    data = json.loads(raw)
+                except json.JSONDecodeError:
+                    await ws.send_text(json.dumps({"type": "error", "message": "Invalid JSON"}))
+                    continue
+
+                msg_type = data.get("type", "message")
+
+                if msg_type == "ping":
+                    await ws.send_text(json.dumps({"type": "pong"}))
+                    continue
+
+                if msg_type == "subscribe":
+                    active_conv_id = data.get("conversation_id")
+                    await ws.send_text(json.dumps({
+                        "type": "subscribed",
+                        "conversation_id": active_conv_id,
+                    }))
+                    continue
+
+                if msg_type == "message":
+                    text = data.get("text", "")
+                    conv_id = data.get("conversation_id") or active_conv_id
+                    if not text:
+                        continue
+
+                    # 保存用户消息到会话
+                    conv_store_inst = app.state.conv_store
+                    if conv_id:
+                        conv_store_inst.add_message(conv_id, user.user_id, "user", text)
+
+                    # 通知开始生成
+                    await ws.send_text(json.dumps({
+                        "type": "stream_start",
+                        "conversation_id": conv_id,
+                    }))
+
+                    try:
+                        response = await orchestrator.process_message(
+                            _make_user_message(user, text, session_id)
+                        )
+                        reply_text = response.content.text if response.content else "收到~"
+
+                        # 模拟流式推送（逐句发送）
+                        sentences = (
+                            reply_text
+                            .replace("。", "。\n")
+                            .replace("！", "！\n")
+                            .replace("？", "？\n")
+                            .split("\n")
+                        )
+                        for sent in sentences:
+                            if sent.strip():
+                                await ws.send_text(json.dumps({
+                                    "type": "stream_delta",
+                                    "delta": sent,
+                                }, ensure_ascii=False))
+
+                        # 保存 AI 回复
+                        if conv_id:
+                            conv_store_inst.add_message(
+                                conv_id, user.user_id, "assistant", reply_text
+                            )
+
+                        await ws.send_text(json.dumps({
+                            "type": "stream_end",
+                            "conversation_id": conv_id,
+                            "full_text": reply_text,
+                        }, ensure_ascii=False))
+
+                    except Exception as e:
+                        logger.error("ws_chat_error", error=str(e))
+                        await ws.send_text(json.dumps({
+                            "type": "error",
+                            "message": "AI 服务暂时不可用",
+                        }))
+
+        except Exception as e:
+            logger.info("ws_chat_disconnected", user_id=user.user_id, error=str(e))
+
+    @app.websocket("/ws/logs")
+    async def websocket_logs_endpoint(ws: WebSocket):
+        """WebSocket 实时日志流（仅管理员）"""
+        import json
+
+        import structlog
+
+        from yuanbot.auth.middleware import get_current_user_from_ws
+
+        logger = structlog.get_logger("websocket")
+
+        user = await get_current_user_from_ws(ws)
+        if not user or user.role.value != "admin":
+            await ws.close(code=4003, reason="Admin access required")
+            return
+
+        await ws.accept()
+        logger.info("ws_logs_connected", user_id=user.user_id)
+        try:
+            # 简单实现：定期推送系统状态
+            import asyncio
+
+            while True:
+                await asyncio.sleep(5)
+                try:
+                    import psutil
+
+                    status = {
+                        "type": "log",
+                        "level": "info",
+                        "message": f"CPU: {psutil.cpu_percent(interval=0.1)}% | "
+                                    f"Memory: {psutil.virtual_memory().percent}%",
+                        "timestamp": datetime.now().isoformat(),
+                    }
+                except ImportError:
+                    status = {
+                        "type": "log",
+                        "level": "info",
+                        "message": "系统运行正常",
+                        "timestamp": datetime.now().isoformat(),
+                    }
+                await ws.send_text(json.dumps(status))
+        except Exception:
+            pass
 
     return app
 
@@ -235,6 +502,20 @@ def _load_persona(config: YuanBotConfig) -> Any:
     from yuanbot.persona.default import DefaultPersona
 
     return DefaultPersona(relationship_stage="initial")
+
+
+def _make_user_message(user: Any, text: str, session_id: str) -> Any:
+    """将认证用户的消息转换为 UserMessage"""
+    from yuanbot.core.types import ContentType, UserMessage
+
+    return UserMessage(
+        platform="web",
+        platform_user_id=user.user_id,
+        yuanbot_user_id=user.user_id,
+        session_id=session_id,
+        content_type=ContentType.TEXT,
+        text=text,
+    )
 
 
 def _register_metrics_middleware(app: FastAPI) -> None:
@@ -539,17 +820,122 @@ def _register_routes(
         """查看 AI 提供商状态"""
         pm: ProviderManager = app.state.provider_manager
         return {
-            "providers": [
-                {
-                    "provider_id": p.provider_id,
-                    "enabled": p.enabled,
-                    "default_model": p.default_model,
-                    "model_count": len(p.models),
-                }
-                for p in pm.get_enabled_providers()
-            ],
+            "providers": pm.list_providers(),
             "ai_service_health": app.state.ai_service.get_health_status(),
         }
+
+    @app.get("/api/providers/{provider_id}")
+    async def get_provider_detail(provider_id: str):
+        """查看单个提供商详情"""
+        from fastapi.responses import JSONResponse
+
+        pm: ProviderManager = app.state.provider_manager
+        provider = pm.get_provider(provider_id)
+        if not provider:
+            return JSONResponse(
+                status_code=404,
+                content={"error": f"Provider '{provider_id}' not found"},
+            )
+        return {
+            "provider_id": provider.provider_id,
+            "name": provider.name,
+            "adapter": provider.adapter,
+            "enabled": provider.enabled,
+            "default_model": provider.default_model,
+            "embedding_model": provider.embedding_model,
+            "models": [
+                {
+                    "id": m.id,
+                    "type": m.type,
+                    "max_tokens": m.max_tokens,
+                    "dimension": m.dimension,
+                }
+                for m in provider.models
+            ],
+        }
+
+    @app.put("/api/providers/active")
+    async def set_active_provider(request: dict[str, Any]):
+        """动态切换活跃提供商
+
+        请求体：
+            {
+                "provider_id": "deepseek",   // 切换默认对话提供商
+                "type": "default"             // "default" 或 "embedding"
+            }
+        """
+        from fastapi.responses import JSONResponse
+
+        pm: ProviderManager = app.state.provider_manager
+        provider_id = request.get("provider_id")
+        switch_type = request.get("type", "default")
+
+        if not provider_id:
+            return JSONResponse(
+                status_code=400,
+                content={"error": "provider_id is required"},
+            )
+
+        provider = pm.get_provider(provider_id)
+        if not provider:
+            return JSONResponse(
+                status_code=404,
+                content={"error": f"Provider '{provider_id}' not found"},
+            )
+
+        if not provider.enabled:
+            return JSONResponse(
+                status_code=400,
+                content={"error": f"Provider '{provider_id}' is disabled"},
+            )
+
+        try:
+            if switch_type == "embedding":
+                pm.set_embedding_provider(provider_id)
+            else:
+                pm.set_default_provider(provider_id)
+        except ValueError as e:
+            return JSONResponse(
+                status_code=400,
+                content={"error": str(e)},
+            )
+
+        return {
+            "status": "ok",
+            "message": f"{'Embedding' if switch_type == 'embedding' else 'Default'} "
+                        f"provider switched to '{provider_id}'",
+            "provider_id": provider_id,
+            "default_model": provider.default_model,
+        }
+
+    @app.post("/api/providers/{provider_id}/reload")
+    async def reload_provider(provider_id: str):
+        """热重载指定提供商配置"""
+        from fastapi.responses import JSONResponse
+
+        pm: ProviderManager = app.state.provider_manager
+        provider = pm.get_provider(provider_id)
+        if not provider:
+            return JSONResponse(
+                status_code=404,
+                content={"error": f"Provider '{provider_id}' not found"},
+            )
+
+        # 从 YAML 重新加载
+        import yaml
+
+        yaml_path = Path("configs/Providers") / f"{provider_id}.yaml"
+        if not yaml_path.exists():
+            return JSONResponse(
+                status_code=404,
+                content={"error": f"Config file not found: {yaml_path}"},
+            )
+
+        with open(yaml_path) as f:
+            new_config = yaml.safe_load(f)
+
+        await pm.reload_provider(provider_id, new_config)
+        return {"status": "ok", "message": f"Provider '{provider_id}' reloaded"}
 
     @app.get("/api/gdpr/export")
     async def gdpr_export(user_id: str):
@@ -644,6 +1030,84 @@ def _register_routes(
             "skills": sm.get_all_skills(),
             "tools": tm.get_all_tools(),
         }
+
+    # ── TTS 语音合成 API ─────────────────────────
+
+    @app.post("/api/tts")
+    async def tts_synthesize(request: dict[str, Any]):
+        """语音合成接口
+
+        请求体:
+            {
+                "text": "你好世界",         // 必填，待合成文本
+                "engine": "edge-tts",       // 可选，指定引擎
+                "voice": "zh-CN-XiaoxiaoNeural", // 可选，指定音色
+                "persona_id": "default",    // 可选，人设 ID
+                "rate": 1.0,                // 可选，语速倍率
+                "pitch": 1.0,               // 可选，音调倍率
+                "format": "mp3"             // 可选，输出格式
+            }
+
+        响应: 音频文件 (audio/mpeg)
+        """
+        from fastapi.responses import JSONResponse, Response
+
+        tts = app.state.tts_manager
+        text = request.get("text", "")
+        if not text:
+            return JSONResponse(
+                status_code=400,
+                content={"error": "text is required"},
+            )
+
+        try:
+            audio = await tts.synthesize(
+                text=text,
+                engine=request.get("engine"),
+                voice=request.get("voice"),
+                persona_id=request.get("persona_id"),
+                rate=request.get("rate"),
+                pitch=request.get("pitch"),
+                output_format=request.get("format", "mp3"),
+            )
+            return Response(
+                content=audio,
+                media_type="audio/mpeg",
+                headers={"Content-Disposition": "inline; filename=tts.mp3"},
+            )
+        except Exception as e:
+            return JSONResponse(
+                status_code=500,
+                content={"error": str(e)},
+            )
+
+    @app.get("/api/tts/voices")
+    async def tts_voices(engine: str | None = None):
+        """列出可用音色
+
+        Args:
+            engine: 可选，指定引擎名称过滤
+        """
+        tts = app.state.tts_manager
+        voices = tts.list_voices(engine)
+        return {
+            "voices": [
+                {
+                    "id": v.id,
+                    "name": v.name,
+                    "language": v.language,
+                    "gender": v.gender,
+                }
+                for v in voices
+            ],
+            "engines": tts.list_engines(),
+        }
+
+    @app.get("/api/tts/status")
+    async def tts_status():
+        """查看 TTS 系统状态"""
+        tts = app.state.tts_manager
+        return await tts.get_status()
 
     # ── 扩展市场 API ────────────────────────────
 

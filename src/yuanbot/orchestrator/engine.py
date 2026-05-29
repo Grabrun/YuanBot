@@ -228,7 +228,7 @@ class OrchestratorEngine:
     @staticmethod
     def _build_messages(working_memory: list[Any]) -> list[Message]:
         """从工作记忆构建消息列表"""
-        messages = []
+        messages: list[Message] = []
         for node in working_memory:
             content = node.content
             if content.startswith("[用户] "):

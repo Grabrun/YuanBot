@@ -1,0 +1,23 @@
+adapter: wechat-clawbot-adapter
+enabled: false
+config:
+  # iLink Bot Token（通过 QR 码登录获取，不要手动填写）
+  token: ""
+
+  # iLink 用户 ID
+  ilink_user_id: ""
+
+  # Bot ID
+  bot_id: ""
+
+  # API 基础 URL
+  base_url: "https://ilinkai.weixin.qq.com"
+
+  # CDN 基础 URL
+  cdn_base_url: "https://novac2c.cdn.weixin.qq.com/c2c"
+
+  # Bot Agent 标识
+  bot_agent: "YuanBot"
+
+  # 同步游标（自动生成，不要手动修改）
+  sync_buf: ""

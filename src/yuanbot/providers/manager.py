@@ -122,6 +122,65 @@ class ProviderManager:
                     error=str(e),
                 )
 
+    def validate_provider_config(self, raw: dict[str, Any]) -> list[str]:
+        """验证 Provider 配置的必需字段
+
+        Args:
+            raw: 原始 YAML 配置字典
+
+        Returns:
+            错误消息列表，空列表表示验证通过
+        """
+        errors: list[str] = []
+
+        # 必需字段
+        if not raw.get("provider_id"):
+            errors.append("缺少 provider_id")
+        if not raw.get("adapter"):
+            errors.append("缺少 adapter 字段")
+
+        config = raw.get("config", {})
+        if not config:
+            errors.append("缺少 config 字段")
+            return errors
+
+        # base_url 验证
+        base_url = config.get("base_url", "")
+        if not base_url:
+            errors.append("config.base_url 不能为空")
+        elif not base_url.startswith(("http://", "https://")):
+            errors.append(f"config.base_url 格式无效: {base_url}")
+
+        # models 验证
+        models = config.get("models", [])
+        if not models:
+            errors.append("config.models 不能为空")
+        else:
+            for i, m in enumerate(models):
+                if not isinstance(m, dict):
+                    errors.append(f"config.models[{i}] 必须是字典")
+                    continue
+                if not m.get("id"):
+                    errors.append(f"config.models[{i}].id 不能为空")
+                mtype = m.get("type", "chat")
+                if mtype not in ("chat", "embedding", "multimodal"):
+                    errors.append(
+                        f"config.models[{i}].type 无效: {mtype}"
+                        f" (应为 chat/embedding/multimodal)"
+                    )
+
+        # default 模型必须在列表中
+        default_model = config.get("default")
+        if default_model and models:
+            model_ids = {m["id"] for m in models if isinstance(m, dict)}
+            if default_model not in model_ids:
+                errors.append(
+                    f"config.default '{default_model}' 不在 models 列表中"
+                    f" (可用: {sorted(model_ids)})"
+                )
+
+        return errors
+
     def _load_provider_from_yaml(self, yaml_path: Path) -> None:
         """从单个 YAML 文件加载 Provider 配置"""
         with open(yaml_path) as f:
@@ -129,6 +188,16 @@ class ProviderManager:
 
         if not raw:
             return
+
+        # 验证配置
+        validation_errors = self.validate_provider_config(raw)
+        if validation_errors:
+            logger.error(
+                "provider_validation_failed",
+                file=yaml_path.name,
+                errors=validation_errors,
+            )
+            # 严格模式下可以跳过加载，目前仅记录警告
 
         # 替换环境变量占位符
         raw = _substitute_env_vars(raw)
@@ -386,6 +455,77 @@ class ProviderManager:
             enabled=new_provider_config.enabled,
             model_count=len(models),
         )
+
+    def resolve_model(self, model_ref: str | None = None) -> tuple[str, str]:
+        """解析模型引用，返回 (provider_id, model_id)
+
+        支持格式：
+        - None: 使用默认提供商的默认模型
+        - "gpt-4o": 在默认提供商中查找
+        - "openai/gpt-4o": 指定提供商+模型
+        - "deepseek/deepseek-chat": 指定提供商+模型
+
+        Returns:
+            (provider_id, model_id) 元组
+
+        Raises:
+            ValueError: 无法解析模型引用
+        """
+        if model_ref is None:
+            default_config = self.get_default_provider()
+            if not default_config:
+                raise ValueError("No default AI provider configured")
+            default_model = default_config.default_model
+            if not default_model:
+                # 使用第一个 chat 模型
+                chat_models = self.get_models(
+                    default_config.provider_id, model_type="chat"
+                )
+                if chat_models:
+                    default_model = chat_models[0].id
+                else:
+                    raise ValueError(
+                        f"No chat model found for provider '{default_config.provider_id}'"
+                    )
+            return default_config.provider_id, default_model
+
+        # 检查是否包含提供商前缀 (provider/model)
+        if "/" in model_ref:
+            pid, mid = model_ref.split("/", 1)
+            if pid not in self._providers:
+                raise ValueError(
+                    f"Provider '{pid}' not found. "
+                    f"Available: {list(self._providers.keys())}"
+                )
+            return pid, mid
+
+        # 在默认提供商中查找
+        default_config = self.get_default_provider()
+        if default_config:
+            return default_config.provider_id, model_ref
+
+        raise ValueError(f"Cannot resolve model '{model_ref}'")
+
+    def list_providers(self) -> list[dict[str, Any]]:
+        """列出所有 Provider 的摘要信息
+
+        Returns:
+            包含 provider 信息的字典列表
+        """
+        result = []
+        for config in self._providers.values():
+            result.append({
+                "provider_id": config.provider_id,
+                "name": config.name,
+                "adapter": config.adapter,
+                "enabled": config.enabled,
+                "default_model": config.default_model,
+                "embedding_model": config.embedding_model,
+                "model_count": len(config.models),
+                "is_default": config.provider_id == self._default_provider_id,
+                "is_embedding": config.provider_id == self._embedding_provider_id,
+            })
+        return result
 
     async def close_all(self) -> None:
         """关闭所有适配器"""

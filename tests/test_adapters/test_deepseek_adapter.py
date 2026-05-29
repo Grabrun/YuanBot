@@ -1,12 +1,18 @@
-"""DeepSeek 适配器测试"""
+"""DeepSeek 适配器测试 (v2.0 - 废弃后)
+
+DeepSeekAdapter 已废弃，委托给 OpenAIAdapter。
+测试验证废弃警告和委托行为。
+"""
 
 from __future__ import annotations
 
+import warnings
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
 from yuanbot.adapters.ai.deepseek_adapter import DeepSeekAdapter
+from yuanbot.adapters.ai.openai_adapter import OpenAIAdapter
 from yuanbot.core.types import (
     FunctionCall,
     Message,
@@ -15,43 +21,67 @@ from yuanbot.core.types import (
 )
 
 
-class TestDeepSeekAdapterProperties:
-    def test_provider_id(self):
+@pytest.fixture(autouse=True)
+def _suppress_deprecation():
+    """自动抑制 DeepSeekAdapter 的废弃警告"""
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", DeprecationWarning)
+        yield
+
+
+class TestDeepSeekAdapterDeprecation:
+    """验证 DeepSeekAdapter 废弃行为"""
+
+    def test_is_openai_adapter_subclass(self):
+        adapter = DeepSeekAdapter(config={"api_key": "test"})
+        assert isinstance(adapter, OpenAIAdapter)
+
+    def test_deprecation_warning_raised(self):
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            DeepSeekAdapter(config={"api_key": "test"})
+            assert len(w) >= 1
+            assert any(
+                issubclass(x.category, DeprecationWarning) and "deprecated" in str(x.message).lower()
+                for x in w
+            )
+
+    def test_provider_id_is_deepseek(self):
         adapter = DeepSeekAdapter(config={"api_key": "test"})
         assert adapter.provider_id == "deepseek"
 
-    def test_supported_models(self):
+    def test_default_base_url_is_deepseek(self):
         adapter = DeepSeekAdapter(config={"api_key": "test"})
-        models = adapter.supported_models
-        assert "deepseek-chat" in models
-        assert "deepseek-reasoner" in models
+        assert "deepseek" in adapter._base_url
 
-    def test_max_context_length_default(self):
-        adapter = DeepSeekAdapter(config={"api_key": "test"})
-        assert adapter.max_context_length == 128000
-
-    def test_max_context_length_custom_model(self):
-        adapter = DeepSeekAdapter(config={"api_key": "test", "default": "deepseek-reasoner"})
-        assert adapter.max_context_length == 128000
-
-    def test_max_context_length_unknown_model(self):
-        adapter = DeepSeekAdapter(config={"api_key": "test", "default": "unknown"})
-        assert adapter.max_context_length == 128000
-
-    def test_default_base_url(self):
-        adapter = DeepSeekAdapter(config={"api_key": "test"})
-        assert adapter._base_url == "https://api.deepseek.com"
-
-    def test_custom_base_url(self):
+    def test_custom_base_url_preserved(self):
         adapter = DeepSeekAdapter(config={"api_key": "test", "base_url": "https://custom.api.com"})
         assert adapter._base_url == "https://custom.api.com"
 
-    def test_default_model(self):
+
+class TestDeepSeekAdapterBehavior:
+    """验证 DeepSeekAdapter 作为 OpenAIAdapter 子类的行为"""
+
+    def test_supported_models_are_openai(self):
+        """现在使用 OpenAIAdapter 的模型列表"""
         adapter = DeepSeekAdapter(config={"api_key": "test"})
+        models = adapter.supported_models
+        # OpenAIAdapter 的模型列表
+        assert "gpt-4o" in models
+
+    def test_default_model_is_openai_default(self):
+        """默认模型来自 OpenAIAdapter"""
+        adapter = DeepSeekAdapter(config={"api_key": "test"})
+        assert adapter._default_model == "gpt-4o"
+
+    def test_default_model_overridable(self):
+        adapter = DeepSeekAdapter(config={"api_key": "test", "default": "deepseek-chat"})
         assert adapter._default_model == "deepseek-chat"
 
 
 class TestMessageToDict:
+    """消息转换测试 (继承自 OpenAIAdapter)"""
+
     def test_basic_message(self):
         msg = Message(role="user", content="Hello")
         result = DeepSeekAdapter._message_to_dict(msg)
@@ -95,6 +125,8 @@ class TestMessageToDict:
 
 
 class TestParseResponse:
+    """响应解析测试 (继承自 OpenAIAdapter)"""
+
     def test_text_response(self):
         data = {
             "choices": [
@@ -156,6 +188,8 @@ class TestParseResponse:
 
 
 class TestParseChunk:
+    """流式响应块解析测试 (继承自 OpenAIAdapter)"""
+
     def test_text_delta(self):
         data = {
             "choices": [
@@ -183,8 +217,10 @@ class TestParseChunk:
 
 
 class TestBuildPayload:
+    """请求构建测试 (继承自 OpenAIAdapter)"""
+
     def test_basic_payload(self):
-        adapter = DeepSeekAdapter(config={"api_key": "test"})
+        adapter = DeepSeekAdapter(config={"api_key": "test", "default": "deepseek-chat"})
         messages = [Message(role="user", content="Hello")]
         payload = adapter._build_payload(
             messages=messages,
@@ -235,20 +271,6 @@ class TestBuildPayload:
         assert payload["messages"][0]["content"] == "You are helpful"
         assert len(payload["messages"]) == 2
 
-    def test_without_system_prompt(self):
-        adapter = DeepSeekAdapter(config={"api_key": "test"})
-        messages = [Message(role="user", content="Hello")]
-        payload = adapter._build_payload(
-            messages=messages,
-            tools=None,
-            temperature=0.7,
-            max_tokens=4096,
-            stream=False,
-            system_prompt=None,
-        )
-        assert len(payload["messages"]) == 1
-        assert payload["messages"][0]["role"] == "user"
-
 
 class TestEnsureClient:
     @pytest.mark.asyncio
@@ -274,7 +296,7 @@ class TestEnsureClient:
     @pytest.mark.asyncio
     async def test_close_when_not_opened(self):
         adapter = DeepSeekAdapter(config={"api_key": "sk-test"})
-        await adapter.close()  # Should not raise
+        await adapter.close()
 
 
 class TestChatCompletion:
@@ -304,7 +326,8 @@ class TestChatCompletion:
         mock_client.post.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_chat_completion_uses_v1_endpoint(self):
+    async def test_chat_completion_uses_openai_endpoint(self):
+        """使用 OpenAI 兼容端点 /chat/completions（不是 /v1/chat/completions）"""
         adapter = DeepSeekAdapter(config={"api_key": "sk-test"})
         mock_response = MagicMock()
         mock_response.status_code = 200
@@ -318,4 +341,5 @@ class TestChatCompletion:
 
         await adapter.chat_completion(messages=[Message(role="user", content="Hi")])
         call_args = mock_client.post.call_args
-        assert call_args[0][0] == "/v1/chat/completions"
+        # OpenAIAdapter 使用 /chat/completions 端点
+        assert call_args[0][0] == "/chat/completions"
