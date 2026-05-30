@@ -234,3 +234,38 @@ async def restore_backup(request: dict, admin: User = Depends(require_admin)) ->
 
     logger.info("backup_restored", name=backup_name, by=admin.username)
     return {"status": "ok", **result}
+
+
+# ── 日志管理 ──────────────────────────────────
+
+
+@router.get("/logging/status")
+async def get_logging_status(admin: User = Depends(require_admin)) -> dict:
+    """获取当前日志配置状态"""
+    from yuanbot.infrastructure.logging_config import get_log_status
+
+    return get_log_status()
+
+
+@router.put("/logging/level")
+async def set_logging_level(
+    body: dict,
+    admin: User = Depends(require_admin),
+) -> dict:
+    """动态调整日志级别
+
+    请求体:
+        {"level": "DEBUG"}
+    """
+    level = body.get("level")
+    if not level:
+        raise HTTPException(status_code=400, detail="level is required")
+
+    from yuanbot.infrastructure.logging_config import set_log_level
+
+    result = set_log_level(level)
+    if not result.get("success"):
+        raise HTTPException(status_code=400, detail=result.get("error", "Unknown error"))
+
+    logger.info("log_level_changed", by=admin.username, level=level)
+    return result

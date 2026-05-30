@@ -235,6 +235,15 @@ def main() -> None:
     marketplace_sub.add_parser("categories", help="查看扩展分类统计")
     marketplace_sub.add_parser("refresh", help="刷新市场索引缓存")
 
+    # yuanbot migrate
+    migrate_parser = subparsers.add_parser("migrate", help="数据库迁移工具 (SQLite→MySQL)")
+    migrate_sub = migrate_parser.add_subparsers(dest="migrate_action")
+    migrate_sub.add_parser("validate", help="验证源数据库和目标数据库")
+    migrate_run_parser = migrate_sub.add_parser("run", help="执行迁移")
+    migrate_run_parser.add_argument("--dry-run", action="store_true", help="只统计不写入")
+    migrate_run_parser.add_argument("--batch-size", type=int, default=1000, help="批量大小")
+    migrate_run_parser.add_argument("--tables", nargs="+", help="指定迁移的表")
+
     args = parser.parse_args()
 
     # 配置日志
@@ -319,6 +328,8 @@ def main() -> None:
         _run_search(args)
     elif args.command == "marketplace":
         _run_marketplace(args)
+    elif args.command == "migrate":
+        _run_migrate(args)
     else:
         parser.print_help()
 
@@ -1882,6 +1893,146 @@ def _run_marketplace_refresh(args: argparse.Namespace) -> None:
 
     asyncio.run(_do())
     print()
+
+
+# --------------------------------------------------------------------------- #
+# yuanbot migrate
+# --------------------------------------------------------------------------- #
+
+
+def _run_migrate(args: argparse.Namespace) -> None:
+    """数据库迁移工具"""
+    import os
+
+    from yuanbot.infrastructure.migration import DatabaseMigrator, MigrationError
+
+    action = getattr(args, "migrate_action", None)
+
+    # 读取 MySQL 配置
+    mysql_config = {
+        "host": os.environ.get("YUANBOT_MYSQL_HOST", "localhost"),
+        "port": int(os.environ.get("YUANBOT_MYSQL_PORT", "3306")),
+        "user": os.environ.get("YUANBOT_MYSQL_USER", "yuanbot"),
+        "password": os.environ.get("YUANBOT_MYSQL_PASSWORD", ""),
+        "database": os.environ.get("YUANBOT_MYSQL_DATABASE", "yuanbot"),
+    }
+    sqlite_path = os.environ.get("YUANBOT_SQLITE_PATH", "data/yuanbot.db")
+
+    migrator = DatabaseMigrator(
+        sqlite_path=sqlite_path,
+        mysql_config=mysql_config,
+    )
+
+    if action == "validate":
+        _header("数据库迁移 - 验证")
+
+        # 验证源
+        print(f"\n  {_c('源数据库 (SQLite):', _BOLD)}")
+        try:
+            source = migrator.validate_source()
+            _ok(f"路径: {source['path']}")
+            _ok(f"大小: {source['size_mb']} MB")
+            _ok(f"总行数: {source['total_rows']}")
+            for table, count in source["migration_tables"].items():
+                if count is not None:
+                    print(f"    {table}: {count} 行")
+                else:
+                    print(f"    {table}: {_c('表不存在', _YELLOW)}")
+        except MigrationError as e:
+            _fail(str(e))
+            return
+
+        # 验证目标
+        print(f"\n  {_c('目标数据库 (MySQL):', _BOLD)}")
+        target = migrator.validate_target()
+        if target["valid"]:
+            _ok(f"连接: {target['host']}:{mysql_config['port']}/{target['database']}")
+            for table, info in target["tables"].items():
+                if info["exists"]:
+                    print(f"    {table}: {info['rows']} 行")
+                else:
+                    print(f"    {table}: {_c('表不存在', _YELLOW)}")
+        else:
+            _fail(f"连接失败: {target.get('error')}")
+
+        migrator.close()
+        print()
+
+    elif action == "run":
+        dry_run = getattr(args, "dry_run", False)
+        batch_size = getattr(args, "batch_size", 1000)
+        tables = getattr(args, "tables", None)
+
+        mode = "试运行" if dry_run else "正式迁移"
+        _header(f"数据库迁移 - {mode}")
+
+        # 先验证
+        try:
+            source = migrator.validate_source()
+            _ok(f"源数据库: {source['path']} ({source['size_mb']} MB, {source['total_rows']} 行)")
+        except MigrationError as e:
+            _fail(f"源数据库验证失败: {e}")
+            return
+
+        if not dry_run:
+            target = migrator.validate_target()
+            if not target["valid"]:
+                _fail(f"目标数据库验证失败: {target.get('error')}")
+                return
+            _ok(f"目标数据库: {target['host']}/{target['database']}")
+
+            # 确认
+            print(f"\n  {_c('⚠️  警告: 这将覆盖 MySQL 中的现有数据!', _YELLOW)}")
+            confirm = input("  确认执行迁移? (yes/no): ")
+            if confirm.lower() != "yes":
+                print("  已取消。")
+                return
+
+        # 执行
+        result = migrator.run_migration(
+            tables=tables,
+            batch_size=batch_size,
+            dry_run=dry_run,
+        )
+
+        print(f"\n  {_c('迁移结果:', _BOLD)}")
+        for detail in result["details"]:
+            status = detail.get("status", "unknown")
+            table = detail.get("table", "?")
+            if status == "done":
+                migrated = detail.get("migrated", 0)
+                elapsed = detail.get("elapsed_seconds", 0)
+                _ok(f"{table}: {migrated} 行 ({elapsed}s)")
+            elif status == "dry_run":
+                rows = detail.get("rows", 0)
+                print(f"    {table}: {rows} 行 (待迁移)")
+            elif status == "skipped":
+                print(f"    {table}: 跳过 - {detail.get('reason')}")
+            else:
+                _fail(f"{table}: {detail.get('reason', '未知错误')}")
+
+        if result["success"]:
+            _ok(f"迁移完成! 共 {result['total_migrated']} 行")
+        else:
+            _fail(f"迁移有错误: {result['total_errors']} 行失败")
+
+        migrator.close()
+        print()
+
+    else:
+        _header("数据库迁移工具")
+        print("\n  用法:")
+        print("    yuanbot migrate validate   验证源和目标数据库")
+        print("    yuanbot migrate run        执行迁移")
+        print("    yuanbot migrate run --dry-run  试运行（只统计不写入）")
+        print("\n  环境变量:")
+        print("    YUANBOT_SQLITE_PATH       SQLite 路径 (默认: data/yuanbot.db)")
+        print("    YUANBOT_MYSQL_HOST        MySQL 主机 (默认: localhost)")
+        print("    YUANBOT_MYSQL_PORT        MySQL 端口 (默认: 3306)")
+        print("    YUANBOT_MYSQL_USER        MySQL 用户 (默认: yuanbot)")
+        print("    YUANBOT_MYSQL_PASSWORD    MySQL 密码")
+        print("    YUANBOT_MYSQL_DATABASE    MySQL 数据库 (默认: yuanbot)")
+        print()
 
 
 # --------------------------------------------------------------------------- #

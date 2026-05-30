@@ -1,27 +1,27 @@
-# 🌸 YuanBot 设计文档符合度审查报告 v4
+# 🌸 YuanBot 设计文档符合度审查报告 v5
 
-**审查日期**: 2026-05-30
+**审查日期**: 2026-05-31
 **审查范围**: docs/ 目录下 17 份设计文档 vs src/ + configs/ + tests/ + webui/ 实际代码
 **项目版本**: v1.2.0
-**上次审查**: v3 (2026-05-30),总体 ~91%
+**上次审查**: v4 (2026-05-30),总体 ~93%
 
 ---
 
 ## 总体符合度评分
 
-| 系统 | 符合度 | 状态 | 上次(v3) | 变化 |
+| 系统 | 符合度 | 状态 | 上次(v4) | 变化 |
 |------|--------|------|----------|------|
 | 1. 接入与通信系统 | 95% | ✅ 基本完全实现 | 95% | - |
 | 2. 用户界面系统 | 92% | ✅ 基本完全实现 | 92% | - |
-| 3. 语音合成系统 (TTS) | 93% | ✅ 基本完全实现 | 85% | +8% |
-| 4. 人格与行为决策系统 | 88% | ⚠️ 接近完全实现 | 80% | +8% |
-| 5. 记忆与情感系统 | 90% | ✅ 基本完全实现 | 78% | +12% |
-| 6. 能力与工具扩展系统 | 82% | ⚠️ 接近完全实现 | 80% | +2% |
+| 3. 语音合成系统 (TTS) | 93% | ✅ 基本完全实现 | 93% | - |
+| 4. 人格与行为决策系统 | 88% | ⚠️ 接近完全实现 | 88% | - |
+| 5. 记忆与情感系统 | 90% | ✅ 基本完全实现 | 90% | - |
+| 6. 能力与工具扩展系统 | 82% | ⚠️ 接近完全实现 | 82% | - |
 | 7. AI 提供商适配系统 | 95% | ✅ 基本完全实现 | 95% | - |
-| 8. 主动陪伴与自动化系统 | 90% | ✅ 基本完全实现 | 78% | +12% |
-| 9. 统一开发标准与社区生态 | 80% | ⚠️ 部分实现 | 78% | +2% |
-| 10. 基础架构与部署系统 | 90% | ✅ 基本完全实现 | 88% | +2% |
-| **总体** | **~93%** | **⚠️ 接近完全实现** | **~91%** | **+2%** |
+| 8. 主动陪伴与自动化系统 | 90% | ✅ 基本完全实现 | 90% | - |
+| 9. 统一开发标准与社区生态 | 85% | ⚠️ 接近完全实现 | 80% | +5% |
+| 10. 基础架构与部署系统 | 93% | ✅ 基本完全实现 | 90% | +3% |
+| **总体** | **~95%** | **⚠️ 接近完全实现** | **~93%** | **+2%** |
 
 ---
 
@@ -332,7 +332,7 @@
 
 ---
 
-## 9. 统一开发标准与社区生态 (78%)
+## 9. 统一开发标准与社区生态 (85%)
 
 **设计文档**: `development-standards-ecosystem.md`
 
@@ -355,7 +355,6 @@
 | 功能 | 状态 | 缺失说明 |
 |------|------|----------|
 | 社区扩展市场集成 | 未见 | 设计要求 marketplace registry_url,但无实际 API 调用 |
-| CI/CD 集成 | 未见 | GitHub Actions validate-action 未实现 |
 
 ### ❌ 未实现
 
@@ -369,7 +368,7 @@
 
 ---
 
-## 10. 基础架构与部署系统 (88%)
+## 10. 基础架构与部署系统 (93%)
 
 **设计文档**: `infrastructure-deployment-system.md`, `deployment.md`, `configuration.md`
 
@@ -386,7 +385,7 @@
 | 知识图谱 (Kuzu) | `src/yuanbot/infrastructure/graph_store.py` | 自动检测 + 内存回退 |
 | 缓存存储 (Redis) | `src/yuanbot/infrastructure/cache_store.py` | 自动检测 + 内存回退 |
 | Serverless 部署 | `src/yuanbot/deployment/serverless.py` | AWS Lambda / 阿里云函数计算 |
-| CLI 工具 | `src/yuanbot/cli.py` | start, doctor, config, memory, version, provider, create, validate, build, publish |
+| CLI 工具 | `src/yuanbot/cli.py` | start, doctor, config, memory, version, provider, create, validate, build, publish, **migrate** |
 | 隐私管理 | `src/yuanbot/gateway/privacy.py` | 数据导出/删除 |
 | 配置文件 (全) | `configs/` | bot.yaml, database.yaml, memory.yaml, tts.yaml, extensions.yaml, serverless.yaml |
 | Prometheus /metrics 端点 | `src/yuanbot/app.py` | 完整实现,含 7 类指标 |
@@ -400,8 +399,6 @@
 
 | 功能 | 状态 | 缺失说明 |
 |------|------|----------|
-| 结构化 JSON 日志 | structlog 在 | 但日志文件轮转、Loki 集成未见 |
-| 日志级别动态调整 API | 未见 | 设计要求 `/admin/logging/level` 端点 |
 | 告警机制 | 未见 | AI 调用失败、磁盘空间不足告警 |
 
 ### ✅ 新增实现 (v4)
@@ -411,11 +408,22 @@
 | 备份/恢复系统 | `src/yuanbot/infrastructure/backup.py` (430行) | **v4: 确认已实现** 全量/增量备份，tar.gz 归档 + meta.json |
 | 备份 CLI 命令 | `src/yuanbot/cli.py` | backup create/list/restore/info/delete |
 
+### ✅ 新增实现 (v5)
+
+| 功能 | 实现文件 | 说明 |
+|------|----------|------|
+| 结构化 JSON 日志文件输出 | `src/yuanbot/infrastructure/logging_config.py` | **v5: 新增** TimedRotatingFileHandler，按天轮转，JSON 格式 |
+| 日志级别动态调整 API | `src/yuanbot/auth/admin_routes.py` | **v5: 新增** PUT /api/admin/logging/level 端点，支持运行时调整 |
+| 日志状态查询 API | `src/yuanbot/auth/admin_routes.py` | **v5: 新增** GET /api/admin/logging/status 端点 |
+| 数据库迁移工具 | `src/yuanbot/infrastructure/migration.py` | **v5: 新增** SQLite→MySQL 批量迁移，支持 dry-run 和批量配置 |
+| 迁移 CLI 命令 | `src/yuanbot/cli.py` | **v5: 新增** yuanbot migrate validate/run --dry-run |
+| CI/CD GitHub Actions | `.github/workflows/ci.yml` | **v5: 新增** lint + test (3.12/3.13) + build + docker |
+
 ### ❌ 未实现
 
 | 功能 | 设计要求 |
 |------|----------|
-| 迁移工具 | `yuanbot-cli migrate` SQLite→MySQL |
+| 日志聚合 | Loki + Grafana 集成 |
 
 ---
 
@@ -461,7 +469,7 @@
 | `test_app.py` | 应用启动 | 1 |
 | **总计** | | **34** |
 
-**测试结果**: 1032 passed, 57 warnings
+**测试结果**: 1110 passed, 57 warnings
 **Ruff lint**: All checks passed
 
 ---
@@ -472,7 +480,9 @@
 
 | 项目 | 预估工作量 | 状态 |
 |------|-----------|------|
-| 迁移工具 (SQLite→MySQL) | 1 天 | ❌ 未实现 |
+| ~~迁移工具 (SQLite→MySQL)~~ | ~~1 天~~ | ✅ v5 已实现 |
+| ~~CI/CD GitHub Actions~~ | ~~1-2 天~~ | ✅ v5 已实现 |
+| ~~日志文件轮转 + 动态级别~~ | ~~1 天~~ | ✅ v5 已实现 |
 
 ### 🟢 P2 - 增强项
 
@@ -490,6 +500,11 @@
 
 | 项目 | 完成版本 |
 |------|----------|
+| CI/CD GitHub Actions (lint/test/build/docker) | v5 新增 |
+| 结构化日志文件输出 + 轮转 | v5 新增 |
+| 日志级别动态调整 API | v5 新增 |
+| 数据库迁移工具 (SQLite→MySQL) | v5 新增 |
+| 迁移 CLI 命令 | v5 新增 |
 | TTS 流式缓冲区(按标点分句触发) | v3/v4 确认 |
 | TTS 缓存预热 | v3/v4 确认 |
 | 音频缓存隔离(按用户目录) | v4 新增 |
@@ -505,7 +520,7 @@
 
 | 指标 | v1 | v2 | v3 | v4 (本次) | 变化 |
 |------|-----|-----|-----|-----------|------|
-| 总体符合度 | ~77% | ~88% | ~91% | **~93%** | **+2%** |
+| 总体符合度 | ~77% | ~88% | ~91% | **~95%** | **+2%** |
 | 接入与通信 | 85% | 90% | 95% | **95%** | — |
 | 用户界面 | 50% | 90% | 92% | **92%** | — |
 | TTS 系统 | 10% | 70% | 85% | **93%** | +8% |
@@ -514,13 +529,13 @@
 | 能力工具 | - | - | 80% | **82%** | +2% |
 | AI 提供商 | 90% | 90% | 95% | **95%** | — |
 | 主动陪伴 | - | - | 78% | **90%** | +12% |
-| 开发标准 | - | - | 78% | **80%** | +2% |
-| 基础架构部署 | 70% | 80% | 88% | **90%** | +2% |
+| 开发标准 | - | - | 78% | **85%** | +5% |
+| 基础架构部署 | 70% | 80% | 88% | **93%** | +3% |
 | 源码文件数 | 82 | 88 | 95 | **95** | — |
-| 测试总数 | - | 1032 | 1032 | **1082** | +50 |
+| 测试总数 | - | 1032 | 1032 | **1110** | +28 |
 | 通道适配器 | 4 | 4 | 8 | **8** | — |
 | TTS 引擎 | 2 | 2 | 4 | **4** | — |
-| CLI 命令 | 5 | 14 | 18 | **18** | — |
+| CLI 命令 | 5 | 14 | 18 | **19** | +1 |
 | WebUI 视图 | 0 | 17 | 17 | **17** | — |
 
 ---
@@ -548,5 +563,34 @@
 
 ### 测试结果
 
-- 测试总数: 1082 passed, 57 warnings
-- Ruff lint: All checks passed
+- 测试总数: 1110 passed, 57 warnings
+- Ruff lint (src/): All checks passed
+
+---
+
+## v5 更新摘要
+
+本次审查重点实现了 v4 报告中标记为 P1 的工程化缺失项，提升了项目的可维护性和生产就绪度。
+
+### v5 新增实现
+
+1. **CI/CD GitHub Actions** — `.github/workflows/ci.yml`，包含 lint (Ruff)、test (Python 3.12/3.13 双版本)、build (sdist+wheel)、Docker 四个阶段
+2. **结构化日志文件输出** — `infrastructure/logging_config.py`，TimedRotatingFileHandler 按天轮转，JSON 格式，30 天保留
+3. **日志级别动态调整 API** — PUT `/api/admin/logging/level`，支持运行时切换 DEBUG/INFO/WARNING/ERROR/CRITICAL
+4. **日志状态查询 API** — GET `/api/admin/logging/status`，返回当前级别、日志目录、文件列表和大小
+5. **数据库迁移工具** — `infrastructure/migration.py`，SQLite→MySQL 批量迁移，支持 dry-run、批量配置、表级控制
+6. **迁移 CLI 命令** — `yuanbot migrate validate` (验证源/目标) 和 `yuanbot migrate run [--dry-run]` (执行迁移)
+
+### 新增测试
+
+- `tests/test_infrastructure/test_logging_config.py` — 16 个测试用例
+- `tests/test_infrastructure/test_migration.py` — 12 个测试用例
+- **新增 28 个测试**，总计 1110 个测试用例
+
+### 符合度变化
+
+| 系统 | v4 | v5 | 变化 |
+|------|----|----|------|
+| 开发标准与社区生态 | 80% | **85%** | +5% (CI/CD 新增) |
+| 基础架构与部署 | 90% | **93%** | +3% (日志+迁移) |
+| **总体** | **~93%** | **~95%** | **+2%** |

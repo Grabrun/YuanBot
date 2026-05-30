@@ -48,6 +48,15 @@ from yuanbot.tools.manager import ToolManager
 def create_app(config: YuanBotConfig) -> FastAPI:
     """创建 YuanBot FastAPI 应用"""
 
+    # ── 0. 配置日志文件输出与轮转 ──────────────
+    try:
+        from yuanbot.infrastructure.logging_config import setup_file_logging
+        setup_file_logging(
+            level=config.log_level.upper() if hasattr(config, 'log_level') else "INFO",
+        )
+    except Exception:
+        pass  # 日志配置失败不影响启动
+
     # ── 1. 初始化基础设施 ──────────────────────
     memory_manager = MemoryManager(config=config.memory.model_dump())
 
