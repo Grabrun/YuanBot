@@ -51,8 +51,14 @@ class TTSCache:
         content = f"{engine}|{voice}|{text[:200]}"
         return hashlib.sha256(content.encode()).hexdigest()
 
-    def get(self, engine: str, voice: str, text: str) -> bytes | None:
-        """查询缓存，优先 L1 内存"""
+    def get(
+        self, engine: str, voice: str, text: str, user_id: str | None = None,
+    ) -> bytes | None:
+        """查询缓存，优先 L1 内存
+
+        设计参考: tts-system.md 第12节 - 音频缓存隔离：
+        不同用户的音频缓存文件通过用户 ID 划分目录。
+        """
         key = self._make_key(engine, voice, text)
 
         # L1: 内存
@@ -60,8 +66,9 @@ class TTSCache:
             self._memory.move_to_end(key)
             return self._memory[key]
 
-        # L2: 文件
-        file_path = self._file_dir / f"{key}.audio"
+        # L2: 文件 (按用户 ID 隔离目录)
+        cache_dir = self._get_user_cache_dir(user_id)
+        file_path = cache_dir / f"{key}.audio"
         if file_path.exists():
             try:
                 data = file_path.read_bytes()
@@ -72,20 +79,41 @@ class TTSCache:
 
         return None
 
-    def put(self, engine: str, voice: str, text: str, audio: bytes) -> None:
-        """写入缓存 (L1 + L2)"""
+    def put(
+        self, engine: str, voice: str, text: str, audio: bytes,
+        user_id: str | None = None,
+    ) -> None:
+        """写入缓存 (L1 + L2)
+
+        L2 文件按用户 ID 划分目录，防止越权访问。
+        """
         key = self._make_key(engine, voice, text)
 
         # L1
         self._put_memory(key, audio)
 
-        # L2
+        # L2 (按用户 ID 隔离目录)
         try:
-            file_path = self._file_dir / f"{key}.audio"
+            cache_dir = self._get_user_cache_dir(user_id)
+            file_path = cache_dir / f"{key}.audio"
             file_path.write_bytes(audio)
             self._evict_file_cache()
         except OSError as e:
             logger.warning("TTS 文件缓存写入失败: %s", e)
+
+    def _get_user_cache_dir(self, user_id: str | None) -> Path:
+        """获取用户级缓存目录
+
+        未指定用户时使用共享目录；指定时使用 user_id 子目录。
+        """
+        if user_id:
+            # 对 user_id 做安全过滤，防止路径穿越
+            safe_id = "".join(c for c in user_id if c.isalnum() or c in "-_")
+            if safe_id:
+                user_dir = self._file_dir / safe_id
+                user_dir.mkdir(parents=True, exist_ok=True)
+                return user_dir
+        return self._file_dir
 
     def _put_memory(self, key: str, data: bytes) -> None:
         """写入 L1 内存缓存"""
@@ -97,20 +125,33 @@ class TTSCache:
             self._memory[key] = data
 
     def _evict_file_cache(self) -> None:
-        """L2 文件缓存淘汰：按时间排序，超出容量上限时删除最旧文件"""
+        """L2 文件缓存淘汰：按时间排序，超出容量上限时删除最旧文件
+
+        遍历所有用户子目录，按访问时间全局排序淘汰。
+        """
         max_bytes = self._config.file_cache_max_mb * 1024 * 1024
-        files = sorted(self._file_dir.glob("*.audio"), key=lambda f: f.stat().st_atime)
-        total = sum(f.stat().st_size for f in files)
-        while total > max_bytes and files:
-            oldest = files.pop(0)
+        all_files: list[Path] = []
+        # 遍历根目录和所有用户子目录
+        all_files.extend(self._file_dir.glob("*.audio"))
+        for user_dir in self._file_dir.iterdir():
+            if user_dir.is_dir():
+                all_files.extend(user_dir.glob("*.audio"))
+        all_files.sort(key=lambda f: f.stat().st_atime)
+        total = sum(f.stat().st_size for f in all_files)
+        while total > max_bytes and all_files:
+            oldest = all_files.pop(0)
             total -= oldest.stat().st_size
             oldest.unlink(missing_ok=True)
 
     def clear(self) -> None:
-        """清空所有缓存"""
+        """清空所有缓存（包括所有用户子目录）"""
         self._memory.clear()
         for f in self._file_dir.glob("*.audio"):
             f.unlink(missing_ok=True)
+        for user_dir in self._file_dir.iterdir():
+            if user_dir.is_dir():
+                for f in user_dir.glob("*.audio"):
+                    f.unlink(missing_ok=True)
 
 
 class TTSManager:
@@ -205,6 +246,7 @@ class TTSManager:
         pitch: float | None = None,
         output_format: str = "mp3",
         use_cache: bool = True,
+        user_id: str | None = None,
     ) -> bytes:
         """非流式合成，返回完整音频字节
 
@@ -232,7 +274,7 @@ class TTSManager:
 
         # 查缓存
         if use_cache:
-            cached = self._cache.get(adapter.engine_id, final_voice, text)
+            cached = self._cache.get(adapter.engine_id, final_voice, text, user_id=user_id)
             if cached is not None:
                 logger.debug(
                     "TTS 缓存命中: engine=%s voice=%s",
@@ -247,7 +289,7 @@ class TTSManager:
 
         # 写缓存
         if use_cache and audio:
-            self._cache.put(adapter.engine_id, final_voice, text, audio)
+            self._cache.put(adapter.engine_id, final_voice, text, audio, user_id=user_id)
 
         return audio
 
@@ -336,6 +378,7 @@ class TTSManager:
         pitch: float | None = None,
         output_format: str = "mp3",
         buffer_threshold: int = 20,
+        user_id: str | None = None,
     ) -> AsyncIterator[bytes]:
         """流式缓冲合成：收集 token，在句子边界处触发合成
 
@@ -390,7 +433,10 @@ class TTSManager:
 
                 if complete.strip():
                     # 查缓存
-                    cached = self._cache.get(adapter.engine_id, final_voice, complete)
+                    cached = self._cache.get(
+                        adapter.engine_id, final_voice, complete,
+                        user_id=user_id,
+                    )
                     if cached is not None:
                         yield cached
                     else:
@@ -402,6 +448,7 @@ class TTSManager:
                             if audio:
                                 self._cache.put(
                                     adapter.engine_id, final_voice, complete, audio,
+                                    user_id=user_id,
                                 )
                                 yield audio
                         except Exception as e:
@@ -439,6 +486,7 @@ class TTSManager:
         engine: str | None = None,
         voice: str | None = None,
         persona_id: str | None = None,
+        user_id: str | None = None,
     ) -> int:
         """预热 TTS 缓存：预加载常用问候语到 L1 内存
 
@@ -472,6 +520,7 @@ class TTSManager:
                     voice=voice,
                     persona_id=persona_id,
                     use_cache=True,
+                    user_id=user_id,
                 )
                 warmed += 1
             except Exception as e:

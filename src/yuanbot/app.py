@@ -84,6 +84,18 @@ def create_app(config: YuanBotConfig) -> FastAPI:
 
     # ── 4. 初始化人格与决策系统 ────────────────
     persona = _load_persona(config)
+
+    # 初始化人设管理器
+    from yuanbot.persona.manager import PersonaManager
+
+    persona_manager = PersonaManager(
+        config_dir=config_dir,
+        default_persona_id=config.persona.id if hasattr(config, 'persona') else "default",
+    )
+    persona_manager.load_personas()
+    # 用管理器中的活跃人设替换默认人设
+    persona = persona_manager.active_persona
+
     decision_engine = DialogueDecisionEngine()
     context_builder = ContextBuilder(persona)
 
@@ -267,6 +279,7 @@ def create_app(config: YuanBotConfig) -> FastAPI:
     app.state.provider_manager = provider_manager
     app.state.capability_orchestrator = capability_orchestrator
     app.state.orchestrator = orchestrator
+    app.state.persona_manager = persona_manager
     app.state.web_adapter = web_adapter
     app.state.proactive_scheduler = proactive_scheduler
     app.state.proactive_strategy = proactive_strategy
@@ -1308,3 +1321,176 @@ def _register_routes(
 
         shutil.rmtree(ext_dir)
         return {"status": "uninstalled", "id": ext_id}
+
+    # ── 人设管理 API ─────────────────────────────
+
+    @app.get("/api/persona")
+    async def get_persona_status():
+        """查看当前人设状态"""
+        pm = app.state.persona_manager
+        persona = pm.active_persona
+        return {
+            "active_id": pm.active_id,
+            "name": persona.name,
+            "relationship_stage": persona.relationship_stage,
+            "voice_style": persona.get_voice_style(),
+            "capability_domains": persona.get_capability_domains(),
+        }
+
+    @app.get("/api/persona/list")
+    async def list_personas():
+        """列出所有人设"""
+        pm = app.state.persona_manager
+        return {
+            "personas": pm.list_personas(),
+            "total": len(pm.list_personas()),
+        }
+
+    @app.put("/api/persona/switch")
+    async def switch_persona(request: dict[str, Any]):
+        """运行时切换人设
+
+        请求体:
+            {
+                "persona_id": "cheerful"  // 目标人设 ID
+            }
+        """
+        from fastapi.responses import JSONResponse
+
+        pm = app.state.persona_manager
+        persona_id = request.get("persona_id")
+
+        if not persona_id:
+            return JSONResponse(
+                status_code=400,
+                content={"error": "persona_id is required"},
+            )
+
+        try:
+            result = pm.switch_persona(persona_id)
+            # 同步更新编排引擎的人设引用
+            app.state.orchestrator._persona = pm.active_persona
+            return result
+        except ValueError as e:
+            return JSONResponse(
+                status_code=404,
+                content={"error": str(e)},
+            )
+
+    @app.put("/api/persona/stage")
+    async def set_persona_stage(request: dict[str, Any]):
+        """设置关系阶段
+
+        请求体:
+            {
+                "stage": "familiar"  // initial | familiar | intimate | deep
+            }
+        """
+        from fastapi.responses import JSONResponse
+
+        pm = app.state.persona_manager
+        stage = request.get("stage")
+
+        if not stage:
+            return JSONResponse(
+                status_code=400,
+                content={"error": "stage is required"},
+            )
+
+        try:
+            result = pm.set_relationship_stage(stage)
+            # 同步更新编排引擎的人设引用
+            app.state.orchestrator._persona = pm.active_persona
+            return result
+        except ValueError as e:
+            return JSONResponse(
+                status_code=404,
+                content={"error": str(e)},
+            )
+
+    @app.post("/api/persona/reload")
+    async def reload_persona(request: dict[str, Any]):
+        """重新加载人设配置"""
+        pm = app.state.persona_manager
+        persona_id = request.get("persona_id", "")
+
+        if persona_id:
+            ok = pm.reload_persona(persona_id)
+            if ok:
+                app.state.orchestrator._persona = pm.active_persona
+                return {"status": "ok", "reloaded": persona_id}
+            return {"status": "error", "message": f"Persona '{persona_id}' not found"}
+        else:
+            pm.load_personas()
+            app.state.orchestrator._persona = pm.active_persona
+            return {"status": "ok", "reloaded": "all", "count": len(pm.list_personas())}
+
+    # ── 扩展市场 API ────────────────────────────
+
+    from yuanbot.services.marketplace import MarketplaceClient
+
+    _marketplace_client = MarketplaceClient()
+
+    @app.get("/api/marketplace/search")
+    async def marketplace_search(
+        q: str = "",
+        type: str = "",
+        limit: int = 20,
+        offset: int = 0,
+    ):
+        """搜索社区扩展市场
+
+        Args:
+            q: 搜索关键词
+            type: 过滤扩展类型
+            limit: 返回数量
+            offset: 分页偏移
+        """
+        result = await _marketplace_client.search(
+            query=q,
+            ext_type=type,
+            limit=limit,
+            offset=offset,
+        )
+        return result
+
+    @app.get("/api/marketplace/extensions")
+    async def marketplace_list(
+        type: str = "",
+        limit: int = 50,
+        offset: int = 0,
+        sort: str = "downloads",
+    ):
+        """列出市场扩展"""
+        result = await _marketplace_client.list_extensions(
+            ext_type=type,
+            limit=limit,
+            offset=offset,
+            sort_by=sort,
+        )
+        return result
+
+    @app.get("/api/marketplace/extensions/{ext_id}")
+    async def marketplace_extension_detail(ext_id: str):
+        """获取市场扩展详情"""
+        from fastapi.responses import JSONResponse
+
+        entry = await _marketplace_client.get_extension(ext_id)
+        if not entry:
+            return JSONResponse(
+                status_code=404,
+                content={"error": f"Extension '{ext_id}' not found in marketplace"},
+            )
+        return entry.to_dict()
+
+    @app.get("/api/marketplace/categories")
+    async def marketplace_categories():
+        """获取扩展分类统计"""
+        categories = await _marketplace_client.get_categories()
+        return {"categories": categories}
+
+    @app.post("/api/marketplace/refresh")
+    async def marketplace_refresh():
+        """刷新市场索引缓存"""
+        ok = await _marketplace_client.refresh_index()
+        return {"status": "ok" if ok else "error"}

@@ -2,6 +2,42 @@
 
 本项目遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.2.0] - 2026-05-30
+
+### ✨ 新增功能
+
+#### P1 功能实现
+
+##### 备份/恢复系统
+- 新增 `BackupManager` 备份管理器（tar.gz 归档格式 + meta.json 元数据）
+- CLI 命令：`yuanbot backup create|list|info|delete|cleanup`
+- CLI 命令：`yuanbot restore <name> [--dry-run] [--no-data] [--no-configs]`
+- REST API 统一使用 BackupManager（`/api/admin/backup`、`/api/admin/backups`、`/api/admin/restore`）
+- 支持试运行模式、选择性恢复、自动清理旧备份
+- 16 个备份系统测试
+
+##### 社区扩展市场
+- 新增 `MarketplaceClient` 市场客户端（注册表搜索、缓存、下载）
+- CLI 命令：`yuanbot search <query> [--type] [--limit]`
+- CLI 命令：`yuanbot install <ext_id> [--version] [--force]`
+- CLI 命令：`yuanbot marketplace categories|refresh`
+- REST API：`/api/marketplace/search`、`/api/marketplace/extensions`、`/api/marketplace/extensions/{id}`、`/api/marketplace/categories`、`/api/marketplace/refresh`
+- 离线缓存 + 自动降级
+- 14 个市场客户端测试
+
+##### 多人设运行时切换
+- 新增 `PersonaManager` 人设管理器（YAML 配置加载 + 运行时切换）
+- 新增 `YamlPersona` 动态人设（支持自定义 prompt、行为规则、语音风格、阶段覆盖）
+- CLI 命令：`yuanbot persona list|info|switch|stage`
+- REST API：`/api/persona`、`/api/persona/list`、`/api/persona/switch`、`/api/persona/stage`、`/api/persona/reload`
+- 内置 3 个示例人设：cheerful（小晴）、mentor（明远）、gentle（静安）
+- 人设切换自动同步编排引擎
+- 20 个人设管理器测试
+
+### 📊 测试
+- 总计 1079 个测试通过（新增 50 个）
+- 3 个跳过，14 个 warnings
+
 ## [1.1.1] - 2026-05-29
 
 ### 🐛 修复

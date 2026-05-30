@@ -177,6 +177,64 @@ def main() -> None:
     publish_parser.add_argument("path", nargs="?", default=".", help="扩展项目路径")
     publish_parser.add_argument("--dry-run", action="store_true", help="仅验证，不实际发布")
 
+    # yuanbot backup
+    backup_parser = subparsers.add_parser("backup", help="系统备份管理")
+    backup_sub = backup_parser.add_subparsers(dest="backup_action")
+    backup_sub.add_parser("list", help="列出所有备份")
+    backup_create_parser = backup_sub.add_parser("create", help="创建系统备份")
+    backup_create_parser.add_argument("--include-logs", action="store_true", help="包含日志目录")
+    backup_create_parser.add_argument("--description", "-d", default="", help="备份描述")
+    backup_info_parser = backup_sub.add_parser("info", help="查看备份详情")
+    backup_info_parser.add_argument("name", help="备份名称")
+    backup_delete_parser = backup_sub.add_parser("delete", help="删除备份")
+    backup_delete_parser.add_argument("name", help="备份名称")
+    backup_cleanup_parser = backup_sub.add_parser("cleanup", help="清理旧备份")
+    backup_cleanup_parser.add_argument("--keep", type=int, default=10, help="保留数量 (默认 10)")
+
+    # yuanbot restore
+    restore_parser = subparsers.add_parser("restore", help="从备份恢复系统")
+    restore_parser.add_argument("name", help="备份名称")
+    restore_parser.add_argument("--dry-run", action="store_true", help="试运行，仅显示将恢复的文件")
+    restore_parser.add_argument("--no-data", action="store_true", help="不恢复 data/ 目录")
+    restore_parser.add_argument("--no-configs", action="store_true", help="不恢复 configs/ 目录")
+
+    # yuanbot persona
+    persona_parser = subparsers.add_parser("persona", help="人设管理")
+    persona_sub = persona_parser.add_subparsers(dest="persona_action")
+    persona_sub.add_parser("list", help="列出所有人设")
+    persona_info_parser = persona_sub.add_parser("info", help="查看人设详情")
+    persona_info_parser.add_argument("persona_id", help="人设 ID")
+    persona_switch_parser = persona_sub.add_parser("switch", help="切换当前人设")
+    persona_switch_parser.add_argument("persona_id", help="人设 ID")
+    persona_stage_parser = persona_sub.add_parser("stage", help="设置关系阶段")
+    persona_stage_parser.add_argument(
+        "stage",
+        choices=["initial", "familiar", "intimate", "deep"],
+        help="目标阶段",
+    )
+
+    # yuanbot install
+    install_parser = subparsers.add_parser("install", help="从社区市场安装扩展")
+    install_parser.add_argument("ext_id", help="扩展 ID")
+    install_parser.add_argument("--version", "-v", help="指定版本 (默认最新)")
+    install_parser.add_argument("--force", action="store_true", help="强制重新安装")
+
+    # yuanbot search
+    search_parser = subparsers.add_parser("search", help="搜索社区扩展市场")
+    search_parser.add_argument("query", nargs="?", default="", help="搜索关键词")
+    search_parser.add_argument(
+        "--type",
+        choices=["ai_provider", "channel", "skill", "tool", "persona", "trigger"],
+        help="按类型过滤",
+    )
+    search_parser.add_argument("--limit", type=int, default=20, help="返回数量 (默认 20)")
+
+    # yuanbot marketplace
+    marketplace_parser = subparsers.add_parser("marketplace", help="扩展市场管理")
+    marketplace_sub = marketplace_parser.add_subparsers(dest="marketplace_action")
+    marketplace_sub.add_parser("categories", help="查看扩展分类统计")
+    marketplace_sub.add_parser("refresh", help="刷新市场索引缓存")
+
     args = parser.parse_args()
 
     # 配置日志
@@ -249,6 +307,18 @@ def main() -> None:
         _run_build(args)
     elif args.command == "publish":
         _run_publish(args)
+    elif args.command == "backup":
+        _run_backup(args)
+    elif args.command == "restore":
+        _run_restore(args)
+    elif args.command == "persona":
+        _run_persona(args)
+    elif args.command == "install":
+        _run_install(args)
+    elif args.command == "search":
+        _run_search(args)
+    elif args.command == "marketplace":
+        _run_marketplace(args)
     else:
         parser.print_help()
 
@@ -1366,6 +1436,451 @@ def _run_list_plugins(args: argparse.Namespace) -> None:
     else:
         _info("无 Tools 配置")
 
+    print()
+
+
+
+# --------------------------------------------------------------------------- #
+# yuanbot backup
+# --------------------------------------------------------------------------- #
+
+
+def _run_backup(args: argparse.Namespace) -> None:
+    """备份系统"""
+    action = getattr(args, "backup_action", None)
+
+    if action == "list":
+        _run_backup_list(args)
+    elif action == "create":
+        _run_backup_create(args)
+    elif action == "info":
+        _run_backup_info(args)
+    elif action == "delete":
+        _run_backup_delete(args)
+    elif action == "cleanup":
+        _run_backup_cleanup(args)
+    else:
+        # 默认执行 create
+        _run_backup_create(args)
+
+
+def _run_backup_list(args: argparse.Namespace) -> None:
+    """列出所有备份"""
+    from yuanbot.infrastructure.backup import BackupManager
+
+    _header("备份列表")
+    manager = BackupManager()
+    backups = manager.list_backups()
+
+    if not backups:
+        _info("暂无备份")
+        _info("运行 yuanbot backup create 创建第一个备份")
+        return
+
+    print(f"  {_c('名称', _BOLD)}  {_c('大小', _BOLD)}  {_c('时间', _BOLD)}  {_c('描述', _BOLD)}")
+    print("  " + "─" * 70)
+
+    for b in backups:
+        name = b.get("name", "unknown")
+        size = b.get("size_mb", 0)
+        timestamp = b.get("timestamp", b.get("created_at", "-"))
+        desc = b.get("description", "-")
+        print(f"  {name:30s}  {size:>6.1f} MB  {timestamp:20s}  {desc}")
+    print(f"\n  共 {len(backups)} 个备份")
+    print()
+
+
+def _run_backup_create(args: argparse.Namespace) -> None:
+    """创建备份"""
+    from yuanbot.infrastructure.backup import BackupManager
+
+    include_logs = getattr(args, "include_logs", False)
+    description = getattr(args, "description", "") or ""
+
+    _header("创建备份")
+    _info(f"包含日志: {'是' if include_logs else '否'}")
+    if description:
+        _info(f"描述: {description}")
+    print()
+
+    manager = BackupManager()
+    result = manager.create_backup(
+        include_logs=include_logs,
+        description=description,
+        created_by="cli",
+    )
+
+    _ok(f"备份已创建: {result['name']}")
+    _info(f"路径: {result['path']}")
+    _info(f"大小: {result['size_mb']} MB")
+    _info(f"文件数: {result['file_count']}")
+    print()
+
+
+def _run_backup_info(args: argparse.Namespace) -> None:
+    """查看备份详情"""
+
+    from yuanbot.infrastructure.backup import BackupManager
+
+    _header(f"备份详情: {args.name}")
+    manager = BackupManager()
+    info = manager.get_backup_info(args.name)
+
+    if not info:
+        _fail(f"备份 '{args.name}' 不存在")
+        return
+
+    for key, value in info.items():
+        print(f"  {_c(key + ':', _BOLD)} {value}")
+    print()
+
+
+def _run_backup_delete(args: argparse.Namespace) -> None:
+    """删除备份"""
+    from yuanbot.infrastructure.backup import BackupManager
+
+    _header(f"删除备份: {args.name}")
+    manager = BackupManager()
+
+    if manager.delete_backup(args.name):
+        _ok(f"备份 '{args.name}' 已删除")
+    else:
+        _fail(f"备份 '{args.name}' 不存在")
+    print()
+
+
+def _run_backup_cleanup(args: argparse.Namespace) -> None:
+    """清理旧备份"""
+    from yuanbot.infrastructure.backup import BackupManager
+
+    keep_count = getattr(args, "keep", 10)
+    _header("清理旧备份")
+    manager = BackupManager()
+    deleted = manager.cleanup_old_backups(keep_count=keep_count)
+    _ok(f"已清理 {deleted} 个旧备份，保留最近 {keep_count} 个")
+    print()
+
+
+# --------------------------------------------------------------------------- #
+# yuanbot restore
+# --------------------------------------------------------------------------- #
+
+
+def _run_restore(args: argparse.Namespace) -> None:
+    """从备份恢复"""
+    from yuanbot.infrastructure.backup import BackupManager
+
+    _header(f"从备份恢复: {args.name}")
+    manager = BackupManager()
+
+    dry_run = getattr(args, "dry_run", False)
+    restore_data = not getattr(args, "no_data", False)
+    restore_configs = not getattr(args, "no_configs", False)
+
+    if dry_run:
+        _info("试运行模式 — 不会实际恢复文件")
+
+    result = manager.restore_backup(
+        backup_name=args.name,
+        restore_data=restore_data,
+        restore_configs=restore_configs,
+        dry_run=dry_run,
+    )
+
+    if result.get("error"):
+        _fail(result["error"])
+        return
+
+    if dry_run:
+        files = result.get("would_restore", [])
+        _info(f"将恢复 {len(files)} 个文件:")
+        for f in files[:20]:
+            print(f"    {f}")
+        if len(files) > 20:
+            _info(f"  ... 还有 {len(files) - 20} 个文件")
+    else:
+        _ok(f"恢复完成！已恢复 {result.get('restored_files', 0)} 个文件")
+        errors = result.get("errors", [])
+        if errors:
+            _warn(f"有 {len(errors)} 个错误:")
+            for e in errors:
+                print(f"    ❌ {e}")
+
+    print()
+
+
+# --------------------------------------------------------------------------- #
+# yuanbot persona
+# --------------------------------------------------------------------------- #
+
+
+def _run_persona(args: argparse.Namespace) -> None:
+    """人设管理"""
+    action = getattr(args, "persona_action", None)
+
+    if action == "list":
+        _run_persona_list(args)
+    elif action == "info":
+        _run_persona_info(args)
+    elif action == "switch":
+        _run_persona_switch(args)
+    elif action == "stage":
+        _run_persona_stage(args)
+    else:
+        _run_persona_list(args)
+
+
+def _run_persona_list(args: argparse.Namespace) -> None:
+    """列出所有人设"""
+    from yuanbot.persona.manager import PersonaManager
+
+    _header("人设列表")
+    manager = PersonaManager()
+    manager.load_personas()
+
+    personas = manager.list_personas()
+    if not personas:
+        _info("未找到任何人设配置")
+        return
+
+    print(
+        f"  {_c('状态', _BOLD)}  {_c('ID', _BOLD)}  "
+        f"{_c('名称', _BOLD)}  {_c('阶段', _BOLD)}  "
+        f"{_c('描述', _BOLD)}"
+    )
+    print("  " + "─" * 60)
+
+    for p in personas:
+        active_mark = _c("●", _GREEN) if p.get("is_active") else " " * 2
+        default_mark = " (默认)" if p.get("is_default") else ""
+        pid = p.get("id", "?")
+        name = p.get("name", "?")
+        stage = p.get("relationship_stage", "initial")
+        desc = p.get("has_custom_prompt", False)
+        desc_str = "自定义 prompt" if desc else "使用默认 prompt"
+        print(
+            f"  {active_mark}  {pid:15s} {name:10s}{default_mark:8s}  "
+            f"{stage:10s}  {desc_str}"
+        )
+
+    print(f"\n  共 {len(personas)} 个人设")
+    print()
+
+
+def _run_persona_info(args: argparse.Namespace) -> None:
+    """查看人设详情"""
+    from yuanbot.persona.manager import PersonaManager
+
+    _header(f"人设详情: {args.persona_id}")
+    manager = PersonaManager()
+    manager.load_personas()
+
+    persona = manager.get_persona(args.persona_id)
+    if not persona:
+        _fail(f"人设 '{args.persona_id}' 不存在")
+        _info(f"可用: {', '.join(p['id'] for p in manager.list_personas())}")
+        return
+
+    info = persona.to_dict()
+    for key, value in info.items():
+        if key == "system_prompt_preview":
+            print(f"  {_c('系统提示词:', _BOLD)}")
+            for line in str(value).split("\n")[:10]:
+                print(f"    {line}")
+        else:
+            print(f"  {_c(key + ':', _BOLD)} {value}")
+    print()
+
+
+def _run_persona_switch(args: argparse.Namespace) -> None:
+    """切换人设"""
+    from yuanbot.persona.manager import PersonaManager
+
+    _header(f"切换人设: {args.persona_id}")
+    manager = PersonaManager()
+    manager.load_personas()
+
+    try:
+        result = manager.switch_persona(args.persona_id)
+        _ok(f"人设已切换: {result['previous']} → {result['current']} ({result['name']})")
+    except ValueError as e:
+        _fail(str(e))
+    print()
+
+
+def _run_persona_stage(args: argparse.Namespace) -> None:
+    """设置关系阶段"""
+    from yuanbot.persona.manager import PersonaManager
+
+    _header(f"设置关系阶段: {args.stage}")
+    manager = PersonaManager()
+    manager.load_personas()
+
+    try:
+        result = manager.set_relationship_stage(args.stage)
+        _ok(f"关系阶段已更新: {result['previous_stage']} → {result['current_stage']}")
+    except ValueError as e:
+        _fail(str(e))
+    print()
+
+
+# --------------------------------------------------------------------------- #
+# yuanbot install
+# --------------------------------------------------------------------------- #
+
+
+def _run_install(args: argparse.Namespace) -> None:
+    """从社区市场安装扩展"""
+    import asyncio
+
+    from yuanbot.services.marketplace import MarketplaceClient
+
+    _header(f"安装扩展: {args.ext_id}")
+
+    client = MarketplaceClient()
+
+    async def _do_install() -> None:
+        # 先查找扩展信息
+        entry = await client.get_extension(args.ext_id)
+        if not entry:
+            _fail(f"扩展 '{args.ext_id}' 在市场中未找到")
+            _info("运行 yuanbot search 搜索可用扩展")
+            return
+
+        print(f"  {_c('名称:', _BOLD)} {entry.name}")
+        print(f"  {_c('版本:', _BOLD)} {entry.version}")
+        print(f"  {_c('类型:', _BOLD)} {entry.type}")
+        print(f"  {_c('描述:', _BOLD)} {entry.description[:80]}")
+        print()
+
+        # 下载到 extensions 目录
+        from pathlib import Path
+
+        dest = Path("data/extensions")
+        ext_path = await client.download_extension(args.ext_id, dest)
+
+        if ext_path:
+            _ok(f"扩展已安装到: {ext_path}")
+            _info("重启服务后生效，或通过 WebUI 插件管理页热加载")
+        else:
+            _fail("下载失败，请检查网络连接")
+
+    asyncio.run(_do_install())
+    print()
+
+
+# --------------------------------------------------------------------------- #
+# yuanbot search
+# --------------------------------------------------------------------------- #
+
+
+def _run_search(args: argparse.Namespace) -> None:
+    """搜索社区扩展市场"""
+    import asyncio
+
+    from yuanbot.services.marketplace import MarketplaceClient
+
+    _header(f"搜索扩展: {args.query or '(全部)'}")
+
+    client = MarketplaceClient()
+    ext_type = getattr(args, "type", "") or ""
+    limit = getattr(args, "limit", 20)
+
+    async def _do_search() -> None:
+        result = await client.search(
+            query=args.query,
+            ext_type=ext_type,
+            limit=limit,
+        )
+
+        extensions = result.get("extensions", [])
+        total = result.get("total", 0)
+
+        if not extensions:
+            _info("未找到匹配的扩展")
+            return
+
+        print(
+            f"  {_c('ID', _BOLD)}  {_c('类型', _BOLD)}  "
+            f"{_c('版本', _BOLD)}  {_c('名称', _BOLD)}  "
+            f"{_c('描述', _BOLD)}"
+        )
+        print("  " + "─" * 70)
+
+        for ext in extensions:
+            ext_id = ext.get("id", "?")[:18]
+            ext_type_str = ext.get("type", "?")[:12]
+            version = ext.get("version", "?")
+            name = ext.get("name", "?")[:15]
+            desc = ext.get("description", "")[:30]
+            print(
+                f"  {ext_id:18s} {ext_type_str:12s} "
+                f"{version:8s} {name:15s}  {desc}"
+            )
+
+        print(f"\n  共 {total} 个结果，显示前 {len(extensions)} 个")
+
+    asyncio.run(_do_search())
+    print()
+
+
+# --------------------------------------------------------------------------- #
+# yuanbot marketplace
+# --------------------------------------------------------------------------- #
+
+
+def _run_marketplace(args: argparse.Namespace) -> None:
+    """扩展市场管理"""
+    action = getattr(args, "marketplace_action", None)
+
+    if action == "categories":
+        _run_marketplace_categories(args)
+    elif action == "refresh":
+        _run_marketplace_refresh(args)
+    else:
+        _run_marketplace_categories(args)
+
+
+def _run_marketplace_categories(args: argparse.Namespace) -> None:
+    """查看扩展分类统计"""
+    import asyncio
+
+    from yuanbot.services.marketplace import MarketplaceClient
+
+    _header("扩展市场分类")
+
+    client = MarketplaceClient()
+
+    async def _do() -> None:
+        categories = await client.get_categories()
+        if not categories:
+            _info("暂无分类数据")
+            return
+
+        for cat, count in sorted(categories.items(), key=lambda x: -x[1]):
+            print(f"  {cat:20s}  {count} 个扩展")
+        print()
+
+    asyncio.run(_do())
+
+
+def _run_marketplace_refresh(args: argparse.Namespace) -> None:
+    """刷新市场索引缓存"""
+    import asyncio
+
+    from yuanbot.services.marketplace import MarketplaceClient
+
+    _header("刷新市场索引")
+    client = MarketplaceClient()
+
+    async def _do() -> None:
+        ok = await client.refresh_index()
+        if ok:
+            _ok("市场索引已刷新")
+        else:
+            _fail("刷新失败，请检查网络连接")
+
+    asyncio.run(_do())
     print()
 
 
