@@ -1,5 +1,4 @@
-"""YuanBot 部署模块"""
+"""部署系统
 
-from yuanbot.deployment.serverless import ServerlessHandler, create_handler
-
-__all__ = ["ServerlessHandler", "create_handler"]
+Serverless 部署支持。
+"""

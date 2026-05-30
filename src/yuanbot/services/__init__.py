@@ -1,8 +1,12 @@
-"""YuanBot 服务层
+"""服务层
 
-提供统一的业务服务接口，屏蔽底层实现细节。
+核心业务服务，包括 AI 服务、能力编排、扩展标准。
 """
 
 from yuanbot.services.ai_service import AIService
+from yuanbot.services.capability_orchestrator import CapabilityOrchestrator
 
-__all__ = ["AIService"]
+__all__ = [
+    "AIService",
+    "CapabilityOrchestrator",
+]
