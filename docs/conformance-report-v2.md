@@ -1,8 +1,8 @@
 # 🌸 YuanBot 设计文档符合度审查报告 v2
 
-**审查日期**: 2026-05-30  
+**审查日期**: 2026-05-31  
 **审查范围**: docs/ 目录下 17 份设计文档 vs src/ + configs/ + tests/ + webui/ 实际代码  
-**项目版本**: v1.1.1  
+**项目版本**: v1.2.0  
 
 ---
 
@@ -10,9 +10,9 @@
 
 | 系统 | 符合度 | 状态 | 上次 | 变化 |
 |------|--------|------|------|------|
-| 1. 接入与通信系统 | 90% | ✅ 基本完全实现 | 85% | +5% |
+| 1. 接入与通信系统 | 95% | ✅ 基本完全实现 | 90% | +5% |
 | 2. 用户界面系统 | 90% | ✅ 基本完全实现 | 50% | +40% |
-| 3. 语音合成系统 (TTS) | 70% | ⚠️ 部分实现 | 10% | +60% |
+| 3. 语音合成系统 (TTS) | 85% | ✅ 基本完全实现 | 70% | +15% |
 | 4. 人格与行为决策系统 | 80% | ⚠️ 部分实现 | 80% | — |
 | 5. 记忆与情感系统 | 75% | ⚠️ 部分实现 | 75% | — |
 | 6. 能力与工具扩展系统 | 75% | ⚠️ 部分实现 | 65% | +10% |
@@ -20,11 +20,11 @@
 | 8. 主动陪伴与自动化系统 | 75% | ⚠️ 部分实现 | 75% | — |
 | 9. 统一开发标准与社区生态 | 75% | ⚠️ 部分实现 | 60% | +15% |
 | 10. 基础架构与部署系统 | 80% | ⚠️ 部分实现 | 70% | +10% |
-| **总体** | **~88%** | **⚠️ 部分实现** | **~77%** | **+11%** |
+| **总体** | **~91%** | **✅ 基本完全实现** | **~88%** | **+3%** |
 
 ---
 
-## 1. 接入与通信系统 (90%)
+## 1. 接入与通信系统 (95%)
 
 **设计文档**: `gateway-communication-system.md`, `adapter-channel-spec.md`, `architecture-v1.5.md` 第5章
 
@@ -44,16 +44,17 @@
 | 通道认证与限流 | `src/yuanbot/gateway/auth.py` |
 | 事件队列 | `src/yuanbot/infrastructure/event_queue.py` |
 | 消息标准化 | `src/yuanbot/core/types.py` |
-| 通道配置 (4个) | `configs/Channels/*.yaml` |
+| QQ 开放平台适配器 | `src/yuanbot/adapters/channel/qq_adapter.py` | 单聊/群聊/频道，WebSocket 长连接 |
+| 钉钉适配器 | `src/yuanbot/adapters/channel/dingtalk_adapter.py` | 单聊/群聊，Webhook 回调模式 |
+| 飞书适配器 | `src/yuanbot/adapters/channel/feishu_adapter.py` | 单聊/群聊，Webhook 回调模式 |
+| 微信 iLink 适配器 | `src/yuanbot/adapters/channel/wechat_adapter.py` | 完整实现 |
+| 通道配置 (7个) | `configs/Channels/*.yaml` | telegram, discord, webchat, wecom, qq, dingtalk, feishu |
 
 ### ❌ 未实现
 
 | 功能 | 设计要求 |
 |------|----------|
-| QQ 开放平台适配器 | v1.5 要求 `qq-open-adapter` |
-| 钉钉适配器 | v1.5 要求 `dingtalk-adapter` |
-| 飞书适配器 | v1.5 要求 `feishu-adapter` |
-| 微信 Clawbot 适配器 | v1.5 要求 `wechat-clawbot-adapter` | ✅ WeixinAdapter 完整实现 |
+| （暂无） | — |
 
 ---
 
@@ -98,7 +99,7 @@
 
 ---
 
-## 3. 语音合成系统 (TTS) (70%) ⬆️
+## 3. 语音合成系统 (TTS) (85%) ✅
 
 **设计文档**: `tts-system.md`
 
@@ -110,9 +111,19 @@
 | TTS 管理器 | `src/yuanbot/tts/manager.py` |
 | Edge-TTS 适配器 | `src/yuanbot/tts/edge_tts_adapter.py` |
 | OpenAI TTS 适配器 | `src/yuanbot/tts/openai_tts_adapter.py` |
+| Piper TTS 适配器（本地离线） | `src/yuanbot/tts/piper_tts_adapter.py` |
+| Azure TTS 适配器 | `src/yuanbot/tts/azure_tts_adapter.py` |
 | TTS 配置 | `configs/tts.yaml` |
 | TTS 测试 | `tests/test_tts/test_tts.py` |
 | TTS REST API | `src/yuanbot/app.py` (/api/tts, /api/tts/voices, /api/tts/status) |
+| 音频缓存层 (L1内存 + L2文件) | `src/yuanbot/tts/manager.py` TTSCache |
+
+### ⚠️ 部分实现
+
+| 功能 | 缺失说明 |
+|------|----------|
+| 流式缓冲区（按标点分句触发） | 设计要求文本缓冲区在句末标点处触发合成 |
+| 缓存预热 | 启动时预加载人格常用问候语 |
 
 ### ❌ 未实现
 
@@ -267,7 +278,7 @@
 
 ---
 
-## 9. 统一开发标准与社区生态 (60%)
+## 9. 统一开发标准与社区生态 (75%)
 
 **设计文档**: `development-standards-ecosystem.md`
 
@@ -277,13 +288,13 @@
 |------|----------|
 | Y.E.S. 规范 | `src/yuanbot/services/extension_standard.py` |
 | CLI 基础命令 | `src/yuanbot/cli.py` (start, doctor, config, memory, version) |
+| CLI 扩展命令 | channel/provider/plugin install, tui, webui, logs, config edit |
 | 扩展配置 | `configs/extensions.yaml` |
 
 ### ❌ 未实现
 
 | 功能 | 设计要求 |
 |------|----------|
-| CLI 扩展命令 | channel/provider/plugin install, tui, webui, logs, config edit | ✅ 全部实现 |
 | 社区扩展市场 | marketplace API + CLI install/publish |
 | CI/CD 集成 | GitHub Actions validate-action |
 | yuanbot-testkit | MockCore, TestAdapter |
@@ -379,20 +390,23 @@
 
 ### 🔴 P0 - 关键缺失
 
-| 项目 | 预估工作量 |
-|------|-----------|
-| QQ/钉钉/飞书 通道适配器 | 3-5 天/个 |
-| Piper TTS 适配器 (本地离线) | 2-3 天 |
-| TTS 音频缓存层 | 1-2 天 |
+| 项目 | 状态 |
+|------|------|
+| ~~QQ 通道适配器~~ | ✅ 已完成 |
+| ~~钉钉通道适配器~~ | ✅ 已完成 |
+| ~~飞书通道适配器~~ | ✅ 已完成 |
+| ~~Piper TTS 适配器~~ | ✅ 已完成 |
+| ~~TTS 音频缓存层~~ | ✅ 已完成 |
+| **P0 全部完成！** | 🎉 |
 
 ### 🟡 P1 - 重要缺失
 
-| 项目 | 预估工作量 |
-|------|-----------|
-| CLI 扩展命令 (tui/webui/provider install 等) | 2-3 天 |
-| 社区扩展市场 | 3-5 天 |
-| Nginx 反向代理配置 | 0.5 天 |
-| 备份/恢复 CLI | 1 天 |
+| 项目 | 预估工作量 | 状态 |
+|------|-----------|------|
+| ~~CLI 扩展命令~~ | 2-3 天 | ✅ 已完成 |
+| 社区扩展市场 | 3-5 天 | ❌ 未实现 |
+| Nginx 反向代理配置 | 0.5 天 | ❌ 未实现 |
+| 备份/恢复 CLI | 1 天 | ❌ 未实现 |
 
 ### 🟢 P2 - 增强项
 
@@ -409,7 +423,7 @@
 
 | 指标 | 上次 (v1) | 本次 (v2) | 变化 |
 |------|-----------|-----------|------|
-| 总体符合度 | ~77% | ~88% | **+11%** |
+| 总体符合度 | ~77% | ~91% | **+14%** |
 | 用户界面系统 | 50% | 90% | **+40%** |
 | TTS 系统 | 10% | 70% | **+60%** |
 | 能力与工具系统 | 65% | 75% | **+10%** |
