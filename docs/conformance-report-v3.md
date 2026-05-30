@@ -1,6 +1,6 @@
-# 🌸 YuanBot 设计文档符合度审查报告 v2
+# 🌸 YuanBot 设计文档符合度审查报告 v3
 
-**审查日期**: 2026-05-31  
+**审查日期**: 2026-05-31 (v3 修正)  
 **审查范围**: docs/ 目录下 17 份设计文档 vs src/ + configs/ + tests/ + webui/ 实际代码  
 **项目版本**: v1.2.0  
 
@@ -129,9 +129,6 @@
 
 | 功能 | 设计要求 |
 |------|----------|
-| Piper TTS 适配器 | 本地离线 TTS |
-| Azure TTS 适配器 | 云端高质量 TTS |
-| 音频缓存层 (L1内存 + L2文件) | 避免重复合成 |
 | 流式合成与播放同步 | 实时流式音频 |
 | 人格语音绑定 | persona.voice_style.tts_voice |
 
@@ -354,7 +351,7 @@
 | `configs/extensions.yaml` | ✅ |
 | `configs/serverless.yaml` | ✅ |
 | `configs/Providers/*.yaml` (8个) | ✅ |
-| `configs/Channels/*.yaml` (4个) | ✅ |
+| `configs/Channels/*.yaml` (7个) | ✅ |
 | `configs/Personas/default.yaml` | ✅ |
 | `configs/Plugins/skills/*.yaml` (4个) | ✅ ⬆️ (+bedtime_story) |
 | `configs/Plugins/tools/*.yaml` (3个) | ✅ ⬆️ (+search) |
@@ -365,7 +362,7 @@
 
 | 测试目录 | 覆盖模块 | 测试文件数 |
 |----------|----------|------------|
-| `test_adapters/` | AI + Channel 适配器 | 8 |
+| `test_adapters/` | AI + Channel 适配器 | 10 |
 | `test_auth/` | 认证路由 + 存储 | 2 |
 | `test_core/` | 类型定义 | 2 |
 | `test_gateway/` | 网关 + 隐私 | 2 |
@@ -382,7 +379,7 @@
 | `test_config.py` | 配置系统 | 1 |
 | `test_integration.py` | 集成测试 | 1 |
 | `test_app.py` | 应用启动 | 1 |
-| **总计** | | **34** |
+| **总计** | | **36** |
 
 ---
 
@@ -405,7 +402,7 @@
 |------|-----------|------|
 | ~~CLI 扩展命令~~ | 2-3 天 | ✅ 已完成 |
 | 社区扩展市场 | 3-5 天 | ❌ 未实现 |
-| Nginx 反向代理配置 | 0.5 天 | ❌ 未实现 |
+| ~~Nginx 反向代理配置~~ | 0.5 天 | ✅ 已完成 |
 | 备份/恢复 CLI | 1 天 | ❌ 未实现 |
 
 ### 🟢 P2 - 增强项
