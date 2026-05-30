@@ -1,0 +1,15 @@
+adapter: dingtalk
+enabled: false
+config:
+  # 钉钉开放平台 AppKey
+  app_key: ""
+
+  # 钉钉开放平台 AppSecret
+  app_secret: ""
+
+  # Webhook 机器人 Token（用于通过 Webhook 发送群消息）
+  webhook_token: ""
+
+  # Webhook 回调服务器配置
+  webhook_host: "0.0.0.0"
+  webhook_port: 8080

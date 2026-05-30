@@ -14,21 +14,24 @@ from yuanbot.gateway.push_dispatcher import PushDispatcher
 class TestIdentityService:
     """身份链接服务测试"""
 
-    def test_resolve_new_user(self):
+    @pytest.mark.asyncio
+    async def test_resolve_new_user(self):
         service = IdentityService()
-        uid = service.resolve_user_id("telegram", "tg_123")
+        uid = await service.resolve_user_id("telegram", "tg_123")
         assert uid.startswith("yb_")
 
-    def test_resolve_same_user_returns_same_id(self):
+    @pytest.mark.asyncio
+    async def test_resolve_same_user_returns_same_id(self):
         service = IdentityService()
-        uid1 = service.resolve_user_id("telegram", "tg_123")
-        uid2 = service.resolve_user_id("telegram", "tg_123")
+        uid1 = await service.resolve_user_id("telegram", "tg_123")
+        uid2 = await service.resolve_user_id("telegram", "tg_123")
         assert uid1 == uid2
 
-    def test_different_platforms_different_ids(self):
+    @pytest.mark.asyncio
+    async def test_different_platforms_different_ids(self):
         service = IdentityService()
-        uid1 = service.resolve_user_id("telegram", "tg_123")
-        uid2 = service.resolve_user_id("discord", "dc_456")
+        uid1 = await service.resolve_user_id("telegram", "tg_123")
+        uid2 = await service.resolve_user_id("discord", "dc_456")
         assert uid1 != uid2
 
     def test_build_session_id(self):
@@ -36,32 +39,36 @@ class TestIdentityService:
         sid = service.build_session_id("telegram", "tg_123")
         assert sid == "telegram:tg_123"
 
-    def test_link_accounts(self):
+    @pytest.mark.asyncio
+    async def test_link_accounts(self):
         service = IdentityService()
-        uid = service.resolve_user_id("telegram", "tg_123")
-        result = service.link_accounts(uid, "discord", "dc_456")
+        uid = await service.resolve_user_id("telegram", "tg_123")
+        result = await service.link_accounts(uid, "discord", "dc_456")
         assert result is True
         # 现在 discord 账号应该映射到同一个用户
-        uid2 = service.resolve_user_id("discord", "dc_456")
+        uid2 = await service.resolve_user_id("discord", "dc_456")
         assert uid == uid2
 
-    def test_link_accounts_invalid_primary(self):
+    @pytest.mark.asyncio
+    async def test_link_accounts_invalid_primary(self):
         service = IdentityService()
-        result = service.link_accounts("nonexistent", "discord", "dc_456")
+        result = await service.link_accounts("nonexistent", "discord", "dc_456")
         assert result is False
 
-    def test_get_linked_platforms(self):
+    @pytest.mark.asyncio
+    async def test_get_linked_platforms(self):
         service = IdentityService()
-        uid = service.resolve_user_id("telegram", "tg_123")
-        service.link_accounts(uid, "discord", "dc_456")
-        platforms = service.get_linked_platforms(uid)
+        uid = await service.resolve_user_id("telegram", "tg_123")
+        await service.link_accounts(uid, "discord", "dc_456")
+        platforms = await service.get_linked_platforms(uid)
         assert len(platforms) == 2
 
-    def test_get_all_identities(self):
+    @pytest.mark.asyncio
+    async def test_get_all_identities(self):
         service = IdentityService()
-        service.resolve_user_id("telegram", "tg_123")
-        service.resolve_user_id("discord", "dc_456")
-        info = service.get_all_identities()
+        await service.resolve_user_id("telegram", "tg_123")
+        await service.resolve_user_id("discord", "dc_456")
+        info = await service.get_all_identities()
         assert info["total_mappings"] == 2
         assert info["total_users"] == 2
 
@@ -146,29 +153,32 @@ class TestYuanGateway:
     async def test_start_stop(self):
         gateway = YuanGateway()
         await gateway.start()
-        status = gateway.get_health_status()
+        status = await gateway.get_health_status()
         assert status["status"] == "ok"
 
         await gateway.stop()
-        status = gateway.get_health_status()
+        status = await gateway.get_health_status()
         assert status["status"] == "stopped"
 
-    def test_resolve_identity(self):
+    @pytest.mark.asyncio
+    async def test_resolve_identity(self):
         gateway = YuanGateway()
-        uid, sid = gateway.resolve_identity("telegram", "tg_123")
+        uid, sid = await gateway.resolve_identity("telegram", "tg_123")
         assert uid.startswith("yb_")
         assert sid == "telegram:tg_123"
 
-    def test_resolve_identity_consistency(self):
+    @pytest.mark.asyncio
+    async def test_resolve_identity_consistency(self):
         gateway = YuanGateway()
-        uid1, sid1 = gateway.resolve_identity("telegram", "tg_123")
-        uid2, sid2 = gateway.resolve_identity("telegram", "tg_123")
+        uid1, sid1 = await gateway.resolve_identity("telegram", "tg_123")
+        uid2, sid2 = await gateway.resolve_identity("telegram", "tg_123")
         assert uid1 == uid2
         assert sid1 == sid2
 
-    def test_health_status_structure(self):
+    @pytest.mark.asyncio
+    async def test_health_status_structure(self):
         gateway = YuanGateway()
-        status = gateway.get_health_status()
+        status = await gateway.get_health_status()
         assert "status" in status
         assert "adapters" in status
         assert "identities" in status

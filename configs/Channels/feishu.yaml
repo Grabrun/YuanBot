@@ -1,0 +1,26 @@
+adapter: feishu-adapter
+enabled: false
+config:
+  # 飞书开放平台 App ID
+  app_id: ""
+
+  # 飞书开放平台 App Secret
+  app_secret: ""
+
+  # 事件订阅验证 Token（可选，用于校验回调来源）
+  verification_token: ""
+
+  # 事件订阅加密 Key（可选）
+  encrypt_key: ""
+
+  # 接收者 ID 类型
+  # open_id: 用户的 open_id（默认）
+  # user_id: 用户的 user_id
+  # union_id: 用户的 union_id
+  # chat_id: 群聊的 chat_id
+  receive_id_type: "open_id"
+
+  # Webhook 回调服务器配置
+  webhook:
+    host: "0.0.0.0"
+    port: 9000

@@ -45,9 +45,10 @@ class YuanGateway:
         self,
         event_queue_config: dict[str, Any] | None = None,
         config_dir: str | None = None,
+        sqlite_store: Any | None = None,
     ) -> None:
         self._adapter_manager = AdapterManager()
-        self._identity_service = IdentityService()
+        self._identity_service = IdentityService(store=sqlite_store)
         self._push_dispatcher = PushDispatcher()
         self._authenticator = ChannelAuthenticator()
         self._rate_limiter = RateLimiter()
@@ -192,7 +193,10 @@ class YuanGateway:
             return None
 
         # 2. 身份解析
-        yuanbot_user_id, session_id = self._identity_service.resolve_user_id(
+        yuanbot_user_id = await self._identity_service.resolve_user_id(
+            platform, platform_user_id
+        )
+        session_id = self._identity_service.build_session_id(
             platform, platform_user_id
         )
 
@@ -274,7 +278,7 @@ class YuanGateway:
             logger.error("send_response_error", platform=platform, error=str(e))
             return False
 
-    def resolve_identity(
+    async def resolve_identity(
         self,
         platform: str,
         platform_user_id: str,
@@ -284,7 +288,7 @@ class YuanGateway:
         Returns:
             (yuanbot_user_id, session_id) 元组
         """
-        yuanbot_user_id = self._identity_service.resolve_user_id(platform, platform_user_id)
+        yuanbot_user_id = await self._identity_service.resolve_user_id(platform, platform_user_id)
         session_id = self._identity_service.build_session_id(platform, platform_user_id)
         return yuanbot_user_id, session_id
 
@@ -342,7 +346,7 @@ class YuanGateway:
 
     # ── 健康检查 ──────────────────────────────
 
-    def get_health_status(self) -> dict[str, Any]:
+    async def get_health_status(self) -> dict[str, Any]:
         """获取网关及各通道健康状态"""
         adapter_health = self._adapter_manager.get_health_status()
         uptime = time.time() - self._started_at if self._started_at else 0
@@ -353,5 +357,5 @@ class YuanGateway:
             "adapters": adapter_health,
             "event_queue": self._event_queue.get_stats(),
             "rate_limiter": self._rate_limiter.get_stats(),
-            "identities": self._identity_service.get_all_identities(),
+            "identities": await self._identity_service.get_all_identities(),
         }

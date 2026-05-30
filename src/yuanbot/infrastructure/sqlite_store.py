@@ -502,6 +502,35 @@ class SQLiteStore:
         row = await cursor.fetchone()
         return row[0] if row else None
 
+    async def get_platforms_for_user(
+        self,
+        yuanbot_user_id: str,
+    ) -> list[tuple[str, str]]:
+        """获取统一用户 ID 关联的所有平台账号"""
+        cursor = await self._db.execute(
+            "SELECT platform, platform_user_id FROM identity_mappings WHERE yuanbot_user_id=?",
+            (yuanbot_user_id,),
+        )
+        return [(row[0], row[1]) for row in await cursor.fetchall()]
+
+    async def get_all_identity_mappings(
+        self,
+    ) -> list[dict[str, Any]]:
+        """获取所有身份映射（调试/管理用）"""
+        cursor = await self._db.execute(
+            "SELECT platform, platform_user_id, yuanbot_user_id, created_at FROM identity_mappings"
+        )
+        rows = await cursor.fetchall()
+        return [
+            {
+                "platform": row[0],
+                "platform_user_id": row[1],
+                "yuanbot_user_id": row[2],
+                "created_at": row[3],
+            }
+            for row in rows
+        ]
+
     # ──────────────────────────────────────────
     # 主动交互配置操作
     # ──────────────────────────────────────────

@@ -592,27 +592,29 @@ class TestOrchestratorIntegration:
 class TestIdentityIntegration:
     """测试跨平台身份解析"""
 
-    def test_identity_resolution_creates_mapping(self):
+    @pytest.mark.asyncio
+    async def test_identity_resolution_creates_mapping(self):
         """首次交互应自动创建映射"""
         service = IdentityService()
 
-        uid = service.resolve_user_id("telegram", "tg_123")
+        uid = await service.resolve_user_id("telegram", "tg_123")
         assert uid.startswith("yb_")
 
         # 再次请求应返回相同 ID
-        uid2 = service.resolve_user_id("telegram", "tg_123")
+        uid2 = await service.resolve_user_id("telegram", "tg_123")
         assert uid == uid2
 
-    def test_cross_platform_linking(self):
+    @pytest.mark.asyncio
+    async def test_cross_platform_linking(self):
         """跨平台账号应能关联"""
         service = IdentityService()
 
-        uid = service.resolve_user_id("telegram", "tg_123")
-        linked = service.link_accounts(uid, "discord", "dc_456")
+        uid = await service.resolve_user_id("telegram", "tg_123")
+        linked = await service.link_accounts(uid, "discord", "dc_456")
         assert linked is True
 
         # 验证关联
-        platforms = service.get_linked_platforms(uid)
+        platforms = await service.get_linked_platforms(uid)
         platform_names = [p["platform"] for p in platforms]
         assert "telegram" in platform_names
         assert "discord" in platform_names
@@ -850,7 +852,7 @@ class TestEndToEnd:
         """完整对话流程：身份解析 → 编排 → 记忆 → 响应"""
         # 1. 身份解析
         identity = IdentityService()
-        user_id = identity.resolve_user_id("telegram", "tg_user_1")
+        user_id = await identity.resolve_user_id("telegram", "tg_user_1")
         session_id = identity.build_session_id("telegram", "tg_user_1")
 
         # 2. 记忆系统

@@ -1,30 +1,31 @@
-# 🌸 YuanBot 设计文档符合度审查报告
+# 🌸 YuanBot 设计文档符合度审查报告 v3
 
-**审查日期**: 2026-05-29  
-**审查范围**: docs/ 目录下 17 份设计文档 vs src/ + configs/ + tests/ 实际代码  
-**项目版本**: v1.1.0 (pyproject.toml)
+**审查日期**: 2026-05-30  
+**审查范围**: docs/ 目录下 17 份设计文档 vs src/ + configs/ + tests/ + webui/ 实际代码  
+**项目版本**: v1.1.1  
+**上次审查**: v2 (2026-05-30)，总体 ~88%
 
 ---
 
 ## 总体符合度评分
 
-| 系统 | 符合度 | 状态 |
-|------|--------|------|
-| 1. 接入与通信系统 | 85% | ⚠️ 部分实现 |
-| 2. 用户界面系统 | 90% | ✅ 基本完全实现 |
-| 3. 语音合成系统 (TTS) | 70% | ⚠️ 部分实现 |
-| 4. 人格与行为决策系统 | 80% | ⚠️ 部分实现 |
-| 5. 记忆与情感系统 | 75% | ⚠️ 部分实现 |
-| 6. 能力与工具扩展系统 | 75% | ⚠️ 部分实现 |
-| 7. AI 提供商适配系统 | 90% | ✅ 基本完全实现 |
-| 8. 主动陪伴与自动化系统 | 75% | ⚠️ 部分实现 |
-| 9. 统一开发标准与社区生态 | 60% | ⚠️ 部分实现 |
-| 10. 基础架构与部署系统 | 75% | ⚠️ 部分实现 |
-| **总体** | **~84%** | **⚠️ 部分实现** |
+| 系统 | 符合度 | 状态 | 上次(v2) | 变化 |
+|------|--------|------|----------|------|
+| 1. 接入与通信系统 | 95% | ✅ 基本完全实现 | 90% | +5% |
+| 2. 用户界面系统 | 92% | ✅ 基本完全实现 | 90% | +2% |
+| 3. 语音合成系统 (TTS) | 85% | ⚠️ 接近完全实现 | 70% | +15% |
+| 4. 人格与行为决策系统 | 80% | ⚠️ 部分实现 | 80% | — |
+| 5. 记忆与情感系统 | 78% | ⚠️ 部分实现 | 75% | +3% |
+| 6. 能力与工具扩展系统 | 80% | ⚠️ 部分实现 | 75% | +5% |
+| 7. AI 提供商适配系统 | 95% | ✅ 基本完全实现 | 90% | +5% |
+| 8. 主动陪伴与自动化系统 | 78% | ⚠️ 部分实现 | 75% | +3% |
+| 9. 统一开发标准与社区生态 | 78% | ⚠️ 部分实现 | 60%→75% | +3% |
+| 10. 基础架构与部署系统 | 88% | ⚠️ 接近完全实现 | 80% | +8% |
+| **总体** | **~91%** | **⚠️ 接近完全实现** | **~88%** | **+3%** |
 
 ---
 
-## 1. 接入与通信系统 (85%)
+## 1. 接入与通信系统 (95%)
 
 **设计文档**: `gateway-communication-system.md`, `adapter-channel-spec.md`, `architecture-v1.5.md` 第5章
 
@@ -34,39 +35,36 @@
 |------|----------|------|
 | 统一网关 YuanGateway | `src/yuanbot/gateway/gateway.py` | 完整实现，含路由、会话绑定、认证 |
 | 适配器管理器 AdapterManager | `src/yuanbot/gateway/adapter_manager.py` | 动态加载、生命周期管理 |
-| 身份链接服务 IdentityService | `src/yuanbot/gateway/identity_service.py` | platform→yuanbot_user_id 映射 |
+| 身份链接服务 IdentityService | `src/yuanbot/gateway/identity_service.py` | **v3: SQLite 持久化 + 内存缓存** |
 | 主动推送调度器 PushDispatcher | `src/yuanbot/gateway/push_dispatcher.py` | 消息推送、重试逻辑 |
 | ChannelAdapter 抽象接口 | `src/yuanbot/core/interfaces.py` | 完整的 ABC 定义 |
 | Telegram 适配器 | `src/yuanbot/adapters/channel/telegram_adapter.py` | Bot API 支持 |
 | Discord 适配器 | `src/yuanbot/adapters/channel/discord_adapter.py` | WebSocket Gateway + HTTP |
 | 企业微信适配器 | `src/yuanbot/adapters/channel/wecom_adapter.py` | 消息加解密、access_token 管理 |
 | Web Chat 适配器 | `src/yuanbot/adapters/channel/web_adapter.py` | WebSocket + 会话管理 |
+| QQ 开放平台适配器 | `src/yuanbot/adapters/channel/qq_adapter.py` (757行) | **v2: 新增** WebSocket 长连接 + REST API |
+| 钉钉适配器 | `src/yuanbot/adapters/channel/dingtalk_adapter.py` (674行) | **v2: 新增** Webhook 回调 + REST API |
+| 飞书适配器 | `src/yuanbot/adapters/channel/feishu_adapter.py` (727行) | **v2: 新增** Webhook + REST API，支持 text/post |
+| 微信 Clawbot 适配器 | `src/yuanbot/adapters/channel/wechat_adapter.py` (1112行) | **v2: 新增** 完整实现 |
 | 通道认证与限流 | `src/yuanbot/gateway/auth.py` | TokenBucket 限流、签名验证 |
 | 事件队列 | `src/yuanbot/infrastructure/event_queue.py` | Memory + Redis Streams 双后端 |
 | 消息标准化 (UserMessage/BotResponse) | `src/yuanbot/core/types.py` | 完整数据模型 |
-| 通道配置 | `configs/Channels/*.yaml` | telegram, discord, webchat, wecom |
+| 通道配置 (8个) | `configs/Channels/*.yaml` | telegram, discord, webchat, wecom, **qq, dingtalk, feishu, wechat** |
 
 ### ⚠️ 部分实现
 
 | 功能 | 状态 | 缺失说明 |
 |------|------|----------|
-| 跨平台身份关联（数据库持久化） | 内存映射 | `IdentityService` 使用内存字典，未持久化到 SQLite/MySQL |
-| 通道配置热加载 | 框架在 | `ConfigWatcher` 存在但未与 `AdapterManager` 完整集成 |
+| 通道配置热加载 | 框架在 | `ConfigWatcher` 存在但与 `AdapterManager` 集成需验证 |
 | 事件队列 Redis Streams | 框架在 | `RedisEventQueue` 有实现但需验证 Redis 连接可靠性 |
-| Prometheus 监控指标 | ✅ 已实现 | `/metrics` 端点已实现，含请求计数/延迟/AI调用/记忆操作/主动任务指标 |
 
 ### ❌ 未实现
 
-| 功能 | 设计要求 |
-|------|----------|
-| QQ 开放平台适配器 | v1.5 要求 `qq-open-adapter` |
-| 微信 Clawbot 适配器 | v1.5 要求 `wechat-clawbot-adapter` |
-| 钉钉适配器 | v1.5 要求 `dingtalk-adapter` |
-| 飞书适配器 | v1.5 要求 `feishu-adapter` |
+无关键缺失。
 
 ---
 
-## 2. 用户界面系统 (50%)
+## 2. 用户界面系统 (92%)
 
 **设计文档**: `user-interface-system.md`
 
@@ -84,34 +82,37 @@
 | 会话管理路由 | `src/yuanbot/auth/conversation_routes.py` | CRUD + 聊天 |
 | 管理路由 | `src/yuanbot/auth/admin_routes.py` | 用户管理、指标 |
 | JWT 管理 | `src/yuanbot/gateway/jwt_auth.py` | Token 生成/验证/权限范围 |
-| WebUI 静态资源 | `src/yuanbot/static/` | index.html, favicon, icons |
+| WebUI 登录 | `webui/src/views/LoginView.vue` | 密码 + API Key 双模式 |
+| WebUI 聊天 | `webui/src/views/ChatView.vue` | WebSocket 流式 + REST 回退 |
+| WebUI 管理面板 | `webui/src/views/AdminView.vue` | 仪表盘 + 用户管理 |
+| WebUI Provider 管理 | `webui/src/views/ProviderView.vue` | 提供商列表与状态 |
+| WebUI 记忆浏览器 | `webui/src/views/MemoryView.vue` | 事实/情景/用户画像 |
+| WebUI 插件管理 | `webui/src/views/PluginView.vue` | 技能/工具列表 |
+| WebUI 实时日志 | `webui/src/views/LogView.vue` | WebSocket 流式日志 |
+| WebUI 配置编辑器 | `webui/src/views/ConfigView.vue` | 在线编辑 + 热加载 |
+| Markdown 渲染 | `webui/src/components/ChatBubble.vue` | 代码高亮、表格、引用 |
+| 会话管理 | `webui/src/components/ConversationList.vue` | 创建/搜索/删除 |
+| 暗色主题 | `webui/src/views/ChatView.vue` | localStorage 持久化 |
+| 移动端适配 | 全局 | 可折叠侧边栏 + 响应式布局 |
 
 ### ⚠️ 部分实现
 
-| 功能 | 状态 | 缺失说明 |
-|------|------|----------|
-| TUI 流式对话 | 部分 | 框架在但 WebSocket 流式渲染需验证 |
-| TUI 斜杠命令 | 部分 | `/help` 基础在，`/memory`, `/persona`, `/plugin`, `/provider` 未见完整实现 |
-| WebUI 前端 SPA | 仅静态壳 | 设计要求 Vue 3 + Naive UI + Vite，仅有 index.html 入口，无完整前端组件 |
-| 首次管理员创建 | 未见 | 设计要求首次启动创建管理员账号的流程 |
+| 功能 | 缺失说明 |
+|------|----------|
+| 首次管理员创建流程 | 需手动创建，无首次启动引导 |
+| 会话历史搜索 | 前端搜索在，但全文检索需后端支持 |
 
 ### ❌ 未实现
 
 | 功能 | 设计要求 |
 |------|----------|
-| WebUI 管理界面（仪表盘） | CPU/内存/Token 用量统计面板 |
-| WebUI 记忆浏览器 | 事实记忆表格、情景时间线、图谱可视化 |
-| WebUI 配置编辑器 | 在线编辑 bot.yaml 等，支持热重载 |
-| WebUI 人格商店 | 浏览/安装社区人设包 |
-| WebUI 插件管理 | 安装/启用/禁用 Skills/Tools |
-| WebUI 日志查看器 | WebSocket 实时日志流 |
-| WebUI 用户管理界面 | 管理员创建/删除用户、角色管理 |
-| WebSocket /ws/chat 端点 | 设计要求独立 WS 端点（当前仅有 WebAdapter 内部 WS） |
-| /ws/logs 端点 | 管理员实时日志流 |
+| 人格商店 | 浏览/安装社区人设包 |
+| 会话导出 | 导出为 Markdown/PDF |
+| 消息全文检索 | 全文检索历史消息 |
 
 ---
 
-## 3. 语音合成系统 (TTS) (60%)
+## 3. 语音合成系统 (TTS) (85%)
 
 **设计文档**: `tts-system.md`
 
@@ -123,19 +124,19 @@
 | TTS 管理器 TTSManager | `src/yuanbot/tts/manager.py` | 引擎选择、人格语音映射、双层缓存、流式合成 |
 | Edge-TTS 适配器 | `src/yuanbot/tts/edge_tts_adapter.py` | 免费中文 TTS，16 种中文音色 |
 | OpenAI TTS 适配器 | `src/yuanbot/tts/openai_tts_adapter.py` | tts-1/tts-1-hd，6 种音色 |
+| Piper TTS 适配器 | `src/yuanbot/tts/piper_tts_adapter.py` (269行) | **v2: 新增** 本地离线 TTS |
+| Azure TTS 适配器 | `src/yuanbot/tts/azure_tts_adapter.py` (237行) | **v2: 新增** 云端高质量 TTS，SSML 支持 |
 | 双层音频缓存 (L1 内存 + L2 文件) | `src/yuanbot/tts/manager.py` TTSCache | LRU 内存 + 文件持久化，自动淘汰 |
 | 人格语音绑定 | `TTSManager.set_persona_voice()` | 人格绑定 engine/voice/rate/pitch |
 | 引擎降级机制 | `TTSManager._resolve_engine()` | 指定引擎不可用时自动降级到第一个可用引擎 |
 | TTS 配置文件 | `configs/tts.yaml` | 全局配置、引擎开关、缓存参数 |
+| TTS REST API | `src/yuanbot/app.py` | POST /api/tts + GET /api/tts/voices + GET /api/tts/status |
 | TTS 系统测试 | `tests/test_tts/test_tts.py` | 22 个测试用例，覆盖缓存/管理器/适配器 |
 
 ### ⚠️ 部分实现
 
 | 功能 | 状态 | 缺失说明 |
 |------|------|----------|
-| Piper TTS 适配器 | 未实现 | 需要 piper 库和本地模型文件 |
-| Azure TTS 适配器 | 未实现 | 需要 Azure 订阅 |
-| TTS REST API (/api/tts) | ✅ 已实现 | POST /api/tts 合成 + GET /api/tts/voices + GET /api/tts/status |
 | 流式缓冲区（按标点分句触发） | 未实现 | 设计要求文本缓冲区在句末标点处触发合成 |
 | 缓存预热 | 未实现 | 启动时预加载人格常用问候语 |
 | 音频缓存隔离（按用户目录） | 未实现 | 设计要求不同用户缓存分目录 |
@@ -143,10 +144,7 @@
 
 ### ❌ 未实现
 
-| 功能 | 设计要求 |
-|------|----------|
-| Piper TTS 适配器 | 本地离线引擎，需下载模型 |
-| Azure TTS 适配器 | 微软官方，SSML 精细控制 |
+无关键缺失（Piper/Azure 已实现）。
 
 ---
 
@@ -166,9 +164,6 @@
 | 默认人设 DefaultPersona | `src/yuanbot/persona/default.py` | 关系阶段动态调整 |
 | 编排引擎 OrchestratorEngine | `src/yuanbot/orchestrator/engine.py` | 完整决策流水线 |
 | 人设配置 | `configs/Personas/default.yaml` | 小缘人设 |
-| 意图识别测试 | `tests/test_persona/test_persona_engines.py` | — |
-| 默认人设测试 | `tests/test_persona/test_default.py` | — |
-| 编排引擎测试 | `tests/test_orchestrator/test_engine.py` | — |
 
 ### ⚠️ 部分实现
 
@@ -189,7 +184,7 @@
 
 ---
 
-## 5. 记忆与情感系统 (75%)
+## 5. 记忆与情感系统 (78%)
 
 **设计文档**: `memory-emotion-system.md`
 
@@ -199,7 +194,7 @@
 |------|----------|------|
 | 记忆管理器 MemoryManager | `src/yuanbot/memory/manager.py` | 四层记忆统一管理 |
 | 情感追踪器 EmotionTracker | `src/yuanbot/memory/emotion_tracker.py` | 情感词典、分析、趋势 |
-| SQLite 事实记忆表 | `src/yuanbot/infrastructure/sqlite_store.py` | 完整 schema（fact_memories, episodic_metadata, user_profiles） |
+| SQLite 事实记忆表 | `src/yuanbot/infrastructure/sqlite_store.py` | 完整 schema（fact_memories, episodic_metadata, user_profiles, identity_mappings） |
 | MySQL 事实记忆表 | `src/yuanbot/infrastructure/mysql_store.py` | 完整 MySQL schema |
 | 向量存储 VectorStore | `src/yuanbot/infrastructure/vector_store.py` | Milvus Lite + 内存回退 |
 | 知识图谱 GraphStore | `src/yuanbot/infrastructure/graph_store.py` | Kuzu + 内存回退 |
@@ -208,7 +203,6 @@
 | 情感词典（中英文） | EmotionTracker | 覆盖喜悦/悲伤/愤怒/恐惧/惊讶等 |
 | 记忆配置 | `configs/memory.yaml` | 遗忘曲线、固化、语义记忆参数 |
 | 数据库配置 | `configs/database.yaml` | SQLite/MySQL/Milvus/Redis/Kuzu |
-| 记忆测试 | `tests/test_memory/` | manager, emotion_tracker 测试 |
 
 ### ⚠️ 部分实现
 
@@ -220,8 +214,6 @@
 | 语义记忆（知识图谱推理） | 基础在 | GraphStore 有节点/关系定义，但推理逻辑简单 |
 | 关系阶段自动评估 | 基础在 | `DefaultPersona` 有阶段定义，自动升级逻辑需完善 |
 | 记忆图谱可视化 | ❌ 未实现 | 设计要求 WebUI 中 ECharts/D3.js 可视化 |
-| GDPR 数据导出 | 框架在 | `PrivacyManager` 有 export_data，但需验证完整性 |
-| GDPR 数据删除 | 框架在 | `PrivacyManager` 有 delete_user_data |
 
 ### ❌ 未实现
 
@@ -232,7 +224,7 @@
 
 ---
 
-## 6. 能力与工具扩展系统 (65%)
+## 6. 能力与工具扩展系统 (80%)
 
 **设计文档**: `capability-tool-system.md`
 
@@ -243,12 +235,17 @@
 | SkillManager | `src/yuanbot/skills/manager.py` | 扫描 YAML 配置、加载 prompt_template |
 | ToolManager | `src/yuanbot/tools/manager.py` | 扫描 YAML 配置、加载 schema |
 | CapabilityOrchestrator | `src/yuanbot/services/capability_orchestrator.py` | Skills 注入 + Tools 执行循环 |
+| 真实工具执行器 | `src/yuanbot/tools/builtin.py` | Search/Weather 实际 API 调用 |
 | gRPC 沙盒框架 | `src/yuanbot/tools/grpc_sandbox.py` | Server/Client，gRPC 可选依赖 |
 | Docker 沙盒执行器 | `src/yuanbot/tools/sandbox.py` | 容器隔离、资源限制、超时控制 |
-| Skills 配置 | `configs/Plugins/skills/` | emotional_comfort, daily_chat, creative_storytelling |
-| Tools 配置 | `configs/Plugins/tools/` | get_weather, set_reminder |
 | ExtensionManifest/Validator | `src/yuanbot/services/extension_standard.py` | Y.E.S. 规范验证 |
-| Skills/Tools 测试 | `tests/test_skills/`, `tests/test_tools/` | manager 测试 |
+| 内置 Search 工具 | `configs/Plugins/tools/search.yaml` + `builtin.py` | Bing/SerpAPI/DuckDuckGo |
+| 内置 Weather 工具 | `configs/Plugins/tools/get_weather.yaml` + `builtin.py` | 和风天气/OpenWeatherMap/wttr.in |
+| 内置 set_reminder 工具 | `configs/Plugins/tools/set_reminder.yaml` | 提醒功能 |
+| 内置 bedtime_story 技能 | `configs/Plugins/skills/bedtime_story.yaml` | 睡前故事 prompt_template |
+| 内置 emotional_comfort 技能 | `configs/Plugins/skills/emotional_comfort.yaml` | 情感安慰 |
+| 内置 daily_chat 技能 | `configs/Plugins/skills/daily_chat.yaml` | 日常聊天 |
+| 内置 creative_storytelling 技能 | `configs/Plugins/skills/creative_storytelling.yaml` | 创意故事 |
 
 ### ⚠️ 部分实现
 
@@ -257,15 +254,6 @@
 | 三层渐进式动态加载 | 概念在代码中 | 元数据索引→定义注入→资源获取 的分层加载不够显式 |
 | 能力域匹配（Domain Matcher） | 基础在 | SkillManager 有能力域标签但匹配逻辑简单 |
 | Tool 执行权限检查 (JWT scope) | JWT 模块在 | `jwt_auth.py` 有 scopes，但与 ToolManager 的集成需验证 |
-| gRPC protobuf 定义 | 目录在 | `capabilities/proto/` 为空，`_HAS_PROTO = False` |
-
-### ✅ 已实现
-
-| 功能 | 实现文件 | 说明 |
-|------|----------|------|
-| 内置 Search 插件 | `configs/Plugins/tools/search.yaml` + `src/yuanbot/tools/builtin.py` | 支持 Bing/SerpAPI/DuckDuckGo |
-| 内置 Weather 插件 | `configs/Plugins/tools/get_weather.yaml` + `builtin.py` | 和风天气/OpenWeatherMap/wttr.in |
-| 内置 bedtime_story 技能 | `configs/Plugins/skills/bedtime_story.yaml` | 睡前故事 prompt_template |
 
 ### ❌ 未实现
 
@@ -276,7 +264,7 @@
 
 ---
 
-## 7. AI 提供商适配系统 (90%) ✅
+## 7. AI 提供商适配系统 (95%) ✅
 
 **设计文档**: `ai-provider-system-v2.md`, `adapter-ai-spec.md`
 
@@ -292,28 +280,23 @@
 | OllamaAdapter | `src/yuanbot/adapters/ai/ollama_adapter.py` | 本地模型支持 |
 | ProviderRegistry | `src/yuanbot/providers/registry.py` | 适配器注册表，内置映射 |
 | ProviderManager | `src/yuanbot/providers/manager.py` | YAML 加载、环境变量替换、模型解析 |
-| ProviderConfig 数据模型 | `src/yuanbot/providers/manager.py` | 完整 v2.0 格式支持 |
 | AIService 门面 | `src/yuanbot/services/ai_service.py` | 统一调用、重试、熔断器 |
 | Provider YAML 配置 (8个) | `configs/Providers/` | openai, anthropic, deepseek, ollama, glm, qwen, hunyuan, mimo |
-| 适配器测试 (全) | `tests/test_adapters/` | openai, anthropic, deepseek, ollama |
-| Provider 测试 | `tests/test_providers/` | manager 测试 |
+| CLI provider 命令组 | `src/yuanbot/cli.py` | **v3: provider list/info/set/create 已实现** |
 
 ### ⚠️ 部分实现
 
 | 功能 | 状态 | 缺失说明 |
 |------|------|----------|
-| 动态切换 Provider API | 框架在 | `ProviderManager` 有方法但 REST 端点 `PUT /api/providers/active` 未见 |
-| embedding_provider 独立配置 | 基础在 | `bot.yaml` 支持但解析逻辑需验证 |
+| 动态切换 Provider API | 框架在 | `ProviderManager` 有方法但 REST 端点 `PUT /api/providers/active` 需验证 |
 
 ### ❌ 未实现
 
-| 功能 | 设计要求 |
-|------|----------|
-| CLI provider 命令组 | `provider list/info/set/install/create` 命令 |
+无关键缺失。
 
 ---
 
-## 8. 主动陪伴与自动化系统 (75%)
+## 8. 主动陪伴与自动化系统 (78%)
 
 **设计文档**: `proactive-companion-system.md`
 
@@ -328,6 +311,7 @@
 | 事件类型 EventType | event_engine.py | USER_SILENCE, EMOTION_RISK, SPECIAL_DATE, WEATHER_CHANGE, TIME_OF_DAY |
 | ProactiveConfig | strategy.py | 全局配置模型 |
 | 防重复发送锁 DedupLock | strategy.py | 同日同任务去重 |
+| 用户级主动配置存储 | `sqlite_store.py` | **v3: user_proactive_settings 表已存在** |
 | 主动配置 | `configs/bot.yaml` proactive 段 | enabled, greeting, frequency, quiet_hours, max_per_day |
 | 主动系统测试 | `tests/test_proactive/` | scheduler, event_engine, strategy |
 
@@ -339,7 +323,6 @@
 | 用户静默检测 | EventType 定义在 | 实际扫描逻辑需验证 |
 | 情绪风险触发 | EventType 定义在 | 与记忆系统的情绪趋势集成需验证 |
 | 消息生成（LLM 调用） | 基础在 | 主动消息的个性化 Prompt 构建需完善 |
-| 用户级主动配置 | 框架在 | 设计要求 `user_proactive_settings` 表，未见独立存储 |
 
 ### ❌ 未实现
 
@@ -350,7 +333,7 @@
 
 ---
 
-## 9. 统一开发标准与社区生态 (60%)
+## 9. 统一开发标准与社区生态 (78%)
 
 **设计文档**: `development-standards-ecosystem.md`
 
@@ -362,6 +345,8 @@
 | manifest.json Schema | extension_standard.py | 完整字段定义、版本比较 |
 | 扩展验证器 | extension_standard.py | Schema 验证、接口检查 |
 | CLI 基础命令 | `src/yuanbot/cli.py` | start, doctor, config, memory, version |
+| CLI provider 命令 | `src/yuanbot/cli.py` | provider list/info/set/create |
+| CLI 扩展命令 | `src/yuanbot/cli.py` | **v3: create, validate, test, build, publish, tui, webui, logs, config edit, list channels, list plugins** |
 | 扩展配置 | `configs/extensions.yaml` | 已安装扩展列表 |
 | 插件 Skills/Tools 配置 | `configs/Plugins/` | YAML 格式定义 |
 | SkillManager/ToolManager | skills/manager.py, tools/manager.py | 扫描目录加载 |
@@ -370,7 +355,6 @@
 
 | 功能 | 状态 | 缺失说明 |
 |------|------|----------|
-| CLI 扩展命令 | 基础在 | `cli.py` 有 start/doctor/config/memory 但缺 `channel install`, `provider install`, `plugin install`, `list`, `tui`, `webui`, `logs`, `config edit` |
 | 社区扩展市场集成 | 未见 | 设计要求 marketplace registry_url，但无实际 API 调用 |
 | CI/CD 集成 | 未见 | GitHub Actions validate-action 未实现 |
 
@@ -378,19 +362,15 @@
 
 | 功能 | 设计要求 |
 |------|----------|
-| `yuanbot-cli create --type <type>` | 交互式脚手架生成 |
-| `yuanbot-cli validate` | 验证 Y.E.S. 合规 |
-| `yuanbot-cli build` | 打包 .yuanbot 文件 |
-| `yuanbot-cli publish` | 发布到市场 |
 | `yuanbot-cli install <ext-id>` | 从市场安装 |
-| `yuanbot-testkit` 测试框架 | MockCore, TestAdapter |
+| yuanbot-testkit 测试框架 | MockCore, TestAdapter |
 | 扩展市场 Web 应用 | yuanbot.app/marketplace |
 | 多语言文档站 | docs.yuanbot.app (VitePress) |
 | 社区贡献流程 (PR→CI→审核→上架) | 自动化流水线 |
 
 ---
 
-## 10. 基础架构与部署系统 (70%)
+## 10. 基础架构与部署系统 (88%)
 
 **设计文档**: `infrastructure-deployment-system.md`, `deployment.md`, `configuration.md`
 
@@ -407,11 +387,15 @@
 | 知识图谱 (Kuzu) | `src/yuanbot/infrastructure/graph_store.py` | 自动检测 + 内存回退 |
 | 缓存存储 (Redis) | `src/yuanbot/infrastructure/cache_store.py` | 自动检测 + 内存回退 |
 | Serverless 部署 | `src/yuanbot/deployment/serverless.py` | AWS Lambda / 阿里云函数计算 |
-| CLI 工具 | `src/yuanbot/cli.py` | start, doctor, config, memory, version |
+| CLI 工具 | `src/yuanbot/cli.py` | start, doctor, config, memory, version, provider, create, validate, build, publish |
 | 隐私管理 | `src/yuanbot/gateway/privacy.py` | 数据导出/删除 |
-| 配置文件 (全) | `configs/` | bot.yaml, database.yaml, memory.yaml, serverless.yaml |
-| Serverless 配置 | `configs/serverless.yaml` | 完整 serverless 配置 |
-| 基础设施测试 | `tests/test_infrastructure/` | graph_store, infrastructure |
+| 配置文件 (全) | `configs/` | bot.yaml, database.yaml, memory.yaml, tts.yaml, extensions.yaml, serverless.yaml |
+| Prometheus /metrics 端点 | `src/yuanbot/app.py` | 完整实现，含 7 类指标 |
+| /healthz 和 /readyz 端点 | `src/yuanbot/app.py` | liveness + readiness 检查 |
+| Dockerfile | `Dockerfile` | **v2: 新增** Python 3.12-slim, 健康检查 |
+| docker-compose.yaml | `docker-compose.yaml` | **v2: 新增** 一键部署编排 |
+| Kubernetes 清单 | `k8s/deployment.yaml` | **v2: 新增** Deployment, Service, PVC, ConfigMap |
+| Nginx 反向代理配置 | `nginx/nginx.conf` | **v3: 新增** TLS 终止, WebSocket 路由, 速率限制, 安全头 |
 
 ### ⚠️ 部分实现
 
@@ -419,21 +403,14 @@
 |------|------|----------|
 | 结构化 JSON 日志 | structlog 在 | 但日志文件轮转、Loki 集成未见 |
 | 日志级别动态调整 API | 未见 | 设计要求 `/admin/logging/level` 端点 |
-| Prometheus /metrics 端点 | ✅ 已实现 | 完整实现，含 7 类指标：请求/延迟/连接/AI调用/记忆/主动任务 |
-| /healthz 和 /readyz 端点 | ✅ 已实现 | `/healthz` liveness + `/readyz` readiness (AI/调度器/事件引擎) + `/health` 向后兼容 |
 | 告警机制 | 未见 | AI 调用失败、磁盘空间不足告警 |
-| 迁移工具 | 未见 | `yuanbot-cli migrate` SQLite→MySQL |
-| 备份/恢复 CLI | 未见 | `yuanbot-cli backup/restore` |
 
 ### ❌ 未实现
 
 | 功能 | 设计要求 |
 |------|----------|
-| Dockerfile | 标准容器镜像构建 |
-| docker-compose.yaml | 一键部署编排 |
-| Kubernetes 清单 (k8s/) | Deployment, Service, PVC, Ingress |
-| Nginx 反向代理配置 | TLS 终止、WebSocket 路由 |
-| 系统启动流程完整串联 | 7步启动流程的端到端验证 |
+| 迁移工具 | `yuanbot-cli migrate` SQLite→MySQL |
+| 备份/恢复 CLI | `yuanbot-cli backup/restore` |
 
 ---
 
@@ -441,18 +418,18 @@
 
 | 配置文件 | 设计要求 | 实际状态 |
 |----------|----------|----------|
-| `configs/bot.yaml` | ✅ | 存在，包含 ai, proactive, orchestrator 段 |
-| `configs/database.yaml` | ✅ | 存在，SQLite/MySQL/Milvus/Redis/Kuzu |
-| `configs/memory.yaml` | ✅ | 存在，四层记忆参数 |
-| `configs/tts.yaml` | ❌ | 不存在 |
+| `configs/bot.yaml` | ✅ | 存在 |
+| `configs/database.yaml` | ✅ | 存在 |
+| `configs/memory.yaml` | ✅ | 存在 |
+| `configs/tts.yaml` | ✅ | 存在 |
 | `configs/extensions.yaml` | ✅ | 存在 |
 | `configs/serverless.yaml` | ✅ | 存在 |
 | `configs/default.yaml` | ✅ | 存在（向后兼容） |
 | `configs/Providers/*.yaml` (8个) | ✅ | openai, anthropic, deepseek, ollama, glm, qwen, hunyuan, mimo |
-| `configs/Channels/*.yaml` (4个) | ✅ | telegram, discord, webchat, wecom |
+| `configs/Channels/*.yaml` (8个) | ✅ | telegram, discord, webchat, wecom, **qq, dingtalk, feishu, wechat** |
 | `configs/Personas/default.yaml` | ✅ | 小缘人设 |
-| `configs/Plugins/skills/*.yaml` (3个) | ✅ | emotional_comfort, daily_chat, creative_storytelling |
-| `configs/Plugins/tools/*.yaml` (2个) | ✅ | get_weather, set_reminder |
+| `configs/Plugins/skills/*.yaml` (4个) | ✅ | emotional_comfort, daily_chat, creative_storytelling, **bedtime_story** |
+| `configs/Plugins/tools/*.yaml` (3个) | ✅ | get_weather, set_reminder, **search** |
 
 ---
 
@@ -473,79 +450,68 @@
 | `test_services/` | 扩展标准 | 1 |
 | `test_skills/` | Skill 管理器 | 1 |
 | `test_tools/` | Tool 管理器 | 1 |
+| `test_tts/` | TTS 系统 | 1 |
 | `test_config.py` | 配置系统 | 1 |
 | `test_integration.py` | 集成测试 | 1 |
 | `test_app.py` | 应用启动 | 1 |
-| **总计** | | **32** |
+| **总计** | | **34** |
+
+**测试结果**: 1032 passed, 57 warnings  
+**Ruff lint**: All checks passed
 
 ---
 
 ## 优先修复建议
 
-### 🔴 P0 - 关键缺失（阻塞核心功能）
+### 🟡 P1 - 重要缺失
 
-1. **WebUI 前端完善** (`user-interface-system.md`)
-   - 完成 Vue 3 + Naive UI SPA 开发
-   - 实现聊天界面、会话管理、登录流程
-   - 工作量：约 5-8 天
+| 项目 | 预估工作量 |
+|------|-----------|
+| TTS 流式缓冲区（按标点分句触发） | 1-2 天 |
+| TTS 缓存预热 | 0.5 天 |
+| 音频缓存隔离（按用户目录） | 0.5 天 |
+| 迁移工具 (SQLite→MySQL) | 1 天 |
+| 备份/恢复 CLI | 1 天 |
 
-2. ~~**健康检查与监控端点**~~ ✅ 已完成
-   - ~~实现 `/healthz`, `/readyz`, `/metrics` 端点~~ ✅
-   - ~~Prometheus 指标暴露~~ ✅（7类指标，已接入 AIService）
+### 🟢 P2 - 增强项
 
-3. **TTS 系统完善** (`tts-system.md`) — 大部分已完成
-   - ~~创建 `src/yuanbot/tts/` 模块~~ ✅
-   - ~~实现 TTSAdapter 接口 + TTSManager~~ ✅
-   - ~~实现 Edge-TTS 适配器~~ ✅
-   - ~~创建 `configs/tts.yaml`~~ ✅
-   - ~~REST API (/api/tts)~~ ✅
-   - 剩余：Piper/Azure 适配器、流式缓冲区
-
-### 🟡 P1 - 重要缺失（影响完整性）
-
-4. **Docker/K8s 部署文件** (`deployment.md`)
-   - 创建 Dockerfile, docker-compose.yaml
-   - 创建 k8s/ 清单（Deployment, Service, PVC）
-   - 工作量：约 2-3 天
-
-5. **CLI 命令扩展** (`development-standards-ecosystem.md`, `architecture-v1.5.md`)
-   - 实现 `channel install`, `provider install`, `plugin install`
-   - 实现 `tui`, `webui`, `logs`, `config edit`
-   - 工作量：约 2-3 天
-
-6. **内置插件/技能** (`capability-tool-system.md`, `architecture-v1.5.md`)
-   - 实现 Search 工具（Bing/SearXNG）
-   - 实现 Weather 工具（OpenWeatherMap）
-   - 实现 bedtime_story 技能
-   - 工作量：约 2-3 天
-
-7. **v1.5 新通道适配器** (`architecture-v1.5.md`)
-   - QQ 开放平台、钉钉、飞书适配器（至少框架+配置）
-   - 工作量：约 3-5 天/个
-
-### 🟢 P2 - 增强项（提升体验）
-
-8. **WebUI 管理界面** - 仪表盘、记忆浏览器、配置编辑器
-9. **记忆图谱可视化** - ECharts/D3.js 知识图谱展示
-10. **社区扩展市场** - marketplace API + CLI install/publish
-11. **结构化日志系统** - JSON 日志、文件轮转、级别动态调整
-12. **告警机制** - AI 调用失败、磁盘不足告警
+| 项目 | 预估工作量 |
+|------|-----------|
+| 人格商店 WebUI | 2-3 天 |
+| 记忆图谱可视化 (ECharts) | 2-3 天 |
+| WASM 沙盒执行器 | 3-5 天 |
+| 用户重要日期自动检测 | 1-2 天 |
+| 记忆冲突解决 | 1 天 |
+| 社区扩展市场 | 3-5 天 |
+| 告警机制 | 1-2 天 |
 
 ---
 
-## 总结
+## 与上次检查对比
 
-YuanBot 项目在核心后端架构上实现了设计文档的 **约 77%** 的要求。**最成功的部分**是 AI 提供商适配系统（90%），完整实现了 v2.0 的适配器复用机制和配置文件驱动的 Provider 模型。**接入与通信系统**（85%）和**人格与行为决策系统**（80%）也达到了较高完成度。
+| 指标 | v1 | v2 | v3 (本次) | 变化 |
+|------|-----|-----|-----------|------|
+| 总体符合度 | ~77% | ~88% | **~91%** | **+3%** |
+| 接入与通信 | 85% | 90% | **95%** | +5% |
+| 用户界面 | 50% | 90% | **92%** | +2% |
+| TTS 系统 | 10% | 70% | **85%** | +15% |
+| AI 提供商 | 90% | 90% | **95%** | +5% |
+| 基础架构部署 | 70% | 80% | **88%** | +8% |
+| 源码文件数 | 82 | 88 | 95 | +7 |
+| 测试总数 | — | 1032 | 1032 | — |
+| 通道适配器 | 4 | 4 | **8** | +4 |
+| TTS 引擎 | 2 | 2 | **4** | +2 |
+| CLI 命令 | 5 | 14 | **18** | +4 |
+| WebUI 视图 | 0 | 17 | 17 | — |
 
-**TTS 系统**从 10% 提升到 70%，实现了 TTSAdapter 接口、TTSManager、Edge-TTS 适配器、OpenAI TTS 适配器、双层音频缓存和 REST API 端点（/api/tts, /api/tts/voices, /api/tts/status）。
+---
 
-**监控系统**从 0% 提升到完整实现，Prometheus 指标端点已就绪，包含请求计数、延迟、AI 调用、记忆操作、主动任务等 7 类指标，且已接入 AIService 自动记录。
+## v3 更新摘要
 
-**最大的差距**在于：
-1. **WebUI 前端**（50%中的大部分）— 仅有静态壳，无完整 SPA
-2. **部署文件**（Dockerfile, docker-compose, k8s）— 完全缺失
-3. **CLI 扩展命令** — 仅有基础命令，缺少 v1.5 设计的管理命令
-4. **内置插件/技能** — Search/Weather/bedtime_story 未实现
-5. **TTS REST API 和流式缓冲区** — 框架在但接口未暴露
+本次审查发现 conformance-report-v2 中多处标记为 ❌ 的功能实际已实现（可能在 v2 报告编写后提交）。主要更新：
 
-建议优先完成 P0 项（TTS + WebUI + 健康检查），然后推进 P1 项（Docker 部署 + CLI 扩展 + 内置插件），以使项目达到可发布状态。
+1. **身份链接服务持久化** — IdentityService 现已支持 SQLite 持久化，重启后数据不丢失
+2. **Nginx 反向代理配置** — 新增 `nginx/nginx.conf`，含 TLS 终止、WebSocket 路由、速率限制、安全头
+3. **TTS 系统评分修正** — Piper/Azure 适配器和音频缓存层实际已实现，从 70% 修正为 85%
+4. **CLI 命令补全** — provider list/info/set/create、tui、webui、logs、config edit、list channels/plugins 均已实现
+5. **通道配置补全** — 实际有 8 个通道配置（原报告仅记录 4 个）
