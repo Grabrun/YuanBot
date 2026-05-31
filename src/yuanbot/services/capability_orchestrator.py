@@ -19,7 +19,9 @@ from yuanbot.core.types import (
     ToolDefinition,
     ToolResult,
 )
+from yuanbot.gateway.jwt_auth import JWTAuthManager, TokenPayload
 from yuanbot.services.ai_service import AIService
+from yuanbot.services.domain_matcher import DomainMatcher, DomainMatchResult
 from yuanbot.skills.manager import SkillManager
 from yuanbot.tools.manager import ToolManager
 
@@ -53,12 +55,14 @@ class CapabilityOrchestrator:
     职责：
     1. 根据决策结果加载 Skill 提示词和 Tool Schema
     2. 管理 Tool 执行循环（LLM → tool_calls → 执行 → 重新推理）
-    3. 安全策略检查（权限验证）
+    3. 安全策略检查（权限验证，JWT scope 集成）
     4. 将工具结果反馈给对话历史
+    5. 能力域匹配（DomainMatcher 集成）
 
     设计参考:
     - persona-decision-system.md 3.8 能力调用编排器
     - capability-tool-system.md 5.3 Tools 调用流程
+    - capability-tool-system.md 7.3 权限级别
     """
 
     def __init__(
@@ -66,10 +70,38 @@ class CapabilityOrchestrator:
         skill_manager: SkillManager,
         tool_manager: ToolManager,
         ai_service: AIService,
+        domain_matcher: DomainMatcher | None = None,
+        jwt_auth_manager: JWTAuthManager | None = None,
     ):
         self._skills = skill_manager
         self._tools = tool_manager
         self._ai = ai_service
+        self._domain_matcher = domain_matcher or DomainMatcher()
+        self._jwt_auth = jwt_auth_manager
+
+    def match_domains(
+        self,
+        intent: str = "",
+        emotion: str = "",
+        capability_domains: list[str] | None = None,
+    ) -> DomainMatchResult:
+        """执行能力域匹配
+
+        委托给 DomainMatcher，返回匹配结果用于指导 Skill/Tool 加载。
+
+        Args:
+            intent: 用户意图
+            emotion: 情感标签
+            capability_domains: 人设能力域声明
+
+        Returns:
+            DomainMatchResult: 匹配结果
+        """
+        return self._domain_matcher.match(
+            intent=intent,
+            emotion=emotion,
+            capability_domains=capability_domains,
+        )
 
     async def load_capabilities(
         self,
@@ -122,6 +154,7 @@ class CapabilityOrchestrator:
         tool_ids: list[str],
         system_prompt: str | None = None,
         max_rounds: int = _MAX_TOOL_CALL_ROUNDS,
+        token_payload: TokenPayload | None = None,
     ) -> ToolExecutionLoopResult:
         """执行工具调用循环
 
@@ -138,6 +171,7 @@ class CapabilityOrchestrator:
             tool_ids: 对应的工具 ID 列表
             system_prompt: 系统提示词
             max_rounds: 最大循环次数
+            token_payload: JWT token 载荷（用于权限验证）
 
         Returns:
             ToolExecutionLoopResult: 执行结果
@@ -181,7 +215,7 @@ class CapabilityOrchestrator:
                 tool_id = tool_id_map.get(tool_name, tool_name)
 
                 # 安全策略检查
-                if not self._check_permission(tool_id):
+                if not self._check_permission(tool_id, token_payload):
                     tool_result = ToolResult(
                         tool_id=tool_id,
                         success=False,
@@ -217,20 +251,49 @@ class CapabilityOrchestrator:
         result.final_response = current_messages[-1].content or ""
         return result
 
-    def _check_permission(self, tool_id: str) -> bool:
+    def _check_permission(
+        self,
+        tool_id: str,
+        token_payload: TokenPayload | None = None,
+    ) -> bool:
         """检查工具调用权限
 
         权限级别:
-        - safe (readonly): 默认允许
-        - restricted (user_data): 需要用户确认（当前默认允许）
-        - dangerous (system): 需要管理员权限（当前拒绝）
+        - readonly: 默认允许
+        - user_data: 需要 user_data 或 system scope
+        - system: 需要 system scope
+
+        集成 JWT scope 验证（当 jwt_auth_manager 可用时）。
+
+        设计参考: capability-tool-system.md 7.3 权限级别
         """
         # 获取工具配置
         all_tools = self._tools.get_all_tools()
         for tool_info in all_tools:
             if tool_info["tool_id"] == tool_id:
                 level = tool_info.get("permission_level", "readonly")
-                if level == "dangerous":
+
+                # JWT scope 验证
+                if self._jwt_auth and token_payload:
+                    from yuanbot.gateway.jwt_auth import InsufficientScopeError
+
+                    try:
+                        self._jwt_auth.require_scope(token_payload, level)
+                        return True
+                    except InsufficientScopeError:
+                        logger.warning(
+                            "tool_jwt_scope_denied",
+                            tool_id=tool_id,
+                            required_scope=level,
+                            user_scopes=token_payload.scopes,
+                        )
+                        return False
+                    except ValueError:
+                        # 无效的 scope 级别，回退到简单检查
+                        pass
+
+                # 回退：简单权限检查
+                if level == "system":
                     logger.warning("tool_permission_denied", tool_id=tool_id)
                     return False
                 return True
