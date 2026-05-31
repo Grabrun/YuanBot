@@ -151,6 +151,78 @@ async def get_messages(
     }
 
 
+class SearchMessagesRequest(BaseModel):
+    query: str
+    limit: int = 50
+    offset: int = 0
+
+
+class ExportConversationRequest(BaseModel):
+    format: str = "markdown"  # "markdown" or "json"
+
+
+@router.get("/api/messages/search")
+async def search_messages(
+    q: str = Query(..., min_length=1, description="搜索关键词"),
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+    user: User = Depends(get_current_user),
+) -> dict:
+    """跨会话全文搜索消息
+
+    在当前用户所有会话的消息内容中搜索关键词。
+    """
+    store = get_conv_store()
+    results = store.search_messages(
+        user_id=user.user_id,
+        query=q,
+        limit=limit,
+        offset=offset,
+    )
+    return {
+        "query": q,
+        "results": results,
+        "count": len(results),
+    }
+
+
+@router.get("/api/conversations/{conversation_id}/export")
+async def export_conversation(
+    conversation_id: str,
+    format: str = Query(default="markdown", pattern="^(markdown|json)$"),
+    user: User = Depends(get_current_user),
+):
+    """导出会话数据
+
+    支持 Markdown 和 JSON 两种格式。
+    """
+    store = get_conv_store()
+
+    if format == "json":
+        data = store.export_conversation_json(conversation_id, user.user_id)
+        if data is None:
+            raise HTTPException(status_code=404, detail="Conversation not found")
+        from fastapi.responses import JSONResponse
+        return JSONResponse(
+            content=data,
+            headers={
+                "Content-Disposition": f'attachment; filename="{conversation_id}.json"'
+            },
+        )
+    else:
+        md = store.export_conversation_markdown(conversation_id, user.user_id)
+        if md is None:
+            raise HTTPException(status_code=404, detail="Conversation not found")
+        from fastapi.responses import Response
+        return Response(
+            content=md,
+            media_type="text/markdown; charset=utf-8",
+            headers={
+                "Content-Disposition": f'attachment; filename="{conversation_id}.md"'
+            },
+        )
+
+
 @router.post("/api/chat")
 async def send_message(
     body: SendMessageRequest,

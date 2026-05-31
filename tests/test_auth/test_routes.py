@@ -402,6 +402,117 @@ class TestConversationEndpoints:
         )
         assert len(resp.json()["conversations"]) == 0
 
+    def test_search_messages(self, init_client):
+        """跨会话全文搜索消息"""
+        token = self._login(init_client)
+        headers = {"Authorization": f"Bearer {token}"}
+
+        # 创建会话并发送消息
+        resp1 = init_client.post("/api/conversations", json={"title": "搜索测试"}, headers=headers)
+        conv_id = resp1.json()["conversation_id"]
+
+        # 直接通过 store 添加消息（避免调用 AI 回复）
+        store = init_client.app.state.conv_store
+        user_id = init_client.app.state.user_store.get_user_by_username("alice").user_id
+        store.add_message(conv_id, user_id, "user", "今天天气真不错")
+        store.add_message(conv_id, user_id, "assistant", "是呀，阳光明媚的～")
+        store.add_message(conv_id, user_id, "user", "我想吃火锅")
+
+        # 搜索"天气"
+        resp = init_client.get("/api/messages/search", params={"q": "天气"}, headers=headers)
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["query"] == "天气"
+        assert len(data["results"]) == 1
+        assert "天气" in data["results"][0]["content"]
+
+        # 搜索"火锅"
+        resp = init_client.get("/api/messages/search", params={"q": "火锅"}, headers=headers)
+        assert resp.status_code == 200
+        assert len(resp.json()["results"]) == 1
+
+        # 搜索不存在的关键词
+        resp = init_client.get("/api/messages/search", params={"q": "不存在"}, headers=headers)
+        assert resp.status_code == 200
+        assert len(resp.json()["results"]) == 0
+
+    def test_search_messages_isolation(self, init_client):
+        """搜索结果用户隔离"""
+        store = init_client.app.state.conv_store
+        user_store = init_client.app.state.user_store
+
+        # 创建 alice 和 bob
+        user_store.create_user("alice", "pass1")
+        user_store.create_user("bob", "pass2")
+        alice = user_store.get_user_by_username("alice")
+        bob = user_store.get_user_by_username("bob")
+
+        # alice 创建会话并添加消息
+        conv = store.create_conversation(alice.user_id, "Alice 会话")
+        store.add_message(conv.conversation_id, alice.user_id, "user", "我的秘密是喜欢吃披萨")
+
+        # bob 创建会话并添加消息
+        conv2 = store.create_conversation(bob.user_id, "Bob 会话")
+        store.add_message(conv2.conversation_id, bob.user_id, "user", "我喜欢吃汉堡")
+
+        # alice 搜索只能看到自己的消息
+        alice_login = init_client.post("/api/auth/login", json={"username": "alice", "password": "pass1"})
+        alice_token = alice_login.json()["token"]
+        resp = init_client.get("/api/messages/search", params={"q": "吃"}, headers={"Authorization": f"Bearer {alice_token}"})
+        assert resp.status_code == 200
+        results = resp.json()["results"]
+        assert len(results) == 1
+        assert "披萨" in results[0]["content"]
+
+    def test_export_conversation_markdown(self, init_client):
+        """导出会话为 Markdown"""
+        token = self._login(init_client)
+        headers = {"Authorization": f"Bearer {token}"}
+
+        # 创建会话并添加消息
+        resp1 = init_client.post("/api/conversations", json={"title": "导出测试"}, headers=headers)
+        conv_id = resp1.json()["conversation_id"]
+
+        store = init_client.app.state.conv_store
+        user_id = init_client.app.state.user_store.get_user_by_username("alice").user_id
+        store.add_message(conv_id, user_id, "user", "你好")
+        store.add_message(conv_id, user_id, "assistant", "你好呀～有什么可以帮你的吗？")
+
+        # 导出 Markdown
+        resp = init_client.get(f"/api/conversations/{conv_id}/export", params={"format": "markdown"}, headers=headers)
+        assert resp.status_code == 200
+        assert resp.headers["content-type"].startswith("text/markdown")
+        body = resp.text
+        assert "# 导出测试" in body
+        assert "你好" in body
+        assert "用户" in body
+        assert "助手" in body
+
+    def test_export_conversation_json(self, init_client):
+        """导出会话为 JSON"""
+        token = self._login(init_client)
+        headers = {"Authorization": f"Bearer {token}"}
+
+        resp1 = init_client.post("/api/conversations", json={"title": "JSON导出"}, headers=headers)
+        conv_id = resp1.json()["conversation_id"]
+
+        store = init_client.app.state.conv_store
+        user_id = init_client.app.state.user_store.get_user_by_username("alice").user_id
+        store.add_message(conv_id, user_id, "user", "测试消息")
+
+        resp = init_client.get(f"/api/conversations/{conv_id}/export", params={"format": "json"}, headers=headers)
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["title"] == "JSON导出"
+        assert len(data["messages"]) == 1
+        assert data["messages"][0]["content"] == "测试消息"
+
+    def test_export_not_found(self, init_client):
+        """导出不存在的会话"""
+        token = self._login(init_client)
+        resp = init_client.get("/api/conversations/nonexistent/export", headers={"Authorization": f"Bearer {token}"})
+        assert resp.status_code == 404
+
 
 class TestAdminEndpoints:
     """管理端点测试"""

@@ -478,6 +478,129 @@ class ConversationStore:
         messages = self.get_messages(conversation_id, user_id, limit=10000)
         return messages[-limit:]
 
+    def search_messages(
+        self,
+        user_id: str,
+        query: str,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> list[dict[str, Any]]:
+        """跨会话全文搜索消息
+
+        在用户所有会话的消息内容中搜索关键词（大小写不敏感）。
+
+        Args:
+            user_id: 用户 ID
+            query: 搜索关键词
+            limit: 最大返回数
+            offset: 偏移量
+
+        Returns:
+            匹配的消息列表，每条包含 conversation_id, title, message 字段
+        """
+        self._ensure_loaded()
+        query_lower = query.lower()
+        results: list[dict[str, Any]] = []
+
+        conv_ids = self._user_conversations.get(user_id, [])
+        for cid in conv_ids:
+            conv = self._conversations.get(cid)
+            if not conv:
+                continue
+            messages = self._messages.get(cid, [])
+            for msg in messages:
+                if query_lower in msg.content.lower():
+                    results.append({
+                        "conversation_id": cid,
+                        "conversation_title": conv.title,
+                        "message_id": msg.message_id,
+                        "role": msg.role,
+                        "content": msg.content,
+                        "timestamp": msg.timestamp.isoformat(),
+                    })
+
+        # 按时间倒序排列
+        results.sort(key=lambda r: r["timestamp"], reverse=True)
+        return results[offset: offset + limit]
+
+    def export_conversation_markdown(
+        self,
+        conversation_id: str,
+        user_id: str,
+    ) -> str | None:
+        """导出会话为 Markdown 格式
+
+        Args:
+            conversation_id: 会话 ID
+            user_id: 用户 ID（校验归属）
+
+        Returns:
+            Markdown 字符串，会话不存在或归属不匹配返回 None
+        """
+        self._ensure_loaded()
+        conv = self.get_conversation(conversation_id, user_id)
+        if not conv:
+            return None
+
+        messages = self._messages.get(conversation_id, [])
+        lines: list[str] = []
+        lines.append(f"# {conv.title}")
+        lines.append("")
+        lines.append(f"创建时间: {conv.created_at.strftime('%Y-%m-%d %H:%M:%S')}")
+        lines.append(f"消息数: {len(messages)}")
+        lines.append("")
+        lines.append("---")
+        lines.append("")
+
+        for msg in messages:
+            role_label = "👤 用户" if msg.role == "user" else "🤖 助手"
+            ts = msg.timestamp.strftime('%Y-%m-%d %H:%M:%S')
+            lines.append(f"**{role_label}** ({ts})")
+            lines.append("")
+            lines.append(msg.content)
+            lines.append("")
+            lines.append("---")
+            lines.append("")
+
+        return "\n".join(lines)
+
+    def export_conversation_json(
+        self,
+        conversation_id: str,
+        user_id: str,
+    ) -> dict[str, Any] | None:
+        """导出会话为 JSON 格式
+
+        Args:
+            conversation_id: 会话 ID
+            user_id: 用户 ID（校验归属）
+
+        Returns:
+            会话数据字典，会话不存在或归属不匹配返回 None
+        """
+        self._ensure_loaded()
+        conv = self.get_conversation(conversation_id, user_id)
+        if not conv:
+            return None
+
+        messages = self._messages.get(conversation_id, [])
+        return {
+            "conversation_id": conv.conversation_id,
+            "title": conv.title,
+            "created_at": conv.created_at.isoformat(),
+            "updated_at": conv.updated_at.isoformat(),
+            "messages": [
+                {
+                    "message_id": m.message_id,
+                    "role": m.role,
+                    "content": m.content,
+                    "timestamp": m.timestamp.isoformat(),
+                    "metadata": m.metadata,
+                }
+                for m in messages
+            ],
+        }
+
     @property
     def conversation_count(self) -> int:
         return len(self._conversations)
