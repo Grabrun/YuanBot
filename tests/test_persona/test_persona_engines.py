@@ -116,6 +116,86 @@ class TestEmotionEngine:
         assert dominant.value == "joy"
 
 
+class TestEmotionEngineDeepIntegration:
+    """情感引擎深度分析集成测试"""
+
+    @pytest.mark.asyncio
+    async def test_deep_analyzer_called_when_low_confidence(self):
+        """当规则引擎置信度低时，应调用 DeepEmotionAnalyzer"""
+        from unittest.mock import AsyncMock
+
+        from yuanbot.core.types import EmotionCategory, EmotionState
+        from yuanbot.persona.engines.emotion_engine import DeepEmotionAnalyzer, EmotionEngine
+
+        mock_deep = AsyncMock(spec=DeepEmotionAnalyzer)
+        mock_deep.enabled = True
+        mock_deep.analyze = AsyncMock(return_value=EmotionState(
+            emotion=EmotionCategory.SADNESS,
+            intensity=0.8,
+            confidence=0.9,
+            valence="negative",
+        ))
+
+        engine = EmotionEngine(
+            config={"deep_analysis_threshold": 0.5},
+            deep_analyzer=mock_deep,
+        )
+
+        # 使用模糊文本，规则引擎置信度通常较低
+        state = await engine.analyze("嗯...", "user1", "session1")
+
+        # 如果规则引擎置信度 < 0.5，深度分析器应该被调用
+        if mock_deep.analyze.called:
+            assert state.confidence == 0.9
+            assert state.emotion == EmotionCategory.SADNESS
+
+    @pytest.mark.asyncio
+    async def test_deep_analyzer_not_called_when_high_confidence(self):
+        """当规则引擎置信度高时，不应调用 DeepEmotionAnalyzer"""
+        from unittest.mock import AsyncMock
+
+        from yuanbot.persona.engines.emotion_engine import DeepEmotionAnalyzer, EmotionEngine
+
+        mock_deep = AsyncMock(spec=DeepEmotionAnalyzer)
+        mock_deep.enabled = True
+        mock_deep.analyze = AsyncMock()
+
+        engine = EmotionEngine(deep_analyzer=mock_deep)
+
+        # 情感关键词明确，规则引擎置信度应该较高
+        await engine.analyze("我非常难过伤心", "user1", "session1")
+
+        # 置信度高时不应调用深度分析
+        mock_deep.analyze.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_deep_analyzer_disabled(self):
+        """DeepEmotionAnalyzer 未启用时不应调用"""
+        from unittest.mock import AsyncMock
+
+        from yuanbot.persona.engines.emotion_engine import DeepEmotionAnalyzer, EmotionEngine
+
+        mock_deep = AsyncMock(spec=DeepEmotionAnalyzer)
+        mock_deep.enabled = False
+        mock_deep.analyze = AsyncMock()
+
+        engine = EmotionEngine(deep_analyzer=mock_deep)
+        await engine.analyze("嗯", "user1", "session1")
+
+        mock_deep.analyze.assert_not_called()
+
+    def test_set_deep_analyzer(self):
+        """测试运行时设置 DeepEmotionAnalyzer"""
+        from yuanbot.persona.engines.emotion_engine import DeepEmotionAnalyzer, EmotionEngine
+
+        engine = EmotionEngine()
+        assert engine.deep_analyzer is None
+
+        analyzer = DeepEmotionAnalyzer()
+        engine.set_deep_analyzer(analyzer)
+        assert engine.deep_analyzer is analyzer
+
+
 class TestDialogueDecisionEngine:
     """对话决策引擎测试"""
 
@@ -144,6 +224,48 @@ class TestDialogueDecisionEngine:
         engine = DialogueDecisionEngine()
         result = await engine.decide("我很难过", "user1", "session1")
         assert "emotional_comfort" in result.should_use_skills
+
+    @pytest.mark.asyncio
+    async def test_decide_with_capability_domains(self):
+        """测试传入人设能力域声明时的决策"""
+        engine = DialogueDecisionEngine()
+        result = await engine.decide(
+            "我很难过", "user1", "session1",
+            capability_domains=["emotional_care", "daily_chat"],
+        )
+        assert "emotional_comfort" in result.should_use_skills
+
+    @pytest.mark.asyncio
+    async def test_domain_matcher_integration_knowledge_query(self):
+        """测试 DomainMatcher 集成：知识查询意图应推荐搜索工具"""
+        engine = DialogueDecisionEngine()
+        result = await engine.decide(
+            "帮我搜索一下最新的新闻", "user1", "session1",
+            capability_domains=["knowledge_query"],
+        )
+        # DomainMatcher 应该将 knowledge_query 域映射到 web_search 工具
+        assert "web_search" in result.should_use_tools
+
+    @pytest.mark.asyncio
+    async def test_domain_matcher_integration_task_management(self):
+        """测试 DomainMatcher 集成：任务管理意图应推荐提醒工具"""
+        engine = DialogueDecisionEngine()
+        result = await engine.decide(
+            "帮我设置提醒", "user1", "session1",
+            capability_domains=["task_management"],
+        )
+        assert "reminder" in result.should_use_tools
+
+    @pytest.mark.asyncio
+    async def test_domain_matcher_comfort_priority(self):
+        """测试 DomainMatcher 在情感紧急时优先推荐情感安慰技能"""
+        engine = DialogueDecisionEngine()
+        result = await engine.decide(
+            "我好难过，想哭", "user1", "session1",
+            capability_domains=["daily_chat", "emotional_care"],
+        )
+        # emotional_comfort 应该排在第一位
+        assert result.should_use_skills[0] == "emotional_comfort"
 
 
 class TestContextBuilder:

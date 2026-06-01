@@ -13,6 +13,7 @@ import structlog
 from yuanbot.core.types import EmotionState
 from yuanbot.persona.engines.emotion_engine import EmotionEngine
 from yuanbot.persona.engines.intent_engine import IntentEngine, IntentResult
+from yuanbot.services.domain_matcher import DomainMatcher
 
 logger = structlog.get_logger(__name__)
 
@@ -41,15 +42,29 @@ class DialogueDecisionEngine:
     4. 人设配置的行为规则
 
     输出决策结果，指导上下文组装和能力调用。
+
+    v8: 集成 DomainMatcher，基于意图/情感/能力域三维加权评分推荐 Skills/Tools。
     """
+
+    # 能力域 → 默认 Tool 映射
+    _DOMAIN_TOOL_MAP: dict[str, list[str]] = {
+        "emotional_care": [],
+        "daily_chat": [],
+        "creative_storytelling": [],
+        "task_management": ["reminder"],
+        "knowledge_query": ["web_search", "weather"],
+        "media_generation": [],
+    }
 
     def __init__(
         self,
         intent_engine: IntentEngine | None = None,
         emotion_engine: EmotionEngine | None = None,
+        domain_matcher: DomainMatcher | None = None,
     ):
         self._intent_engine = intent_engine or IntentEngine()
         self._emotion_engine = emotion_engine or EmotionEngine()
+        self._domain_matcher = domain_matcher or DomainMatcher()
 
     async def decide(
         self,
@@ -57,6 +72,7 @@ class DialogueDecisionEngine:
         user_id: str,
         session_id: str,
         context_summary: str | None = None,
+        capability_domains: list[str] | None = None,
     ) -> DecisionResult:
         """做出对话决策
 
@@ -83,9 +99,9 @@ class DialogueDecisionEngine:
         # 3. 确定响应策略
         response_strategy = await self._emotion_engine.get_response_strategy(emotion)
 
-        # 4. 根据意图和情感推荐 Skills/Tools
-        recommended_skills = self._recommend_skills(intent, emotion)
-        recommended_tools = self._recommend_tools(intent)
+        # 4. 根据意图和情感推荐 Skills/Tools（使用 DomainMatcher）
+        recommended_skills = self._recommend_skills(intent, emotion, capability_domains)
+        recommended_tools = self._recommend_tools(intent, emotion, capability_domains)
 
         # 5. 确定上下文优先级和 Token 预算
         context_priority, token_ratio = self._determine_resource_allocation(intent, emotion)
@@ -114,40 +130,76 @@ class DialogueDecisionEngine:
         self,
         intent: IntentResult,
         emotion: EmotionState,
+        capability_domains: list[str] | None = None,
     ) -> list[str]:
-        """根据意图和情感推荐 Skills"""
-        skills = []
+        """根据意图和情感推荐 Skills
 
-        # 情感相关 Skills
-        if intent.primary == "emotional_seeking_comfort":
-            skills.append("emotional_comfort")
-        elif intent.primary == "emotional_sharing_joy":
-            skills.append("celebration")
+        使用 DomainMatcher 进行三维加权评分匹配：
+        - 人设能力域声明: 3 分
+        - 意图关键词匹配: 2 分
+        - 情感标签匹配: 1 分
+        """
+        # 使用 DomainMatcher 进行能力域匹配
+        match_result = self._domain_matcher.match(
+            intent=intent.primary,
+            emotion=emotion.emotion.value if emotion else "",
+            capability_domains=capability_domains,
+            max_skills=3,
+            max_tools=3,
+        )
 
-        # 意图相关 Skills
-        if intent.primary == "seeking_advice":
-            skills.append("advisory")
-        elif intent.primary == "casual_chat":
-            skills.append("daily_chat")
+        # 从匹配到的能力域推导 Skills
+        skills: list[str] = []
+        domain_skill_map = {
+            "emotional_care": "emotional_comfort",
+            "daily_chat": "daily_chat",
+            "creative_storytelling": "creative_storytelling",
+            "task_management": "set_reminder",
+        }
+        for domain in match_result.matched_domains:
+            skill_id = domain_skill_map.get(domain.value)
+            if skill_id and skill_id not in skills:
+                skills.append(skill_id)
 
-        # 基于情感状态的 Skills
-        if emotion.needs_immediate_comfort:
-            if "emotional_comfort" not in skills:
-                skills.append("emotional_comfort")
+        # 补充：基于情感状态的紧急 Skills
+        if emotion.needs_immediate_comfort and "emotional_comfort" not in skills:
+            skills.insert(0, "emotional_comfort")
 
         return skills
 
-    def _recommend_tools(self, intent: IntentResult) -> list[str]:
-        """根据意图推荐 Tools"""
-        tools = []
+    def _recommend_tools(
+        self,
+        intent: IntentResult,
+        emotion: EmotionState,
+        capability_domains: list[str] | None = None,
+    ) -> list[str]:
+        """根据意图和情感推荐 Tools
 
-        if intent.primary == "set_reminder":
-            tools.append("reminder")
-        elif intent.primary == "search":
-            tools.append("web_search")
-        elif intent.primary == "request_action":
-            if "weather" in str(intent.entities):
-                tools.append("weather")
+        使用 DomainMatcher 能力域匹配结果推导 Tools。
+        """
+        match_result = self._domain_matcher.match(
+            intent=intent.primary,
+            emotion=emotion.emotion.value if emotion else "",
+            capability_domains=capability_domains,
+            max_skills=3,
+            max_tools=3,
+        )
+
+        tools: list[str] = []
+        for domain in match_result.matched_domains:
+            domain_tools = self._DOMAIN_TOOL_MAP.get(domain.value, [])
+            for tool_id in domain_tools:
+                if tool_id not in tools:
+                    tools.append(tool_id)
+
+        # 补充：基于意图的直接 Tools
+        intent_tool_map = {
+            "set_reminder": "reminder",
+            "search": "web_search",
+        }
+        direct_tool = intent_tool_map.get(intent.primary)
+        if direct_tool and direct_tool not in tools:
+            tools.insert(0, direct_tool)
 
         return tools
 

@@ -22,17 +22,33 @@ class EmotionEngine:
 
     封装 EmotionTracker，提供面向决策系统的高级接口。
     支持规则引擎和模型引擎两种模式。
+    当规则引擎置信度低于阈值时，自动调用 DeepEmotionAnalyzer 进行 LLM 深度分析。
     """
 
-    def __init__(self, config: dict[str, Any] | None = None):
+    def __init__(
+        self,
+        config: dict[str, Any] | None = None,
+        deep_analyzer: DeepEmotionAnalyzer | None = None,
+    ):
         self._config = config or {}
         self._tracker = EmotionTracker(self._config)
         self._engine_mode = self._config.get("engine_mode", "rule_based")
+        self._deep_analyzer = deep_analyzer
+        self._deep_analysis_threshold = self._config.get("deep_analysis_threshold", 0.5)
 
     @property
     def tracker(self) -> EmotionTracker:
         """获取底层情感追踪器"""
         return self._tracker
+
+    @property
+    def deep_analyzer(self) -> DeepEmotionAnalyzer | None:
+        """获取深度情感分析器"""
+        return self._deep_analyzer
+
+    def set_deep_analyzer(self, analyzer: DeepEmotionAnalyzer) -> None:
+        """设置深度情感分析器"""
+        self._deep_analyzer = analyzer
 
     async def analyze(
         self,
@@ -43,6 +59,9 @@ class EmotionEngine:
     ) -> EmotionState:
         """分析文本情感
 
+        当规则引擎置信度低于阈值且 DeepEmotionAnalyzer 可用时，
+        自动调用 LLM 深度分析以获得更准确的结果。
+
         Args:
             text: 用户输入文本
             user_id: 用户 ID
@@ -52,12 +71,46 @@ class EmotionEngine:
         Returns:
             EmotionState: 情感状态
         """
-        return await self._tracker.analyze_emotion(
+        # 1. 规则引擎分析
+        rule_result = await self._tracker.analyze_emotion(
             text=text,
             user_id=user_id,
             session_id=session_id,
             context_summary=context_summary,
         )
+
+        # 2. 置信度检查：低于阈值时尝试深度分析
+        if (
+            rule_result.confidence < self._deep_analysis_threshold
+            and self._deep_analyzer is not None
+            and self._deep_analyzer.enabled
+        ):
+            logger.debug(
+                "emotion_deep_analysis_triggered",
+                user_id=user_id,
+                rule_confidence=rule_result.confidence,
+                threshold=self._deep_analysis_threshold,
+            )
+            deep_result = await self._deep_analyzer.analyze(
+                text=text,
+                user_id=user_id,
+                session_id=session_id,
+                context_summary=context_summary,
+                rule_result=rule_result,
+            )
+            # 深度分析置信度更高时采用
+            if deep_result.confidence > rule_result.confidence:
+                logger.info(
+                    "emotion_deep_analysis_adopted",
+                    user_id=user_id,
+                    rule_emotion=rule_result.emotion.value,
+                    deep_emotion=deep_result.emotion.value,
+                    rule_confidence=rule_result.confidence,
+                    deep_confidence=deep_result.confidence,
+                )
+                return deep_result
+
+        return rule_result
 
     async def get_dominant_emotion(self, user_id: str, session_id: str) -> EmotionCategory:
         """获取当前会话的主导情感"""

@@ -326,6 +326,57 @@ class TestProactiveTasks:
         assert len(tasks) == 0
 
 
+class TestRelationshipStageAutoEvaluation:
+    """关系阶段自动评估测试"""
+
+    @pytest.mark.asyncio
+    async def test_persona_stage_updated_after_message(self, engine: OrchestratorEngine):
+        """处理消息后应自动评估并更新 persona 的关系阶段"""
+        from yuanbot.persona.default import DefaultPersona
+
+        persona = DefaultPersona("initial")
+        memory = MemoryManager()
+
+        from unittest.mock import AsyncMock
+        mock_ai = AsyncMock()
+        mock_ai.generate = AsyncMock(return_value=ChatResponse(
+            content="你好呀~",
+            finish_reason="stop",
+            model="mock-model",
+        ))
+
+        eng = OrchestratorEngine(
+            ai_service=mock_ai,
+            persona=persona,
+            memory_manager=memory,
+        )
+
+        msg = _make_user_message("你好")
+        await eng.process_message(msg)
+
+        # persona 的关系阶段应该被同步（初始用户信任度低，应为 initial）
+        assert persona.relationship_stage in ("initial", "familiar", "intimate", "deep")
+
+    @pytest.mark.asyncio
+    async def test_relationship_stage_reflects_trust_score(self, engine: OrchestratorEngine):
+        """关系阶段应反映信任度分数"""
+        msg = _make_user_message("你好")
+        await engine.process_message(msg)
+
+        profile = await engine._memory.get_or_create_user_profile(msg.yuanbot_user_id)
+        trust = await engine._memory.calculate_trust_score(msg.yuanbot_user_id)
+
+        # 新用户信任度低，应为 initial
+        if trust < 0.3:
+            assert profile.relationship_stage == "initial"
+        elif trust < 0.6:
+            assert profile.relationship_stage == "familiar"
+        elif trust < 0.8:
+            assert profile.relationship_stage == "intimate"
+        else:
+            assert profile.relationship_stage == "deep"
+
+
 class TestChannelManagement:
     """通道管理测试"""
 

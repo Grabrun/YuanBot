@@ -116,6 +116,7 @@ class OrchestratorEngine:
             text=message.text or "",
             user_id=message.yuanbot_user_id,
             session_id=message.session_id,
+            capability_domains=self._persona.get_capability_domains(),
         )
 
         logger.info(
@@ -196,13 +197,40 @@ class OrchestratorEngine:
                 emotion_state=decision.emotion_state,
             )
 
-        # 11. 生成主动跟进任务
+        # 11. 关系阶段自动评估与更新
+        try:
+            trust_score = await self._memory.calculate_trust_score(
+                message.yuanbot_user_id
+            )
+            # 同步更新 persona 的关系阶段
+            if hasattr(self._persona, "relationship_stage"):
+                updated_profile = await self._memory.get_or_create_user_profile(
+                    message.yuanbot_user_id
+                )
+                if updated_profile.relationship_stage != getattr(
+                    self._persona, "_relationship_stage", None
+                ):
+                    self._persona.relationship_stage = updated_profile.relationship_stage  # type: ignore[attr-defined]
+                    logger.info(
+                        "persona_relationship_stage_updated",
+                        user_id=message.yuanbot_user_id,
+                        stage=updated_profile.relationship_stage,
+                        trust_score=trust_score,
+                    )
+        except Exception as e:
+            logger.debug(
+                "relationship_evaluation_skipped",
+                user_id=message.yuanbot_user_id,
+                error=str(e),
+            )
+
+        # 12. 生成主动跟进任务
         proactive_tasks = await self._generate_proactive_tasks(
             user_profile=user_profile,
             emotion_state=decision.emotion_state,
         )
 
-        # 12. 构建响应
+        # 13. 构建响应
         bot_response = BotResponse(
             content=MessageContent(
                 content_type=ContentType.TEXT,
