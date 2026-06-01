@@ -48,3 +48,9 @@ orchestrator:
   decision_plugins:
     enabled: true
     plugins_dir: "configs/Plugins/decision"
+
+# 扩展市场
+marketplace:
+  registry_url: "https://registry.yuanbot.app"  # 扩展注册表地址
+  cache_dir: "data/.marketplace_cache"  # 索引缓存目录
+  cache_ttl: 3600  # 缓存有效期（秒）

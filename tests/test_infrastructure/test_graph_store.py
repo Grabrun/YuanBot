@@ -338,6 +338,230 @@ class TestGraphStoreMemoryMode:
         assert "abd" in path_strs
         assert "acd" in path_strs
 
+    @pytest.mark.asyncio
+    async def test_in_relationship_with(self, store):
+        """测试 IN_RELATIONSHIP_WITH 关系类型"""
+        await store.add_node("user1", "User", {"name": "小明"})
+        await store.add_node("persona1", "AIPersona", {"name": "小缘"})
+
+        edge_id = await store.add_edge(
+            "user1", "persona1", "IN_RELATIONSHIP_WITH",
+            {"stage": "familiar", "since": "2026-01-01"},
+        )
+        assert edge_id != ""
+
+        neighbors = await store.get_neighbors("user1", edge_type="IN_RELATIONSHIP_WITH")
+        assert len(neighbors) == 1
+        assert neighbors[0]["node_id"] == "persona1"
+        assert neighbors[0]["edge_properties"]["stage"] == "familiar"
+
+    @pytest.mark.asyncio
+    async def test_knows_about(self, store):
+        """测试 KNOWS_ABOUT 关系类型"""
+        await store.add_node("persona1", "AIPersona", {"name": "小缘"})
+        await store.add_node("entity1", "Entity", {"name": "咖啡", "type": "food"})
+
+        edge_id = await store.add_edge("persona1", "entity1", "KNOWS_ABOUT")
+        assert edge_id != ""
+
+        neighbors = await store.get_neighbors("persona1", edge_type="KNOWS_ABOUT")
+        assert len(neighbors) == 1
+        assert neighbors[0]["node_id"] == "entity1"
+
+    @pytest.mark.asyncio
+    async def test_aipersona_node(self, store):
+        """测试 AIPersona 节点类型"""
+        node_id = await store.add_node(
+            "persona1", "AIPersona", {"name": "小缘"},
+        )
+        assert node_id == "persona1"
+
+        node = await store.get_node("persona1")
+        assert node is not None
+        assert node["type"] == "AIPersona"
+
+        all_personas = await store.get_all_nodes(node_type="AIPersona")
+        assert len(all_personas) == 1
+
+
+class TestGraphStoreReasoning:
+    """图推理方法测试"""
+
+    @pytest.fixture
+    def store(self):
+        return GraphStore(db_path=None)
+
+    async def _build_test_graph(self, store: GraphStore) -> None:
+        """构建测试图谱"""
+        # 用户
+        await store.add_node("user1", "User", {"name": "小明"})
+        await store.add_node("user2", "User", {"name": "小红"})
+
+        # 实体
+        await store.add_node("coffee", "Entity", {"name": "咖啡", "type": "food"})
+        await store.add_node("tea", "Entity", {"name": "茶", "type": "food"})
+        await store.add_node("coding", "Entity", {"name": "编程", "type": "activity"})
+        await store.add_node("python", "Entity", {"name": "Python", "type": "technology"})
+        await store.add_node("music", "Entity", {"name": "古典音乐", "type": "music"})
+
+        # 人格
+        await store.add_node("persona1", "AIPersona", {"name": "小缘"})
+
+        # 关系
+        await store.add_edge("user1", "coffee", "LIKES", {"weight": 0.9})
+        await store.add_edge("user1", "coding", "LIKES", {"weight": 0.95})
+        await store.add_edge("user1", "music", "DISLIKES", {"weight": 0.3})
+        await store.add_edge("user2", "coffee", "LIKES", {"weight": 0.8})
+        await store.add_edge("user2", "tea", "LIKES", {"weight": 0.7})
+        await store.add_edge("coding", "python", "ASSOCIATED_WITH", {"strength": 0.9})
+        await store.add_edge("user1", "persona1", "IN_RELATIONSHIP_WITH", {"stage": "familiar"})
+        await store.add_edge("persona1", "coffee", "KNOWS_ABOUT")
+
+    @pytest.mark.asyncio
+    async def test_find_related_entities_basic(self, store):
+        """测试基本的多跳实体查找"""
+        await self._build_test_graph(store)
+
+        results = await store.find_related_entities("user1", max_depth=1)
+        entity_ids = {r["entity_id"] for r in results}
+        # user1 -> coffee, coding (LIKES), music (DISLIKES)
+        assert "coffee" in entity_ids
+        assert "coding" in entity_ids
+        assert "music" in entity_ids
+
+    @pytest.mark.asyncio
+    async def test_find_related_entities_two_hops(self, store):
+        """测试两跳推理"""
+        await self._build_test_graph(store)
+
+        results = await store.find_related_entities("user1", max_depth=2)
+        entity_ids = {r["entity_id"] for r in results}
+        # user1 -> coding -> python (两跳)
+        assert "python" in entity_ids
+
+    @pytest.mark.asyncio
+    async def test_find_related_entities_weight_filter(self, store):
+        """测试权重过滤"""
+        await self._build_test_graph(store)
+
+        # 只取权重 >= 0.9 的
+        results = await store.find_related_entities("user1", min_weight=0.9, max_depth=1)
+        entity_ids = {r["entity_id"] for r in results}
+        assert "coffee" in entity_ids  # weight=0.9
+        assert "coding" in entity_ids  # weight=0.95
+        # music 是 DISLIKES weight=0.3，但默认也查 DISLIKES，权重 < 0.9 被过滤
+        assert "music" not in entity_ids
+
+    @pytest.mark.asyncio
+    async def test_find_related_entities_relation_filter(self, store):
+        """测试关系类型过滤"""
+        await self._build_test_graph(store)
+
+        results = await store.find_related_entities(
+            "user1", relation_types=["LIKES"], max_depth=1,
+        )
+        entity_ids = {r["entity_id"] for r in results}
+        assert "coffee" in entity_ids
+        assert "coding" in entity_ids
+        assert "music" not in entity_ids  # DISLIKES 被排除
+
+    @pytest.mark.asyncio
+    async def test_find_related_entities_path_and_chain(self, store):
+        """测试路径和关系链记录"""
+        await self._build_test_graph(store)
+
+        results = await store.find_related_entities("user1", max_depth=2)
+        # 找 python 的结果应该有完整的路径和关系链
+        python_results = [r for r in results if r["entity_id"] == "python"]
+        assert len(python_results) >= 1
+        r = python_results[0]
+        assert r["path"] == ["user1", "coding", "python"]
+        assert r["relation_chain"] == ["LIKES", "ASSOCIATED_WITH"]
+        assert r["depth"] == 2
+
+    @pytest.mark.asyncio
+    async def test_get_entity_connections(self, store):
+        """测试实体连接查询"""
+        await self._build_test_graph(store)
+
+        result = await store.get_entity_connections("coffee")
+        assert result["node"] is not None
+        assert result["node"]["id"] == "coffee"
+        # coffee 有 incoming: user1 (LIKES), user2 (LIKES), persona1 (KNOWS_ABOUT)
+        assert len(result["incoming"]) >= 2
+
+    @pytest.mark.asyncio
+    async def test_get_entity_connections_not_found(self, store):
+        """测试不存在的实体"""
+        result = await store.get_entity_connections("nonexistent")
+        assert result["node"] is None
+
+    @pytest.mark.asyncio
+    async def test_get_entity_connections_two_hops(self, store):
+        """测试两跳连接"""
+        await self._build_test_graph(store)
+
+        result = await store.get_entity_connections("user1", max_hops=2)
+        related_ids = {r["entity_id"] for r in result["related_entities"]}
+        # user1 -> coding -> python (via coding)
+        assert "python" in related_ids
+
+    @pytest.mark.asyncio
+    async def test_get_knowledge_subgraph(self, store):
+        """测试知识子图提取"""
+        await self._build_test_graph(store)
+
+        subgraph = await store.get_knowledge_subgraph("user1", depth=1)
+        node_ids = {n["id"] for n in subgraph["nodes"]}
+        assert "user1" in node_ids
+        assert "coffee" in node_ids
+        assert subgraph["center_id"] == "user1"
+        assert len(subgraph["edges"]) > 0
+
+    @pytest.mark.asyncio
+    async def test_get_knowledge_subgraph_max_nodes(self, store):
+        """测试子图节点数限制"""
+        await self._build_test_graph(store)
+
+        subgraph = await store.get_knowledge_subgraph("user1", depth=2, max_nodes=3)
+        assert len(subgraph["nodes"]) <= 3
+
+    @pytest.mark.asyncio
+    async def test_find_common_preferences(self, store):
+        """测试协同过滤"""
+        await self._build_test_graph(store)
+
+        result = await store.find_common_preferences("user1")
+        # user1 likes coffee, coding
+        assert "coffee" in result["user_likes"]
+        assert "coding" in result["user_likes"]
+        # user2 also likes coffee
+        assert "user2" in result["common"]
+        assert "coffee" in result["common"]["user2"]
+
+    @pytest.mark.asyncio
+    async def test_find_common_preferences_explicit_users(self, store):
+        """测试指定用户列表的协同过滤"""
+        await self._build_test_graph(store)
+
+        result = await store.find_common_preferences("user1", ["user2"])
+        assert "user2" in result["common"]
+        assert "coffee" in result["common"]["user2"]
+
+    @pytest.mark.asyncio
+    async def test_find_common_preferences_no_overlap(self, store):
+        """测试无重叠的偏好"""
+        await store.add_node("u1", "User", {"name": "A"})
+        await store.add_node("u2", "User", {"name": "B"})
+        await store.add_node("e1", "Entity", {"name": "X"})
+        await store.add_node("e2", "Entity", {"name": "Y"})
+
+        await store.add_edge("u1", "e1", "LIKES")
+        await store.add_edge("u2", "e2", "LIKES")
+
+        result = await store.find_common_preferences("u1", ["u2"])
+        assert result["common"] == {}
+
 
 class TestGraphStoreWithKuzu:
     """Kuzu 后端测试（如果可用）"""

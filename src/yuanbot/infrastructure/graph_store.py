@@ -27,6 +27,7 @@ def is_kuzu_available() -> bool:
 # Kuzu 节点表定义
 _NODE_TABLES = {
     "User": {"name": "STRING", "properties": "STRING"},
+    "AIPersona": {"name": "STRING", "properties": "STRING"},
     "Entity": {"name": "STRING", "type": "STRING", "properties": "STRING"},
     "Event": {"name": "STRING", "timestamp": "STRING", "properties": "STRING"},
     "Trait": {"name": "STRING", "value": "STRING", "properties": "STRING"},
@@ -45,6 +46,8 @@ _REL_TABLES = {
     "EXPERIENCED": ("User", "Event", {}),
     "ASSOCIATED_WITH": ("Entity", "Entity", {"strength": "DOUBLE"}),
     "HAS_MEMORY": ("User", "SemanticMemory", {}),
+    "IN_RELATIONSHIP_WITH": ("User", "AIPersona", {"stage": "STRING", "since": "STRING"}),
+    "KNOWS_ABOUT": ("AIPersona", "Entity", {}),
 }
 
 
@@ -692,6 +695,222 @@ class GraphStore:
         else:
             self._memory_graph = InMemoryGraph()
             logger.info("in_memory_graph_cleared")
+
+    # ------------------------------------------------------------------
+    # 图推理方法 (Graph Reasoning)
+    # ------------------------------------------------------------------
+
+    async def find_related_entities(
+        self,
+        user_id: str,
+        min_weight: float = 0.0,
+        relation_types: list[str] | None = None,
+        max_depth: int = 2,
+    ) -> list[dict[str, Any]]:
+        """查找与用户相关的实体（多跳推理）
+
+        从用户出发，沿 LIKES/DISLIKES/EXPERIENCED 等关系遍历图谱，
+        收集所有可达实体及其关联关系。支持按权重过滤和深度限制。
+
+        Args:
+            user_id: 用户节点 ID
+            min_weight: 最小关系权重过滤（仅对有 weight 属性的关系有效）
+            relation_types: 限制遍历的关系类型（默认 LIKES/DISLIKES/ASSOCIATED_WITH）
+            max_depth: 最大遍历深度
+
+        Returns:
+            相关实体列表，每个元素包含 entity_id, entity_type, properties,
+            path（从用户到该实体的路径）, relation_chain（经过的关系类型链）
+        """
+        rels = relation_types or ["LIKES", "DISLIKES", "ASSOCIATED_WITH"]
+        visited: dict[str, int] = {user_id: 0}
+        queue: list[tuple[str, list[str], list[str]]] = [(user_id, [user_id], [])]
+        results: list[dict[str, Any]] = []
+
+        while queue:
+            current_id, path, rel_chain = queue.pop(0)
+            depth = len(path) - 1
+
+            if depth >= max_depth:
+                continue
+
+            for rel_type in rels:
+                neighbors = await self.get_neighbors(
+                    current_id, edge_type=rel_type, direction="outgoing"
+                )
+                for neighbor in neighbors:
+                    nid = neighbor["node_id"]
+                    new_depth = depth + 1
+
+                    # 权重过滤
+                    edge_props = neighbor.get("edge_properties", {})
+                    weight = edge_props.get("weight", 1.0)
+                    if weight < min_weight:
+                        continue
+
+                    # 收集实体结果（排除 User 和 Trait 节点本身）
+                    n_type = neighbor.get("node_type", "unknown")
+                    if n_type not in ("User", "Trait"):
+                        results.append({
+                            "entity_id": nid,
+                            "entity_type": n_type,
+                            "properties": neighbor.get("properties", {}),
+                            "path": path + [nid],
+                            "relation_chain": rel_chain + [rel_type],
+                            "depth": new_depth,
+                        })
+
+                    # 继续遍历（避免循环）
+                    if nid not in visited or visited[nid] > new_depth:
+                        visited[nid] = new_depth
+                        queue.append((nid, path + [nid], rel_chain + [rel_type]))
+
+        return results
+
+    async def get_entity_connections(
+        self,
+        entity_id: str,
+        max_hops: int = 1,
+    ) -> dict[str, Any]:
+        """获取实体的所有连接关系
+
+        返回实体的一跳或多跳邻居及其关系信息，用于构建用户画像
+        或回答 "用户喜欢什么" 类型的查询。
+
+        Args:
+            entity_id: 实体节点 ID
+            max_hops: 最大跳数
+
+        Returns:
+            包含 node（节点信息）, outgoing（出边关系）, incoming（入边关系）,
+            related_entities（多跳相关实体）的字典
+        """
+        node = await self.get_node(entity_id)
+        if not node:
+            return {"node": None, "outgoing": [], "incoming": [], "related_entities": []}
+
+        outgoing = await self.get_neighbors(entity_id, direction="outgoing")
+        incoming = await self.get_neighbors(entity_id, direction="incoming")
+
+        related_entities: list[dict[str, Any]] = []
+        if max_hops >= 2:
+            for neighbor in outgoing + incoming:
+                nid = neighbor["node_id"]
+                second_hop = await self.get_neighbors(nid, direction="both")
+                for n2 in second_hop:
+                    if n2["node_id"] != entity_id:
+                        related_entities.append({
+                            "entity_id": n2["node_id"],
+                            "entity_type": n2.get("node_type", "unknown"),
+                            "properties": n2.get("properties", {}),
+                            "via": nid,
+                            "via_relation": neighbor.get("edge_type", ""),
+                        })
+
+        return {
+            "node": node,
+            "outgoing": outgoing,
+            "incoming": incoming,
+            "related_entities": related_entities,
+        }
+
+    async def get_knowledge_subgraph(
+        self,
+        center_id: str,
+        depth: int = 2,
+        max_nodes: int = 50,
+    ) -> dict[str, Any]:
+        """获取以某节点为中心的知识子图
+
+        用于构建上下文信息或可视化。返回节点和边的集合，
+        适合注入到 LLM 的 system prompt 中作为背景知识。
+
+        Args:
+            center_id: 中心节点 ID
+            depth: 子图半径（最大跳数）
+            max_nodes: 最大节点数（防止过大子图）
+
+        Returns:
+            {nodes: [...], edges: [...], center_id: str}
+        """
+        visited: dict[str, dict[str, Any]] = {}
+        edges: list[dict[str, Any]] = []
+        queue: list[tuple[str, int]] = [(center_id, 0)]
+
+        while queue and len(visited) < max_nodes:
+            node_id, d = queue.pop(0)
+            if node_id in visited or d > depth:
+                continue
+
+            node = await self.get_node(node_id)
+            if node:
+                visited[node_id] = node
+
+            if d < depth:
+                neighbors = await self.get_neighbors(node_id, direction="both")
+                for neighbor in neighbors:
+                    nid = neighbor["node_id"]
+                    # 记录边
+                    edge_info = {
+                        "source": node_id if neighbor["direction"] == "outgoing" else nid,
+                        "target": nid if neighbor["direction"] == "outgoing" else node_id,
+                        "type": neighbor.get("edge_type", "unknown"),
+                        "properties": neighbor.get("edge_properties", {}),
+                    }
+                    if edge_info not in edges:
+                        edges.append(edge_info)
+
+                    if nid not in visited:
+                        queue.append((nid, d + 1))
+
+        return {
+            "center_id": center_id,
+            "nodes": list(visited.values()),
+            "edges": edges,
+        }
+
+    async def find_common_preferences(
+        self,
+        user_id: str,
+        other_user_ids: list[str] | None = None,
+    ) -> dict[str, Any]:
+        """查找用户间的共同偏好（协同过滤）
+
+        找出指定用户与其他用户共同 LIKES 的实体，用于推荐系统。
+        如果不指定 other_user_ids，则自动发现所有有 LIKES 关系的用户。
+
+        Args:
+            user_id: 目标用户 ID
+            other_user_ids: 要比较的其他用户 ID 列表（可选）
+
+        Returns:
+            {user_likes: [...], common: {other_user: [shared_entities]}}
+        """
+        # 获取目标用户的偏好
+        user_likes_neighbors = await self.get_neighbors(
+            user_id, edge_type="LIKES", direction="outgoing"
+        )
+        user_likes = {n["node_id"] for n in user_likes_neighbors}
+
+        # 如果没有指定其他用户，自动发现
+        if other_user_ids is None:
+            all_users = await self.get_all_nodes(node_type="User")
+            other_user_ids = [u["id"] for u in all_users if u["id"] != user_id]
+
+        common: dict[str, list[str]] = {}
+        for other_id in other_user_ids:
+            other_likes_neighbors = await self.get_neighbors(
+                other_id, edge_type="LIKES", direction="outgoing"
+            )
+            other_likes = {n["node_id"] for n in other_likes_neighbors}
+            shared = user_likes & other_likes
+            if shared:
+                common[other_id] = list(shared)
+
+        return {
+            "user_likes": list(user_likes),
+            "common": common,
+        }
 
     @staticmethod
     def _escape(value: str) -> str:
