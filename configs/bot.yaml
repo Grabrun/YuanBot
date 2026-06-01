@@ -45,3 +45,6 @@ orchestrator:
     max_input_tokens: 8000
     max_output_tokens: 2000
     reserved_for_memory: 2000
+  decision_plugins:
+    enabled: true
+    plugins_dir: "configs/Plugins/decision"

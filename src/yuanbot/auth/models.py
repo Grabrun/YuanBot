@@ -117,3 +117,15 @@ class CreateUserRequest(BaseModel):
     password: str
     display_name: str = ""
     role: UserRole = UserRole.USER
+
+
+class SetupRequest(BaseModel):
+    """首次管理员设置请求
+
+    当系统中没有管理员用户时，通过此请求创建第一个管理员。
+    设计参考: user-interface-system.md 第5.4节
+    """
+
+    username: str = Field(min_length=3, max_length=32)
+    password: str = Field(min_length=6, max_length=128)
+    display_name: str = ""

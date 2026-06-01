@@ -11,6 +11,10 @@ from typing import Any
 import structlog
 
 from yuanbot.core.types import EmotionState
+from yuanbot.persona.engines.decision_plugin import (
+    DecisionPluginManager,
+    PluginDecisionResult,
+)
 from yuanbot.persona.engines.emotion_engine import EmotionEngine
 from yuanbot.persona.engines.intent_engine import IntentEngine, IntentResult
 from yuanbot.services.domain_matcher import DomainMatcher
@@ -61,10 +65,12 @@ class DialogueDecisionEngine:
         intent_engine: IntentEngine | None = None,
         emotion_engine: EmotionEngine | None = None,
         domain_matcher: DomainMatcher | None = None,
+        plugin_manager: DecisionPluginManager | None = None,
     ):
         self._intent_engine = intent_engine or IntentEngine()
         self._emotion_engine = emotion_engine or EmotionEngine()
         self._domain_matcher = domain_matcher or DomainMatcher()
+        self._plugin_manager = plugin_manager
 
     async def decide(
         self,
@@ -106,14 +112,30 @@ class DialogueDecisionEngine:
         # 5. 确定上下文优先级和 Token 预算
         context_priority, token_ratio = self._determine_resource_allocation(intent, emotion)
 
+        # 6. 运行自定义决策插件
+        plugin_result = await self._run_plugins(
+            text=text,
+            user_id=user_id,
+            session_id=session_id,
+            intent=intent,
+            emotion=emotion,
+            context_summary=context_summary,
+            capability_domains=capability_domains,
+        )
+
         result = DecisionResult(
-            response_strategy=response_strategy,
+            response_strategy=plugin_result.response_strategy or response_strategy,
             intent=intent,
             emotion_state=emotion,
-            should_use_skills=recommended_skills,
-            should_use_tools=recommended_tools,
-            context_priority=context_priority,
-            token_budget_ratio=token_ratio,
+            should_use_skills=plugin_result.should_use_skills or recommended_skills,
+            should_use_tools=plugin_result.should_use_tools or recommended_tools,
+            context_priority=plugin_result.context_priority or context_priority,
+            token_budget_ratio=(
+                plugin_result.token_budget_ratio
+                if plugin_result.token_budget_ratio is not None
+                else token_ratio
+            ),
+            metadata=plugin_result.metadata,
         )
 
         logger.info(
@@ -122,6 +144,7 @@ class DialogueDecisionEngine:
             intent=intent.primary,
             strategy=response_strategy,
             emotion=emotion.emotion.value,
+            plugin_overridden=bool(plugin_result.response_strategy),
         )
 
         return result
@@ -202,6 +225,29 @@ class DialogueDecisionEngine:
             tools.insert(0, direct_tool)
 
         return tools
+
+    async def _run_plugins(
+        self,
+        text: str,
+        user_id: str,
+        session_id: str,
+        intent: IntentResult,
+        emotion: EmotionState | None,
+        context_summary: str | None = None,
+        capability_domains: list[str] | None = None,
+    ) -> PluginDecisionResult:
+        """运行决策插件，返回合并后的插件结果"""
+        if not self._plugin_manager or not self._plugin_manager.loaded:
+            return PluginDecisionResult()
+        return await self._plugin_manager.process_all(
+            text=text,
+            user_id=user_id,
+            session_id=session_id,
+            intent=intent,
+            emotion=emotion,
+            context_summary=context_summary,
+            capability_domains=capability_domains,
+        )
 
     def _determine_resource_allocation(
         self,
