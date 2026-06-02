@@ -89,6 +89,10 @@ const toolColumns = [
     <n-layout-header bordered style="padding: 12px 24px; display: flex; align-items: center">
       <n-button text @click="router.push('/')">← 返回聊天</n-button>
       <n-text strong style="font-size: 18px; margin-left: 16px">🧩 插件管理</n-text>
+      <div style="flex: 1" />
+      <n-button type="primary" @click="router.push('/marketplace')">
+        🛒 浏览市场
+      </n-button>
     </n-layout-header>
 
     <n-layout-content style="padding: 24px" :native-scrollbar="false">

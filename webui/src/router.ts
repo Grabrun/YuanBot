@@ -40,6 +40,12 @@ const router = createRouter({
       meta: { requiresAuth: true },
     },
     {
+      path: '/marketplace',
+      name: 'marketplace',
+      component: () => import('./views/MarketplaceView.vue'),
+      meta: { requiresAuth: true },
+    },
+    {
       path: '/logs',
       name: 'logs',
       component: () => import('./views/LogView.vue'),
@@ -50,6 +56,12 @@ const router = createRouter({
       name: 'config',
       component: () => import('./views/ConfigView.vue'),
       meta: { requiresAuth: true, requiresAdmin: true },
+    },
+    {
+      path: '/personas',
+      name: 'personas',
+      component: () => import('./views/PersonaStoreView.vue'),
+      meta: { requiresAuth: true },
     },
   ],
 })

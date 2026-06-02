@@ -11,6 +11,7 @@
   "dependencies": {
     "@types/markdown-it": "^14.1.2",
     "@vicons/ionicons5": "^0.13.0",
+    "echarts": "^6.1.0",
     "markdown-it": "^14.2.0",
     "naive-ui": "^2.44.1",
     "pinia": "^3.0.4",

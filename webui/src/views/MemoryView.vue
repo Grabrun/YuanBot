@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, watch, nextTick, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
 import { useMessage } from 'naive-ui'
+import * as echarts from 'echarts'
 import { api } from '../api/client'
 
 const router = useRouter()
@@ -13,6 +14,12 @@ const factMemories = ref<any[]>([])
 const episodicMemories = ref<any[]>([])
 const userProfiles = ref<any[]>([])
 const searchQuery = ref('')
+const graphChart = ref<echarts.ECharts | null>(null)
+const graphContainer = ref<HTMLDivElement | null>(null)
+const graphLoading = ref(false)
+const graphDepth = ref(2)
+const graphData = ref<any>(null)
+const selectedNode = ref<any>(null)
 
 const filteredFacts = computed(() => {
   if (!searchQuery.value) return factMemories.value
@@ -30,8 +37,26 @@ const filteredEpisodic = computed(() => {
   )
 })
 
+const nodeColors: Record<string, string> = {
+  User: '#18a058',
+  Entity: '#2080f0',
+  Event: '#f0a020',
+  AIPersona: '#d03050',
+}
+
+const categoryMap: Record<number, string> = {
+  0: 'User',
+  1: 'Entity',
+  2: 'Event',
+  3: 'AIPersona',
+}
+
 onMounted(async () => {
   await loadMemories()
+})
+
+onBeforeUnmount(() => {
+  graphChart.value?.dispose()
 })
 
 async function loadMemories() {
@@ -60,6 +85,147 @@ async function loadMemories() {
     loading.value = false
   }
 }
+
+async function loadGraph() {
+  graphLoading.value = true
+  selectedNode.value = null
+  try {
+    const data = await api.request<any>(
+      `/api/memory/graph?depth=${graphDepth.value}`
+    )
+    graphData.value = data
+    await nextTick()
+    renderGraph()
+  } catch (e: any) {
+    message.warning('图谱 API 暂未开放或数据为空')
+    graphData.value = { nodes: [], links: [], categories: [] }
+  } finally {
+    graphLoading.value = false
+  }
+}
+
+function renderGraph() {
+  if (!graphContainer.value || !graphData.value) return
+
+  if (!graphChart.value) {
+    graphChart.value = echarts.init(graphContainer.value)
+  }
+
+  const { nodes, links, categories } = graphData.value
+
+  // 增强节点样式
+  const styledNodes = (nodes || []).map((n: any) => {
+    const catName = categoryMap[n.category] || 'Entity'
+    const color = nodeColors[catName] || '#2080f0'
+    return {
+      ...n,
+      itemStyle: {
+        color,
+        borderColor: n.isCenter ? '#fff' : color,
+        borderWidth: n.isCenter ? 3 : 1,
+        shadowBlur: n.isCenter ? 20 : 0,
+        shadowColor: n.isCenter ? color : 'transparent',
+      },
+      label: {
+        show: true,
+        formatter: '{b}',
+        fontSize: n.isCenter ? 14 : 11,
+        fontWeight: n.isCenter ? 'bold' : 'normal',
+      },
+    }
+  })
+
+  const styledLinks = (links || []).map((l: any) => ({
+    ...l,
+    lineStyle: {
+      color: '#aaa',
+      curveness: 0.2,
+    },
+    label: {
+      show: true,
+      formatter: l.relation || '',
+      fontSize: 9,
+      color: '#666',
+    },
+  }))
+
+  const option: echarts.EChartsOption = {
+    tooltip: {
+      trigger: 'item',
+      formatter: (params: any) => {
+        if (params.dataType === 'node') {
+          const d = params.data
+          const cat = categoryMap[d.category] || 'Unknown'
+          return `<div style="max-width:260px">
+            <strong>${d.name}</strong><br/>
+            <span style="color:${nodeColors[cat] || '#666'}">● ${cat}</span><br/>
+            ${d.properties ? Object.entries(d.properties)
+              .filter(([k]: any) => k !== 'name')
+              .map(([k, v]: any) => `${k}: ${v}`)
+              .join('<br/>') : ''}
+          </div>`
+        }
+        if (params.dataType === 'edge') {
+          return `${params.data.relation || ''}`
+        }
+        return ''
+      },
+    },
+    legend: {
+      data: ['User', 'Entity', 'Event', 'AIPersona'],
+      top: 10,
+      right: 10,
+      orient: 'vertical',
+    },
+    series: [
+      {
+        type: 'graph',
+        layout: 'force',
+        data: styledNodes,
+        links: styledLinks,
+        categories: categories || [],
+        roam: true,
+        draggable: true,
+        force: {
+          repulsion: 200,
+          gravity: 0.1,
+          edgeLength: [80, 200],
+          layoutAnimation: true,
+        },
+        emphasis: {
+          focus: 'adjacency',
+          lineStyle: { width: 3 },
+        },
+        scaleLimit: { min: 0.3, max: 5 },
+        lineStyle: { opacity: 0.8 },
+      },
+    ],
+  }
+
+  graphChart.value.setOption(option, true)
+
+  graphChart.value.off('click')
+  graphChart.value.on('click', (params: any) => {
+    if (params.dataType === 'node') {
+      selectedNode.value = params.data
+    }
+  })
+}
+
+function handleGraphResize() {
+  graphChart.value?.resize()
+}
+
+watch(activeTab, async (tab) => {
+  if (tab === 'graph') {
+    await nextTick()
+    if (!graphData.value) {
+      await loadGraph()
+    } else {
+      handleGraphResize()
+    }
+  }
+})
 
 async function handleDeleteFact(key: string) {
   try {
@@ -148,6 +314,99 @@ function formatTime(ts: string) {
                 </n-card>
               </n-gi>
             </n-grid>
+          </n-tab-pane>
+
+          <!-- 知识图谱 -->
+          <n-tab-pane name="graph" tab="🕸️ 知识图谱">
+            <div style="margin-top: 8px">
+              <!-- 工具栏 -->
+              <n-space justify="space-between" align="center" style="margin-bottom: 12px">
+                <n-space align="center">
+                  <n-text depth="3" style="font-size: 13px">遍历深度</n-text>
+                  <n-radio-group v-model:value="graphDepth" size="small">
+                    <n-radio-button :value="1">1</n-radio-button>
+                    <n-radio-button :value="2">2</n-radio-button>
+                    <n-radio-button :value="3">3</n-radio-button>
+                  </n-radio-group>
+                </n-space>
+                <n-button size="small" :loading="graphLoading" @click="loadGraph">
+                  🔄 刷新
+                </n-button>
+              </n-space>
+
+              <!-- 图谱容器 -->
+              <div style="position: relative">
+                <div
+                  ref="graphContainer"
+                  :style="{
+                    width: '100%',
+                    height: isMobile ? '350px' : '500px',
+                    border: '1px solid var(--n-border-color)',
+                    borderRadius: '8px',
+                    background: 'var(--n-card-color)',
+                  }"
+                />
+                <n-spin
+                  v-if="graphLoading"
+                  size="large"
+                  :style="{
+                    position: 'absolute',
+                    top: '50%',
+                    left: '50%',
+                    transform: 'translate(-50%, -50%)',
+                  }"
+                />
+                <n-empty
+                  v-if="!graphLoading && graphData && graphData.nodes.length === 0"
+                  description="暂无图谱数据"
+                  :style="{
+                    position: 'absolute',
+                    top: '50%',
+                    left: '50%',
+                    transform: 'translate(-50%, -50%)',
+                  }"
+                />
+              </div>
+
+              <!-- 节点详情面板 -->
+              <n-collapse-transition
+                :show="!!selectedNode"
+                style="margin-top: 12px"
+              >
+                <n-card
+                  v-if="selectedNode"
+                  size="small"
+                  :title="`${selectedNode.name} 的详情`"
+                  :bordered="true"
+                  closable
+                  @close="selectedNode = null"
+                >
+                  <n-descriptions :column="isMobile ? 1 : 2" bordered size="small">
+                    <n-descriptions-item label="类型">
+                      <n-tag
+                        :color="{
+                          color: nodeColors[categoryMap[selectedNode.category]] || '#2080f0',
+                          textColor: '#fff',
+                        }"
+                        size="small"
+                      >
+                        {{ categoryMap[selectedNode.category] || 'Unknown' }}
+                      </n-tag>
+                    </n-descriptions-item>
+                    <n-descriptions-item label="ID">
+                      <n-text code style="font-size: 12px">{{ selectedNode.id }}</n-text>
+                    </n-descriptions-item>
+                    <n-descriptions-item
+                      v-for="(val, key) in (selectedNode.properties || {})"
+                      :key="key"
+                      :label="String(key)"
+                    >
+                      {{ val }}
+                    </n-descriptions-item>
+                  </n-descriptions>
+                </n-card>
+              </n-collapse-transition>
+            </div>
           </n-tab-pane>
         </n-tabs>
       </template>

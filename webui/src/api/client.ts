@@ -41,11 +41,20 @@ export interface StreamCallbacks {
   onError?: (message: string) => void
 }
 
+export interface TtsCallbacks {
+  onStart?: (format: string) => void
+  onChunk?: (audioData: ArrayBuffer) => void
+  onEnd?: () => void
+  onError?: (message: string) => void
+}
+
 class ApiClient {
   private token: string | null = null
   private ws: WebSocket | null = null
   private wsCallbacks: StreamCallbacks | null = null
   private currentConvId: string | null = null
+  private ttsWs: WebSocket | null = null
+  private ttsCallbacks: TtsCallbacks | null = null
 
   setToken(token: string) {
     this.token = token
@@ -204,6 +213,84 @@ class ApiClient {
     return this.request<{ backups: Record<string, unknown>[] }>('/api/admin/backups')
   }
 
+  // ── 扩展市场 ────────────────────────────
+
+  async marketplaceSearch(q = '', category = '') {
+    const params = new URLSearchParams()
+    if (q) params.set('q', q)
+    if (category) params.set('category', category)
+    const qs = params.toString()
+    return this.request<any>(`/api/marketplace/search${qs ? '?' + qs : ''}`)
+  }
+
+  async marketplaceList(type = '', limit = 50, offset = 0, sort = 'downloads') {
+    const params = new URLSearchParams()
+    if (type) params.set('type', type)
+    params.set('limit', String(limit))
+    params.set('offset', String(offset))
+    params.set('sort', sort)
+    return this.request<any>(`/api/marketplace/extensions?${params.toString()}`)
+  }
+
+  async marketplaceDetail(extId: string) {
+    return this.request<any>(`/api/marketplace/extensions/${extId}`)
+  }
+
+  async marketplaceCategories() {
+    return this.request<any>('/api/marketplace/categories')
+  }
+
+  async marketplaceRefresh() {
+    return this.request<any>('/api/marketplace/refresh', { method: 'POST' })
+  }
+
+  async marketplaceInstalled() {
+    return this.request<any>('/api/marketplace/installed')
+  }
+
+  async marketplaceInstall(extId: string, force = false) {
+    return this.request<any>(`/api/marketplace/extensions/${extId}/install`, {
+      method: 'POST',
+      body: JSON.stringify({ force }),
+    })
+  }
+
+  async marketplaceUninstall(extId: string) {
+    return this.request<any>(`/api/marketplace/extensions/${extId}/uninstall`, {
+      method: 'DELETE',
+    })
+  }
+
+  async marketplaceReviews(extId: string, limit = 20, offset = 0) {
+    return this.request<any>(`/api/marketplace/extensions/${extId}/reviews?limit=${limit}&offset=${offset}`)
+  }
+
+  async marketplaceReviewStats(extId: string) {
+    return this.request<any>(`/api/marketplace/extensions/${extId}/reviews/stats`)
+  }
+
+  // ── 人格商店 ────────────────────────────
+
+  async listAllPersonas(): Promise<{ local: any[]; marketplace: any[] }> {
+    return this.request('/api/personas')
+  }
+
+  async installPersona(personaId: string): Promise<any> {
+    return this.request(`/api/personas/install/${personaId}`, { method: 'POST' })
+  }
+
+  async activatePersona(personaId: string): Promise<any> {
+    return this.request(`/api/personas/activate/${personaId}`, { method: 'POST' })
+  }
+
+  async getActivePersona(): Promise<any> {
+    return this.request('/api/personas/active')
+  }
+
+  async deletePersona(personaId: string): Promise<any> {
+    return this.request(`/api/personas/${personaId}`, { method: 'DELETE' })
+  }
+
   // ── WebSocket 流式聊天 ──────────────────
 
   connectWS(convId: string, callbacks: StreamCallbacks) {
@@ -274,6 +361,74 @@ class ApiClient {
     }
     this.wsCallbacks = null
     this.currentConvId = null
+  }
+
+  // ── TTS WebSocket 流式合成 ──────────────
+
+  ttsStream(text: string, callbacks: TtsCallbacks, engine?: string, voice?: string) {
+    this.ttsDisconnect()
+    this.ttsCallbacks = callbacks
+
+    const token = this.getToken()
+    const wsBase = API_BASE.replace(/^http/, 'ws') || `${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${window.location.host}`
+    const url = `${wsBase}/ws/tts?token=${token}`
+
+    this.ttsWs = new WebSocket(url)
+
+    this.ttsWs.onopen = () => {
+      this.ttsWs?.send(JSON.stringify({
+        type: 'synthesize',
+        text,
+        ...(engine && { engine }),
+        ...(voice && { voice }),
+      }))
+    }
+
+    this.ttsWs.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data)
+        switch (data.type) {
+          case 'audio_start':
+            this.ttsCallbacks?.onStart?.(data.format || 'mp3')
+            break
+          case 'audio_chunk': {
+            const binaryStr = atob(data.data)
+            const bytes = new Uint8Array(binaryStr.length)
+            for (let i = 0; i < binaryStr.length; i++) {
+              bytes[i] = binaryStr.charCodeAt(i)
+            }
+            this.ttsCallbacks?.onChunk?.(bytes.buffer)
+            break
+          }
+          case 'audio_end':
+            this.ttsCallbacks?.onEnd?.()
+            break
+          case 'error':
+            this.ttsCallbacks?.onError?.(data.message)
+            break
+          case 'pong':
+            break
+        }
+      } catch (e) {
+        console.error('TTS WS parse error:', e)
+      }
+    }
+
+    this.ttsWs.onerror = () => {
+      this.ttsCallbacks?.onError?.('TTS WebSocket 连接错误')
+    }
+
+    this.ttsWs.onclose = () => {
+      this.ttsWs = null
+    }
+  }
+
+  ttsDisconnect() {
+    if (this.ttsWs) {
+      this.ttsWs.close()
+      this.ttsWs = null
+    }
+    this.ttsCallbacks = null
   }
 }
 

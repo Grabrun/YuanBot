@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, onUnmounted } from 'vue'
 import MarkdownIt from 'markdown-it'
 import type { Message } from '../api/client'
+import { api } from '../api/client'
 
 const md = new MarkdownIt({
   html: false,
@@ -37,6 +38,146 @@ function handleCopy() {
 function handleRegenerate() {
   emit('regenerate', props.message.message_id)
 }
+
+// ── TTS 语音播放 ──────────────────────────
+
+type TtsState = 'idle' | 'loading' | 'playing' | 'paused'
+
+const ttsState = ref<TtsState>('idle')
+const ttsAudioUrl = ref<string | null>(null)
+const ttsAudioEl = ref<HTMLAudioElement | null>(null)
+const ttsProgress = ref(0)
+const ttsDuration = ref(0)
+
+function formatTime(seconds: number): string {
+  const m = Math.floor(seconds / 60)
+  const s = Math.floor(seconds % 60)
+  return `${m}:${s.toString().padStart(2, '0')}`
+}
+
+const ttsProgressPercent = computed(() => {
+  if (ttsDuration.value <= 0) return 0
+  return (ttsProgress.value / ttsDuration.value) * 100
+})
+
+function handleTtsPlay() {
+  // 如果正在加载，忽略点击
+  if (ttsState.value === 'loading') return
+
+  // 如果已有音频，切换播放/暂停
+  if (ttsAudioEl.value && (ttsState.value === 'playing' || ttsState.value === 'paused')) {
+    if (ttsAudioEl.value.paused) {
+      ttsAudioEl.value.play()
+      ttsState.value = 'playing'
+    } else {
+      ttsAudioEl.value.pause()
+      ttsState.value = 'paused'
+    }
+    return
+  }
+
+  // 清理之前的音频
+  if (ttsAudioEl.value) {
+    ttsAudioEl.value.pause()
+    ttsAudioEl.value = null
+  }
+  if (ttsAudioUrl.value) {
+    URL.revokeObjectURL(ttsAudioUrl.value)
+    ttsAudioUrl.value = null
+  }
+
+  // 开始新的 TTS 流式合成
+  ttsState.value = 'loading'
+  ttsProgress.value = 0
+  ttsDuration.value = 0
+  const chunks: ArrayBuffer[] = []
+
+  api.ttsStream(props.message.content, {
+    onStart: () => {
+      chunks.length = 0
+    },
+    onChunk: (data: ArrayBuffer) => {
+      chunks.push(data)
+    },
+    onEnd: () => {
+      // 将所有音频块合并为一个 Blob
+      const totalLen = chunks.reduce((sum, c) => sum + c.byteLength, 0)
+      const merged = new Uint8Array(totalLen)
+      let offset = 0
+      for (const chunk of chunks) {
+        merged.set(new Uint8Array(chunk), offset)
+        offset += chunk.byteLength
+      }
+
+      const blob = new Blob([merged], { type: 'audio/mpeg' })
+
+      // 清理旧的 object URL
+      if (ttsAudioUrl.value) {
+        URL.revokeObjectURL(ttsAudioUrl.value)
+      }
+
+      const url = URL.createObjectURL(blob)
+      ttsAudioUrl.value = url
+
+      const audio = new Audio(url)
+      ttsAudioEl.value = audio
+
+      audio.addEventListener('loadedmetadata', () => {
+        ttsDuration.value = audio.duration || 0
+      })
+
+      audio.addEventListener('timeupdate', () => {
+        ttsProgress.value = audio.currentTime
+      })
+
+      audio.addEventListener('ended', () => {
+        ttsState.value = 'idle'
+        ttsProgress.value = 0
+      })
+
+      audio.addEventListener('error', () => {
+        ttsState.value = 'idle'
+      })
+
+      audio.play().then(() => {
+        ttsState.value = 'playing'
+      }).catch(() => {
+        ttsState.value = 'idle'
+      })
+    },
+    onError: (_msg: string) => {
+      ttsState.value = 'idle'
+    },
+  })
+}
+
+function handleTtsStop() {
+  if (ttsAudioEl.value) {
+    ttsAudioEl.value.pause()
+    ttsAudioEl.value.currentTime = 0
+    ttsAudioEl.value = null
+  }
+  if (ttsAudioUrl.value) {
+    URL.revokeObjectURL(ttsAudioUrl.value)
+    ttsAudioUrl.value = null
+  }
+  ttsState.value = 'idle'
+  ttsProgress.value = 0
+  ttsDuration.value = 0
+  api.ttsDisconnect()
+}
+
+onUnmounted(() => {
+  if (ttsAudioEl.value) {
+    ttsAudioEl.value.pause()
+    ttsAudioEl.value = null
+  }
+  if (ttsAudioUrl.value) {
+    URL.revokeObjectURL(ttsAudioUrl.value)
+    ttsAudioUrl.value = null
+  }
+  api.ttsDisconnect()
+})
 </script>
 
 <template>
@@ -55,8 +196,35 @@ function handleRegenerate() {
       </div>
       <!-- AI 消息：Markdown 渲染 -->
       <div v-else class="bubble-text bubble-ai markdown-body" v-html="renderedHtml" />
+      <!-- TTS 播放器（仅 AI 消息） -->
+      <div v-if="!isUser && ttsState !== 'idle'" class="tts-player">
+        <n-button
+          text
+          size="tiny"
+          @click="handleTtsPlay"
+          class="tts-control-btn"
+        >
+          {{ ttsState === 'loading' ? '⏳' : ttsState === 'playing' ? '⏸️' : '▶️' }}
+        </n-button>
+        <div class="tts-progress-track">
+          <div class="tts-progress-bar" :style="{ width: ttsProgressPercent + '%' }" />
+        </div>
+        <span class="tts-time">{{ formatTime(ttsProgress) }} / {{ formatTime(ttsDuration) }}</span>
+        <n-button text size="tiny" @click="handleTtsStop" class="tts-control-btn">
+          ⏹️
+        </n-button>
+      </div>
       <div class="bubble-actions">
         <n-button text size="tiny" @click="handleCopy">复制</n-button>
+        <n-button
+          v-if="!isUser"
+          text
+          size="tiny"
+          :loading="ttsState === 'loading'"
+          @click="handleTtsPlay"
+        >
+          {{ ttsState === 'playing' || ttsState === 'paused' ? '🔊 播放中' : '🔊 语音' }}
+        </n-button>
         <n-button v-if="!isUser" text size="tiny" @click="handleRegenerate">重新生成</n-button>
       </div>
     </div>
@@ -185,6 +353,43 @@ function handleRegenerate() {
 }
 .chat-bubble-row:hover .bubble-actions {
   opacity: 1;
+}
+
+/* ── TTS 播放器样式 ──────────────────── */
+.tts-player {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  padding: 4px 8px;
+  background: var(--n-card-color);
+  border: 1px solid var(--n-border-color);
+  border-radius: 8px;
+  font-size: 12px;
+}
+.tts-control-btn {
+  flex-shrink: 0;
+  font-size: 14px;
+}
+.tts-progress-track {
+  flex: 1;
+  height: 4px;
+  background: var(--n-border-color);
+  border-radius: 2px;
+  overflow: hidden;
+  min-width: 60px;
+}
+.tts-progress-bar {
+  height: 100%;
+  background: linear-gradient(90deg, #667eea, #764ba2);
+  border-radius: 2px;
+  transition: width 0.3s ease;
+}
+.tts-time {
+  flex-shrink: 0;
+  color: var(--n-text-color-3);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 /* 移动端适配 */

@@ -1,0 +1,98 @@
+# =============================================================================
+# Loki 配置 - YuanBot 日志聚合
+# Loki 3.0+ 语法 | 监听端口: 3100 | 存储: boltdb-shipper
+# =============================================================================
+
+# --- 认证配置 ---
+# 单租户模式，不需要多租户认证
+auth_enabled: false
+
+# --- 服务端口 ---
+server:
+  http_listen_port: 3100
+  grpc_listen_port: 9096
+  # 日志级别 (debug/info/warn/error)
+  log_level: info
+  # gRPC 最大接收消息大小 (用于 Promtail 推送)
+  grpc_server_max_recv_msg_size: 104857600  # 100MB
+
+# --- 通用配置 ---
+common:
+  # 实例地址，用于集群中的节点标识
+  instance_addr: 127.0.0.1
+  path_prefix: /loki
+  storage:
+    filesystem:
+      chunks_directory: /loki/chunks
+      rules_directory: /loki/rules
+  replication_factor: 1
+  ring:
+    kvstore:
+      store: inmemory
+
+# --- 存储引擎配置 ---
+# 使用 v13 存储架构 (Loki 3.0+)
+storage_config:
+  boltdb_shipper:
+    active_index_directory: /loki/boltdb-shipper-active
+    cache_location: /loki/boltdb-shipper-cache
+    cache_ttl: 24h
+    shared_store: filesystem
+  filesystem:
+    directory: /loki/chunks
+
+# --- Schema 配置 ---
+# 定义索引和分块的存储方案
+schema_config:
+  configs:
+    - from: "2024-01-01"
+      store: tsdb
+      object_store: filesystem
+      schema: v13
+      index:
+        prefix: index_
+        period: 24h
+
+# --- 数据保留策略 ---
+limits_config:
+  # 全局保留期: 30 天
+  retention_period: 720h
+  # 单次查询最大条数
+  max_query_length: 721h
+  # 每个租户的最大流数
+  max_global_streams_per_user: 10000
+  # 每个流的标签最大长度
+  max_label_name_length: 1024
+  max_label_value_length: 2048
+  # 每行日志最大大小
+  max_line_size: 256000
+  # 拒绝旧数据的阈值（避免乱序写入过旧数据）
+  reject_old_samples: true
+  reject_old_samples_max_age: 168h  # 7 天
+
+# --- 数据压缩与保留执行 ---
+compactor:
+  working_directory: /loki/compactor
+  shared_store: filesystem
+  compaction_interval: 10m
+  retention_enabled: true
+  retention_delete_delay: 2h
+  retention_delete_worker_count: 150
+  delete_request_store: filesystem
+
+# --- 查询调度 ---
+query_range:
+  results_cache:
+    cache:
+      embedded_cache:
+        enabled: true
+        max_size_mb: 100
+
+# --- 前端（查询拆分与并行） ---
+frontend:
+  max_outstanding_per_tenant: 4096
+  compress_responses: true
+
+# --- 分析引擎 ---
+analytics:
+  reporting_enabled: false

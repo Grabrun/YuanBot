@@ -471,6 +471,120 @@ def create_app(config: YuanBotConfig) -> FastAPI:
         except Exception as e:
             logger.info("ws_chat_disconnected", user_id=user.user_id, error=str(e))
 
+    @app.websocket("/ws/tts")
+    async def websocket_tts_endpoint(ws: WebSocket):
+        """WebSocket TTS 流式合成端点
+
+        连接时需要在 URL 参数中携带 JWT token:
+            ws://host:port/ws/tts?token=<jwt>
+
+        客户端发送:
+            {"type": "synthesize", "text": "...",
+             "engine": "edge-tts", "voice": "zh-CN-XiaoxiaoNeural"}
+            {"type": "ping"}
+
+        服务端推送:
+            {"type": "audio_start", "format": "mp3"}
+            {"type": "audio_chunk", "data": "<base64编码的音频块>"}
+            {"type": "audio_end", "chunks": N}
+            {"type": "error", "message": "..."}
+            {"type": "pong"}
+        """
+        import base64
+        import json
+
+        import structlog
+
+        from yuanbot.auth.middleware import get_current_user_from_ws
+
+        logger = structlog.get_logger("websocket.tts")
+
+        user = await get_current_user_from_ws(ws)
+        if not user:
+            await ws.close(code=4001, reason="Unauthorized")
+            return
+
+        await ws.accept()
+        logger.info("ws_tts_connected", user_id=user.user_id, username=user.username)
+
+        try:
+            while True:
+                raw = await ws.receive_text()
+                try:
+                    data = json.loads(raw)
+                except json.JSONDecodeError:
+                    await ws.send_text(json.dumps({"type": "error", "message": "Invalid JSON"}))
+                    continue
+
+                msg_type = data.get("type", "")
+
+                if msg_type == "ping":
+                    await ws.send_text(json.dumps({"type": "pong"}))
+                    continue
+
+                if msg_type == "synthesize":
+                    text = data.get("text", "")
+                    if not text:
+                        await ws.send_text(json.dumps(
+                            {"type": "error", "message": "text is required"}
+                        ))
+                        continue
+
+                    engine = data.get("engine")
+                    voice = data.get("voice")
+
+                    tts = app.state.tts_manager
+
+                    try:
+                        await ws.send_text(json.dumps({
+                            "type": "audio_start",
+                            "format": "mp3",
+                        }))
+
+                        # 将完整文本包装为单元素异步迭代器
+                        async def _text_iter():
+                            yield text
+
+                        chunk_count = 0
+                        async for audio_chunk in tts.synthesize_streaming_buffered(
+                            text_stream=_text_iter(),
+                            engine=engine,
+                            voice=voice,
+                        ):
+                            b64_data = base64.b64encode(audio_chunk).decode("ascii")
+                            await ws.send_text(json.dumps({
+                                "type": "audio_chunk",
+                                "data": b64_data,
+                            }))
+                            chunk_count += 1
+
+                        await ws.send_text(json.dumps({
+                            "type": "audio_end",
+                            "chunks": chunk_count,
+                        }))
+                        logger.info(
+                            "ws_tts_synthesized",
+                            user_id=user.user_id,
+                            text_len=len(text),
+                            chunks=chunk_count,
+                        )
+
+                    except Exception as e:
+                        logger.error("ws_tts_error", error=str(e))
+                        await ws.send_text(json.dumps({
+                            "type": "error",
+                            "message": f"TTS 合成失败: {e}",
+                        }))
+
+                else:
+                    await ws.send_text(json.dumps({
+                        "type": "error",
+                        "message": f"Unknown message type: {msg_type}",
+                    }))
+
+        except Exception as e:
+            logger.info("ws_tts_disconnected", user_id=user.user_id, error=str(e))
+
     @app.websocket("/ws/logs")
     async def websocket_logs_endpoint(ws: WebSocket):
         """WebSocket 实时日志流（仅管理员）"""
@@ -699,6 +813,125 @@ def _register_routes(
         @app.get("/metrics")
         async def metrics():
             return {"error": "prometheus_client not installed"}
+
+    # ── 知识图谱 API ───────────────────────────
+
+    # 初始化图谱存储
+    from yuanbot.infrastructure.graph_store import GraphStore
+
+    _graph_store = GraphStore(
+        db_path=getattr(config, 'graph_db_path', None)
+    ) if hasattr(config, 'graph_db_path') else GraphStore()
+    app.state.graph_store = _graph_store
+
+    # 节点类型到分类索引的映射
+    node_type_category: dict[str, int] = {
+        "User": 0,
+        "Entity": 1,
+        "Event": 2,
+        "AIPersona": 3,
+        "Trait": 1,       # Trait 归入 Entity 类别
+        "SemanticMemory": 1,
+    }
+
+    # 节点类型对应的基础符号大小
+    node_base_size: dict[str, int] = {
+        "User": 40,
+        "AIPersona": 36,
+        "Entity": 24,
+        "Event": 28,
+        "Trait": 20,
+        "SemanticMemory": 22,
+    }
+
+    @app.get("/api/memory/graph")
+    async def get_memory_graph(
+        user_id: str | None = None,
+        depth: int = 2,
+        center_node_id: str | None = None,
+    ):
+        """获取知识图谱数据（ECharts graph 格式）
+
+        Args:
+            user_id: 用户 ID（可选，作为中心节点）
+            depth: 遍历深度，1-3（默认 2）
+            center_node_id: 中心节点 ID（可选，优先于 user_id）
+        """
+
+        gs: GraphStore = app.state.graph_store
+
+        # 限制深度范围
+        depth = max(1, min(3, depth))
+
+        # 确定中心节点
+        center_id = center_node_id or user_id
+
+        if not center_id:
+            # 无指定中心节点时，返回所有节点
+            all_nodes = await gs.get_all_nodes()
+            if not all_nodes:
+                return {
+                    "nodes": [],
+                    "links": [],
+                    "categories": [
+                        {"name": "User"},
+                        {"name": "Entity"},
+                        {"name": "Event"},
+                        {"name": "AIPersona"},
+                    ],
+                }
+            # 默认以第一个 User 节点为中心
+            user_nodes = [n for n in all_nodes if n.get("type") == "User"]
+            center_id = user_nodes[0]["id"] if user_nodes else all_nodes[0]["id"]
+
+        # 获取子图
+        subgraph = await gs.get_knowledge_subgraph(
+            center_id=center_id,
+            depth=depth,
+            max_nodes=100,
+        )
+
+        # 转换为 ECharts graph 格式
+        echarts_nodes: list[dict[str, Any]] = []
+        for node in subgraph.get("nodes", []):
+            node_type = node.get("type", "Entity")
+            props = node.get("properties", {})
+            name = props.get("name", node.get("id", "unknown"))
+            category = node_type_category.get(node_type, 1)
+            base_size = node_base_size.get(node_type, 24)
+
+            echarts_nodes.append({
+                "id": node.get("id", ""),
+                "name": name,
+                "category": category,
+                "value": 1,
+                "symbolSize": base_size,
+                "nodeType": node_type,
+                "properties": props,
+                "isCenter": node.get("id") == center_id,
+            })
+
+        # 转换边
+        echarts_links: list[dict[str, Any]] = []
+        for edge in subgraph.get("edges", []):
+            echarts_links.append({
+                "source": edge.get("source", ""),
+                "target": edge.get("target", ""),
+                "relation": edge.get("type", "unknown"),
+            })
+
+        return {
+            "nodes": echarts_nodes,
+            "links": echarts_links,
+            "categories": [
+                {"name": "User"},
+                {"name": "Entity"},
+                {"name": "Event"},
+                {"name": "AIPersona"},
+            ],
+            "center_id": center_id,
+            "depth": depth,
+        }
 
     # ── 健康检查与业务路由 ─────────────────────
     @app.get("/healthz")
@@ -1434,11 +1667,215 @@ def _register_routes(
             app.state.orchestrator._persona = pm.active_persona
             return {"status": "ok", "reloaded": "all", "count": len(pm.list_personas())}
 
-    # ── 扩展市场 API ────────────────────────────
+    # ── 人格商店 API ─────────────────────────────
 
     from yuanbot.services.marketplace import MarketplaceClient
 
     _marketplace_client = MarketplaceClient()
+
+    from yuanbot.services.marketplace import ExtensionReviewStore
+
+    _review_store = ExtensionReviewStore()
+
+    @app.get("/api/personas")
+    async def list_all_personas():
+        """列出本地已安装人设 + 市场可用人设"""
+        pm = app.state.persona_manager
+        local_personas = pm.list_personas()
+
+        # 从市场获取 persona 类型的扩展
+        marketplace_personas = []
+        try:
+            result = await _marketplace_client.search(
+                query="",
+                ext_type="persona",
+                limit=50,
+            )
+            marketplace_personas = result.get("extensions", [])
+        except Exception:
+            pass
+
+        # 获取评分统计
+        installed_ids = {p["id"] for p in local_personas}
+        for mp in marketplace_personas:
+            mp["is_installed"] = mp["id"] in installed_ids
+            stats = _review_store.get_stats(mp["id"])
+            mp["rating"] = stats.average_rating
+            mp["review_count"] = stats.total_reviews
+
+        return {
+            "local": local_personas,
+            "marketplace": marketplace_personas,
+        }
+
+    @app.post("/api/personas/install/{persona_id}")
+    async def install_persona(persona_id: str):
+        """从市场下载安装人设包到 configs/Personas/"""
+        from fastapi.responses import JSONResponse
+
+        # 从市场获取扩展详情
+        entry = await _marketplace_client.get_extension(persona_id)
+        if not entry:
+            return JSONResponse(
+                status_code=404,
+                content={"error": f"Persona '{persona_id}' not found in marketplace"},
+            )
+
+        if entry.type != "persona":
+            return JSONResponse(
+                status_code=400,
+                content={"error": f"Extension '{persona_id}' is not a persona"},
+            )
+
+        personas_dir = Path("configs/Personas")
+        personas_dir.mkdir(parents=True, exist_ok=True)
+
+        try:
+            import httpx
+
+            if entry.download_url:
+                # 下载 zip 并解压
+                import shutil
+                import zipfile
+
+                tmp_zip = personas_dir / f".tmp_{persona_id}.zip"
+                async with httpx.AsyncClient(timeout=120, follow_redirects=True) as client:
+                    resp = await client.get(entry.download_url)
+                    resp.raise_for_status()
+                    tmp_zip.write_bytes(resp.content)
+
+                # 解压并查找 YAML 文件
+                tmp_dir = personas_dir / f".tmp_{persona_id}"
+                if tmp_dir.exists():
+                    shutil.rmtree(tmp_dir)
+                with zipfile.ZipFile(tmp_zip) as zf:
+                    zf.extractall(tmp_dir)
+
+                # 查找 persona yaml 文件
+                yaml_found = False
+                for yaml_file in tmp_dir.rglob("*.yaml"):
+                    dest = personas_dir / yaml_file.name
+                    shutil.copy2(str(yaml_file), str(dest))
+                    yaml_found = True
+                    break
+
+                if not yaml_found:
+                    # 尝试查找 yml 文件
+                    for yml_file in tmp_dir.rglob("*.yml"):
+                        dest = personas_dir / yml_file.name
+                        shutil.copy2(str(yml_file), str(dest))
+                        yaml_found = True
+                        break
+
+                # 清理临时文件
+                tmp_zip.unlink(missing_ok=True)
+                shutil.rmtree(tmp_dir, ignore_errors=True)
+
+                if not yaml_found:
+                    return JSONResponse(
+                        status_code=400,
+                        content={"error": "No YAML persona config found in the package"},
+                    )
+
+            elif entry.homepage:
+                # 尝试直接下载 YAML
+                import httpx
+
+                async with httpx.AsyncClient(timeout=60, follow_redirects=True) as client:
+                    resp = await client.get(entry.homepage)
+                    resp.raise_for_status()
+                    dest = personas_dir / f"{persona_id}.yaml"
+                    dest.write_text(resp.text, encoding="utf-8")
+            else:
+                return JSONResponse(
+                    status_code=400,
+                    content={"error": "No download URL available for this persona"},
+                )
+
+            # 重载人设管理器
+            pm = app.state.persona_manager
+            pm.load_personas()
+            app.state.orchestrator._persona = pm.active_persona
+
+            return {
+                "status": "installed",
+                "persona_id": persona_id,
+                "name": entry.name,
+            }
+
+        except Exception as e:
+            import structlog
+            _logger = structlog.get_logger("persona_install")
+            _logger.error("persona_install_failed", persona_id=persona_id, error=str(e))
+            return JSONResponse(
+                status_code=500,
+                content={"error": f"Installation failed: {e}"},
+            )
+
+    @app.post("/api/personas/activate/{persona_id}")
+    async def activate_persona(persona_id: str):
+        """切换当前活跃人设"""
+        from fastapi.responses import JSONResponse
+
+        pm = app.state.persona_manager
+        try:
+            result = pm.switch_persona(persona_id)
+            app.state.orchestrator._persona = pm.active_persona
+            return result
+        except ValueError as e:
+            return JSONResponse(
+                status_code=404,
+                content={"error": str(e)},
+            )
+
+    @app.get("/api/personas/active")
+    async def get_active_persona():
+        """获取当前活跃人设信息"""
+        pm = app.state.persona_manager
+        persona = pm.active_persona
+        return {
+            "persona_id": pm.active_id,
+            "name": persona.name,
+            "relationship_stage": persona.relationship_stage,
+            "voice_style": persona.get_voice_style(),
+            "capability_domains": persona.get_capability_domains(),
+            "behavior_rules": persona.get_behavior_rules(),
+        }
+
+    @app.delete("/api/personas/{persona_id}")
+    async def delete_persona(persona_id: str):
+        """删除已安装的人设（不能删除当前活跃人设和默认人设）"""
+        from fastapi.responses import JSONResponse
+
+        pm = app.state.persona_manager
+
+        if persona_id == "default":
+            return JSONResponse(
+                status_code=400,
+                content={"error": "Cannot delete the default persona"},
+            )
+
+        if persona_id == pm.active_id:
+            return JSONResponse(
+                status_code=400,
+                content={"error": (
+                    "Cannot delete the currently active persona."
+                    " Switch to another persona first."
+                )},
+            )
+
+        personas_dir = Path("configs/Personas")
+        yaml_file = personas_dir / f"{persona_id}.yaml"
+        if not yaml_file.exists():
+            return JSONResponse(
+                status_code=404,
+                content={"error": f"Persona '{persona_id}' not found"},
+            )
+
+        yaml_file.unlink()
+        pm.load_personas()
+
+        return {"status": "deleted", "persona_id": persona_id}
 
     @app.get("/api/marketplace/search")
     async def marketplace_search(
@@ -1504,6 +1941,110 @@ def _register_routes(
         ok = await _marketplace_client.refresh_index()
         return {"status": "ok" if ok else "error"}
 
+    @app.get("/api/marketplace/installed")
+    async def marketplace_installed():
+        """获取已安装扩展列表
+
+        扫描 data/extensions 目录，返回每个已安装扩展的 ID 和 manifest 信息。"""
+        if not _extensions_dir.exists():
+            return {"installed": [], "count": 0}
+
+        installed = []
+        for ext_dir in sorted(_extensions_dir.iterdir()):
+            if not ext_dir.is_dir():
+                continue
+            manifest_path = ext_dir / "manifest.json"
+            if manifest_path.exists():
+                try:
+                    manifest = ExtensionManifest.from_file(manifest_path)
+                    installed.append({
+                        "id": manifest.id,
+                        "name": manifest.name,
+                        "version": manifest.version,
+                        "type": manifest.type if hasattr(manifest, "type") else "",
+                    })
+                except Exception:
+                    installed.append({"id": ext_dir.name, "version": "unknown", "type": ""})
+            else:
+                installed.append({"id": ext_dir.name, "version": "unknown", "type": ""})
+
+        return {"installed": installed, "count": len(installed)}
+
+    @app.post("/api/marketplace/extensions/{ext_id}/install")
+    async def marketplace_install(ext_id: str, request: dict[str, Any] | None = None):
+        """从市场下载并安装扩展到 data/extensions
+
+        通过 MarketplaceClient 下载扩展 zip 包并解压到扩展目录。"""
+        from fastapi.responses import JSONResponse
+
+        # 检查是否已安装
+        ext_dir = _extensions_dir / ext_id
+        force = (request or {}).get("force", False)
+        if ext_dir.exists() and not force:
+            manifest_path = ext_dir / "manifest.json"
+            if manifest_path.exists():
+                try:
+                    existing = ExtensionManifest.from_file(manifest_path)
+                    return JSONResponse(
+                        status_code=409,
+                        content={
+                            "error": (
+                                f"Extension '{ext_id}' is already installed"
+                                f" (version {existing.version})"
+                            ),
+                            "hint": "Use 'force': true to reinstall",
+                        },
+                    )
+                except Exception:
+                    pass
+
+        _extensions_dir.mkdir(parents=True, exist_ok=True)
+
+        # 使用 MarketplaceClient 下载
+        result_path = await _marketplace_client.download_extension(
+            ext_id=ext_id,
+            dest_dir=_extensions_dir,
+        )
+
+        if not result_path:
+            return JSONResponse(
+                status_code=404,
+                content={"error": f"Failed to download extension '{ext_id}' from marketplace"},
+            )
+
+        # 读取已安装的 manifest 信息
+        manifest_path = result_path / "manifest.json"
+        manifest_info = {}
+        if manifest_path.exists():
+            try:
+                manifest = ExtensionManifest.from_file(manifest_path)
+                manifest_info = manifest.to_dict()
+            except Exception:
+                pass
+
+        return {
+            "status": "installed",
+            "extension_id": ext_id,
+            "manifest": manifest_info,
+        }
+
+    @app.delete("/api/marketplace/extensions/{ext_id}/uninstall")
+    async def marketplace_uninstall(ext_id: str):
+        """卸载扩展（从 data/extensions 中删除）"""
+        import shutil
+
+        from fastapi.responses import JSONResponse
+
+        ext_dir = _extensions_dir / ext_id
+        if not ext_dir.exists():
+            return JSONResponse(
+                status_code=404,
+                content={"error": f"Extension '{ext_id}' is not installed"},
+            )
+
+        shutil.rmtree(ext_dir)
+        return {"status": "uninstalled", "extension_id": ext_id}
+
     # ── 扩展评分与评论 API ──────────────────────────
     from fastapi import Depends
     from fastapi.responses import JSONResponse
@@ -1511,9 +2052,6 @@ def _register_routes(
 
     from yuanbot.auth.middleware import get_current_user
     from yuanbot.auth.models import User
-    from yuanbot.services.marketplace import ExtensionReviewStore
-
-    _review_store = ExtensionReviewStore()
 
     class ReviewCreateRequest(BaseModel):
         rating: int = Field(..., ge=1, le=5, description="评分 1-5 星")

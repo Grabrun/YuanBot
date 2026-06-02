@@ -1,6 +1,9 @@
 version: '3.8'
 
 services:
+  # =========================================================================
+  # YuanBot 应用服务
+  # =========================================================================
   yuanbot:
     build: .
     restart: always
@@ -18,3 +21,85 @@ services:
       interval: 30s
       timeout: 3s
       retries: 3
+
+  # =========================================================================
+  # 日志聚合 — Loki + Promtail + Grafana
+  # =========================================================================
+
+  # --- Loki: 日志存储与查询引擎 ---
+  loki:
+    image: grafana/loki:3.0.0
+    container_name: yuanbot-loki
+    restart: always
+    ports:
+      - "3100:3100"
+    volumes:
+      - ./configs/loki/loki-config.yaml:/etc/loki/loki-config.yaml:ro
+      - loki-data:/loki
+    command: -config.file=/etc/loki/loki-config.yaml
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--output-document=-", "http://localhost:3100/ready"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - monitoring
+
+  # --- Promtail: 日志采集代理 ---
+  promtail:
+    image: grafana/promtail:3.0.0
+    container_name: yuanbot-promtail
+    restart: always
+    volumes:
+      - ./configs/loki/promtail-config.yaml:/etc/promtail/promtail-config.yaml:ro
+      - ./logs:/var/log/yuanbot:ro
+      - /var/log/nginx:/var/log/nginx:ro
+      - promtail-positions:/tmp
+    command: -config.file=/etc/promtail/promtail-config.yaml
+    depends_on:
+      loki:
+        condition: service_healthy
+    networks:
+      - monitoring
+
+  # --- Grafana: 可视化仪表盘 ---
+  grafana:
+    image: grafana/grafana:11.0.0
+    container_name: yuanbot-grafana
+    restart: always
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./configs/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./configs/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-yuanbot2024}
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_SERVER_ROOT_URL=http://localhost:3000
+      - GF_INSTALL_PLUGINS=
+    depends_on:
+      loki:
+        condition: service_healthy
+    networks:
+      - monitoring
+
+# ===========================================================================
+# 数据卷
+# ===========================================================================
+volumes:
+  loki-data:
+    driver: local
+  promtail-positions:
+    driver: local
+  grafana-data:
+    driver: local
+
+# ===========================================================================
+# 网络
+# ===========================================================================
+networks:
+  monitoring:
+    driver: bridge

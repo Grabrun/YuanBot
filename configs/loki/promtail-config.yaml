@@ -1,0 +1,96 @@
+# =============================================================================
+# Promtail 配置 - YuanBot 日志采集
+# 采集 logs/ 目录下的 JSON 日志文件，解析结构化字段并推送至 Loki
+# =============================================================================
+
+# --- 服务端口 ---
+server:
+  http_listen_port: 9080
+  grpc_listen_port: 0
+  log_level: info
+
+# --- 位置文件（记录采集进度，避免重启后重复采集） ---
+positions:
+  filename: /tmp/positions.yaml
+  sync_period: 10s
+
+# --- Loki 推送目标 ---
+clients:
+  - url: http://loki:3100/loki/api/v1/push
+
+# --- 采集任务定义 ---
+scrape_configs:
+  # -----------------------------------------------------------------------
+  # YuanBot 应用日志
+  # -----------------------------------------------------------------------
+  - job_name: yuanbot
+
+    # 文件发现：监控 logs/ 目录下的所有 .log 文件
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: yuanbot
+          __path__: /var/log/yuanbot/*.log
+
+    # JSON 日志解析 pipeline
+    pipeline_stages:
+      # 1) 匹配 JSON 日志行
+      - json:
+          expressions:
+            # 从 JSON 中提取字段
+            level: level
+            logger: logger
+            message: message
+            time: time
+
+      # 2) 用提取的 level 字段设置标签（用于过滤和分组）
+      - labels:
+          level:
+          logger:
+
+      # 3) 用 time 字段覆盖日志时间戳
+      - timestamp:
+          source: time
+          format: "2006-01-02T15:04:05"
+          fallback_formats:
+            - "2006-01-02T15:04:05.000"
+            - "2006-01-02T15:04:05.000000"
+            - "2006-01-02 15:04:05"
+
+      # 4) 设置日志行内容为 message 字段（清理格式）
+      - output:
+          source: message
+
+      # 5) 丢弃 DEBUG 级别日志（减少存储压力，需要时可注释掉）
+      - match:
+          selector: '{job="yuanbot", level="DEBUG"}'
+          action: drop
+
+  # -----------------------------------------------------------------------
+  # Nginx 访问日志（如果存在）
+  # -----------------------------------------------------------------------
+  - job_name: nginx
+
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: nginx
+          __path__: /var/log/nginx/*.log
+
+    pipeline_stages:
+      - json:
+          expressions:
+            status: status
+            method: method
+            path: path
+            request_time: request_time
+      - labels:
+          status:
+          method:
+      - timestamp:
+          source: time
+          format: "02/Jan/2006:15:04:05 -0700"
+          fallback_formats:
+            - "2006-01-02T15:04:05Z"
