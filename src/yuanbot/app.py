@@ -1503,3 +1503,88 @@ def _register_routes(
         """刷新市场索引缓存"""
         ok = await _marketplace_client.refresh_index()
         return {"status": "ok" if ok else "error"}
+
+    # ── 扩展评分与评论 API ──────────────────────────
+    from fastapi import Depends
+    from fastapi.responses import JSONResponse
+    from pydantic import BaseModel, Field
+
+    from yuanbot.auth.middleware import get_current_user
+    from yuanbot.auth.models import User
+    from yuanbot.services.marketplace import ExtensionReviewStore
+
+    _review_store = ExtensionReviewStore()
+
+    class ReviewCreateRequest(BaseModel):
+        rating: int = Field(..., ge=1, le=5, description="评分 1-5 星")
+        title: str = Field("", max_length=200)
+        content: str = Field("", max_length=5000)
+
+    @app.post("/api/marketplace/extensions/{ext_id}/reviews")
+    async def create_review(
+        ext_id: str,
+        req: ReviewCreateRequest,
+        user: User = Depends(get_current_user),
+    ):
+        """为扩展添加或更新评论（每人每扩展限一条）"""
+        review = _review_store.add_review(
+            ext_id=ext_id,
+            user_id=user.user_id,
+            rating=req.rating,
+            title=req.title,
+            content=req.content,
+        )
+        return review.to_dict()
+
+    @app.get("/api/marketplace/extensions/{ext_id}/reviews")
+    async def list_reviews(
+        ext_id: str,
+        limit: int = 20,
+        offset: int = 0,
+        sort: str = "created_at",
+        order: str = "desc",
+    ):
+        """列出扩展的评论"""
+        return _review_store.list_reviews(
+            ext_id=ext_id,
+            limit=limit,
+            offset=offset,
+            sort_by=sort,
+            order=order,
+        )
+
+    @app.get("/api/marketplace/extensions/{ext_id}/reviews/stats")
+    async def review_stats(ext_id: str):
+        """获取扩展评分统计"""
+        stats = _review_store.get_stats(ext_id)
+        return stats.to_dict()
+
+    @app.delete("/api/marketplace/extensions/{ext_id}/reviews/{review_id}")
+    async def delete_review(
+        ext_id: str,
+        review_id: str,
+        user: User = Depends(get_current_user),
+    ):
+        """删除自己的评论"""
+        deleted = _review_store.delete_review(review_id, user.user_id)
+        if not deleted:
+            return JSONResponse(
+                status_code=404,
+                content={"error": "Review not found or not owned by user"},
+            )
+        return {"status": "deleted"}
+
+    @app.post("/api/marketplace/extensions/{ext_id}/reviews/{review_id}/helpful")
+    async def mark_review_helpful(
+        ext_id: str,
+        review_id: str,
+        user: User = Depends(get_current_user),
+    ):
+        """标记评论为有帮助"""
+        ok = _review_store.mark_helpful(review_id, user.user_id)
+        if not ok:
+            return JSONResponse(
+                status_code=409,
+                content={"error": "Already marked as helpful"},
+            )
+        return {"status": "ok"}

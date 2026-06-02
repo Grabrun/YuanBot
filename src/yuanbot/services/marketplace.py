@@ -14,7 +14,9 @@
 from __future__ import annotations
 
 import json
+import sqlite3
 import time
+import uuid
 import zipfile
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -445,3 +447,289 @@ class MarketplaceClient:
                     continue
 
         return entries
+
+
+# ──────────────────────────────────────────────
+# Extension Rating & Review System
+# 设计参考: development-standards-ecosystem.md §5.1
+# ──────────────────────────────────────────────
+
+
+@dataclass
+class ExtensionReview:
+    """扩展评论条目"""
+
+    id: str
+    ext_id: str
+    user_id: str
+    rating: int  # 1-5 星
+    title: str = ""
+    content: str = ""
+    helpful_count: int = 0
+    created_at: float = 0.0
+    updated_at: float = 0.0
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "id": self.id,
+            "ext_id": self.ext_id,
+            "user_id": self.user_id,
+            "rating": self.rating,
+            "title": self.title,
+            "content": self.content,
+            "helpful_count": self.helpful_count,
+            "created_at": self.created_at,
+            "updated_at": self.updated_at,
+        }
+
+    @classmethod
+    def from_row(cls, row: sqlite3.Row) -> ExtensionReview:
+        return cls(
+            id=row["id"],
+            ext_id=row["ext_id"],
+            user_id=row["user_id"],
+            rating=row["rating"],
+            title=row["title"] or "",
+            content=row["content"] or "",
+            helpful_count=row["helpful_count"],
+            created_at=row["created_at"],
+            updated_at=row["updated_at"],
+        )
+
+
+@dataclass
+class ReviewStats:
+    """扩展评分统计"""
+
+    ext_id: str
+    total_reviews: int = 0
+    average_rating: float = 0.0
+    rating_distribution: dict[int, int] = field(default_factory=dict)  # {1: N, 2: N, ...}
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "ext_id": self.ext_id,
+            "total_reviews": self.total_reviews,
+            "average_rating": round(self.average_rating, 2),
+            "rating_distribution": self.rating_distribution,
+        }
+
+
+class ExtensionReviewStore:
+    """扩展评分与评论存储
+
+    使用 SQLite 持久化扩展的用户评分和文字评论。
+    支持 CRUD 操作、"有帮助"投票和评分统计。
+    """
+
+    def __init__(self, db_path: Path | str | None = None) -> None:
+        self._db_path = Path(db_path) if db_path else Path("data/marketplace_reviews.db")
+        self._db_path.parent.mkdir(parents=True, exist_ok=True)
+        self._conn: sqlite3.Connection | None = None
+        self._ensure_tables()
+
+    def _get_conn(self) -> sqlite3.Connection:
+        if self._conn is None:
+            self._conn = sqlite3.connect(str(self._db_path))
+            self._conn.row_factory = sqlite3.Row
+            self._conn.execute("PRAGMA journal_mode=WAL")
+            self._conn.execute("PRAGMA foreign_keys=ON")
+        return self._conn
+
+    def _ensure_tables(self) -> None:
+        conn = self._get_conn()
+        conn.executescript("""
+            CREATE TABLE IF NOT EXISTS extension_reviews (
+                id TEXT PRIMARY KEY,
+                ext_id TEXT NOT NULL,
+                user_id TEXT NOT NULL,
+                rating INTEGER NOT NULL CHECK (rating >= 1 AND rating <= 5),
+                title TEXT DEFAULT '',
+                content TEXT DEFAULT '',
+                helpful_count INTEGER DEFAULT 0,
+                created_at REAL NOT NULL,
+                updated_at REAL NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_reviews_ext_id ON extension_reviews(ext_id);
+            CREATE INDEX IF NOT EXISTS idx_reviews_user_id ON extension_reviews(user_id);
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_reviews_ext_user
+                ON extension_reviews(ext_id, user_id);
+
+            CREATE TABLE IF NOT EXISTS review_helpful (
+                review_id TEXT NOT NULL,
+                user_id TEXT NOT NULL,
+                created_at REAL NOT NULL,
+                PRIMARY KEY (review_id, user_id),
+                FOREIGN KEY (review_id) REFERENCES extension_reviews(id) ON DELETE CASCADE
+            );
+        """)
+        conn.commit()
+
+    def close(self) -> None:
+        if self._conn:
+            self._conn.close()
+            self._conn = None
+
+    def add_review(
+        self,
+        ext_id: str,
+        user_id: str,
+        rating: int,
+        title: str = "",
+        content: str = "",
+    ) -> ExtensionReview:
+        """添加或更新评论（同一用户对同一扩展只能有一条评论）"""
+        if not 1 <= rating <= 5:
+            raise ValueError("Rating must be between 1 and 5")
+
+        conn = self._get_conn()
+        now = time.time()
+        review_id = str(uuid.uuid4())
+
+        try:
+            conn.execute(
+                """INSERT INTO extension_reviews
+                    (id, ext_id, user_id, rating,
+                     title, content, created_at, updated_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                (review_id, ext_id, user_id, rating,
+                 title, content, now, now),
+            )
+            conn.commit()
+        except sqlite3.IntegrityError:
+            # 已有评论 → 更新
+            conn.execute(
+                """UPDATE extension_reviews SET rating = ?, title = ?, content = ?, updated_at = ?
+                   WHERE ext_id = ? AND user_id = ?""",
+                (rating, title, content, now, ext_id, user_id),
+            )
+            conn.commit()
+            row = conn.execute(
+                "SELECT * FROM extension_reviews WHERE ext_id = ? AND user_id = ?",
+                (ext_id, user_id),
+            ).fetchone()
+            return ExtensionReview.from_row(row)
+
+        row = conn.execute(
+            "SELECT * FROM extension_reviews WHERE id = ?", (review_id,)
+        ).fetchone()
+        return ExtensionReview.from_row(row)
+
+    def get_review(self, review_id: str) -> ExtensionReview | None:
+        """获取单条评论"""
+        conn = self._get_conn()
+        row = conn.execute(
+            "SELECT * FROM extension_reviews WHERE id = ?", (review_id,)
+        ).fetchone()
+        return ExtensionReview.from_row(row) if row else None
+
+    def list_reviews(
+        self,
+        ext_id: str,
+        limit: int = 20,
+        offset: int = 0,
+        sort_by: str = "created_at",
+        order: str = "desc",
+    ) -> dict[str, Any]:
+        """列出扩展的评论
+
+        Args:
+            ext_id: 扩展 ID
+            limit: 返回数量
+            offset: 分页偏移
+            sort_by: 排序字段 (created_at, rating, helpful_count)
+            order: 排序方向 (asc, desc)
+        """
+        conn = self._get_conn()
+
+        # 验证排序字段
+        allowed_sort = {"created_at", "rating", "helpful_count"}
+        if sort_by not in allowed_sort:
+            sort_by = "created_at"
+        order_sql = "DESC" if order.lower() == "desc" else "ASC"
+
+        total = conn.execute(
+            "SELECT COUNT(*) FROM extension_reviews WHERE ext_id = ?", (ext_id,)
+        ).fetchone()[0]
+
+        rows = conn.execute(
+            f"SELECT * FROM extension_reviews"
+            f" WHERE ext_id = ?"
+            f" ORDER BY {sort_by} {order_sql}"
+            f" LIMIT ? OFFSET ?",
+            (ext_id, limit, offset),
+        ).fetchall()
+
+        return {
+            "reviews": [ExtensionReview.from_row(r).to_dict() for r in rows],
+            "total": total,
+            "offset": offset,
+            "limit": limit,
+        }
+
+    def delete_review(self, review_id: str, user_id: str) -> bool:
+        """删除评论（仅评论作者可删除）"""
+        conn = self._get_conn()
+        cursor = conn.execute(
+            "DELETE FROM extension_reviews WHERE id = ? AND user_id = ?",
+            (review_id, user_id),
+        )
+        conn.commit()
+        return cursor.rowcount > 0
+
+    def mark_helpful(self, review_id: str, user_id: str) -> bool:
+        """标记评论为"有帮助"（每人限投一次）"""
+        conn = self._get_conn()
+        now = time.time()
+        try:
+            conn.execute(
+                "INSERT INTO review_helpful (review_id, user_id, created_at) VALUES (?, ?, ?)",
+                (review_id, user_id, now),
+            )
+            conn.execute(
+                "UPDATE extension_reviews SET helpful_count = helpful_count + 1 WHERE id = ?",
+                (review_id,),
+            )
+            conn.commit()
+            return True
+        except sqlite3.IntegrityError:
+            # 已投过票
+            return False
+
+    def get_stats(self, ext_id: str) -> ReviewStats:
+        """获取扩展评分统计"""
+        conn = self._get_conn()
+
+        row = conn.execute(
+            "SELECT COUNT(*) as cnt,"
+            " COALESCE(AVG(rating), 0) as avg_r"
+            " FROM extension_reviews WHERE ext_id = ?",
+            (ext_id,)
+        ).fetchone()
+
+        dist_rows = conn.execute(
+            "SELECT rating, COUNT(*) as cnt"
+            " FROM extension_reviews"
+            " WHERE ext_id = ? GROUP BY rating",
+            (ext_id,),
+        ).fetchall()
+
+        distribution = {i: 0 for i in range(1, 6)}
+        for r in dist_rows:
+            distribution[r["rating"]] = r["cnt"]
+
+        return ReviewStats(
+            ext_id=ext_id,
+            total_reviews=row["cnt"],
+            average_rating=row["avg_r"],
+            rating_distribution=distribution,
+        )
+
+    def get_user_review(self, ext_id: str, user_id: str) -> ExtensionReview | None:
+        """获取用户对某扩展的评论"""
+        conn = self._get_conn()
+        row = conn.execute(
+            "SELECT * FROM extension_reviews WHERE ext_id = ? AND user_id = ?",
+            (ext_id, user_id),
+        ).fetchone()
+        return ExtensionReview.from_row(row) if row else None
