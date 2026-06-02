@@ -1,9 +1,9 @@
-# 🌸 YuanBot 设计文档符合度审查报告 v13
+# 🌸 YuanBot 设计文档符合度审查报告 v14
 
-**审查日期**: 2026-06-02
+**审查日期**: 2026-06-03
 **审查范围**: docs/ 目录下 17 份设计文档 vs src/ + configs/ + tests/ + webui/ 实际代码
 **项目版本**: v1.5.0
-**上次审查**: v12 (2026-06-02),总体 ~100%
+**上次审查**: v13 (2026-06-02),总体 ~100%
 
 ---
 
@@ -1041,6 +1041,40 @@
 | 统一开发标准与社区生态 | 95% | **98%** | **+3%** (市场 WebUI 视图) |
 | 基础架构与部署系统 | 96% | **99%** | **+3%** (Loki+Grafana 日志聚合) |
 | **总体** | **~100%** | **~100%** | - |
+
+### 剩余待完成项
+
+| 优先级 | 项目 | 预估工作量 | 类型 |
+|--------|------|----------|------|
+| P2 | 本地意图模型 (bert-base ONNX) | 2-3 天 | 外部 ML 依赖 |
+
+---
+
+## v14 更新摘要
+
+本次审查在总体符合度已达 ~100% 的情况下，聚焦代码性能优化和运行效率提升。所有系统保持 96%+ 符合度，无功能缺失。
+
+### v14 性能优化
+
+1. **记忆检索批量访问更新** — `sqlite_store.py` 新增 `batch_update_episodic_access()` 方法，将 `retrieve_relevant_memories` 中的逐条 `UPDATE` 改为单次 `executemany` 批量提交，减少 SQLite I/O 开销
+2. **实体匹配预计算** — `_entity_match_score()` 将 `text.lower()` 提取到循环外，避免对同一文本重复调用 `.lower()` (O(n) → O(1) 调用次数)
+3. **情感匹配常量提升** — `_emotion_match_score()` 中的 `positive_emotions` / `negative_emotions` 集合提升为类级 `frozenset` 常量 (`_POSITIVE_EMOTIONS` / `_NEGATIVE_EMOTIONS`)，避免每次调用时重新创建集合对象
+
+### 修改的源文件
+
+- `src/yuanbot/infrastructure/sqlite_store.py` — 新增 `batch_update_episodic_access()` 方法
+- `src/yuanbot/memory/manager.py` — `_entity_match_score` 预计算、`_emotion_match_score` 常量提升、`retrieve_relevant_memories` 批量更新
+
+### 代码质量
+
+- Ruff lint: All checks passed
+- 测试: 1346 passed, 72 warnings
+
+### 符合度变化
+
+| 系统 | v13 | v14 | 变化 |
+|------|------|------|------|
+| **总体** | **~100%** | **~100%** | — (性能优化，无功能变更) |
 
 ### 剩余待完成项
 

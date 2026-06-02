@@ -202,7 +202,7 @@ class OrchestratorEngine:
             trust_score = await self._memory.calculate_trust_score(
                 message.yuanbot_user_id
             )
-            # 同步更新 persona 的关系阶段
+            # 同步更新 persona 的关系阶段（calculate_trust_score 已更新 DB，需重新获取）
             if hasattr(self._persona, "relationship_stage"):
                 updated_profile = await self._memory.get_or_create_user_profile(
                     message.yuanbot_user_id

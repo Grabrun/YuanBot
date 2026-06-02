@@ -329,6 +329,18 @@ class SQLiteStore:
         )
         await self._db.commit()
 
+    async def batch_update_episodic_access(self, ids: list[str]) -> None:
+        """批量更新情景记忆的访问信息（单次提交，减少 I/O）"""
+        if not ids:
+            return
+        now = time.time()
+        await self._db.executemany(
+            "UPDATE episodic_metadata SET access_count=access_count+1, "
+            "last_accessed_at=? WHERE id=?",
+            [(now, id) for id in ids],
+        )
+        await self._db.commit()
+
     async def delete_episodic_metadata(self, id: str) -> None:
         """删除情景记忆元数据"""
         await self._db.execute("DELETE FROM episodic_metadata WHERE id=?", (id,))

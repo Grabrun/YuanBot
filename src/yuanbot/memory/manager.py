@@ -726,6 +726,8 @@ class MemoryManager:
             except Exception as e:
                 logger.debug("vector_search_fallback", error=str(e))
 
+        ids_to_update: list[str] = []
+
         for node in all_memories:
             score = 0.0
             match_type = "unknown"
@@ -775,12 +777,16 @@ class MemoryManager:
                 node.last_accessed = datetime.now()
                 node.access_count += 1
 
-                # 持久化访问计数更新
+                # 持久化访问计数更新（批量）
                 if self.has_persistence and node.memory_type == MemoryType.EPISODIC:
-                    try:
-                        await self._db.sqlite.update_episodic_access(node.id)
-                    except Exception:
-                        pass
+                    ids_to_update.append(node.id)
+
+        # 批量更新访问计数（单次 DB 提交）
+        if ids_to_update:
+            try:
+                await self._db.sqlite.batch_update_episodic_access(ids_to_update)
+            except Exception:
+                pass
 
         results.sort(key=lambda r: r.score, reverse=True)
         return results[:max_results], current_emotion
@@ -1364,6 +1370,10 @@ class MemoryManager:
         common_entities = set(existing.key_entities) & set(new_node.key_entities)
         return len(common_entities) > 0
 
+    # Emotion valence sets (shared across instances, avoid re-creation per call)
+    _POSITIVE_EMOTIONS = frozenset({"joy", "trust", "anticipation"})
+    _NEGATIVE_EMOTIONS = frozenset({"sadness", "anger", "fear", "disgust"})
+
     def _emotion_match_score(self, current_emotion: EmotionState, memory_emotion: str) -> float:
         """情感匹配评分"""
         if not memory_emotion:
@@ -1372,21 +1382,18 @@ class MemoryManager:
         if current_emotion.emotion.value == memory_emotion:
             return 1.0
 
-        positive_emotions = {"joy", "trust", "anticipation"}
-        negative_emotions = {"sadness", "anger", "fear", "disgust"}
-
         current_valence = (
             "positive"
-            if current_emotion.emotion.value in positive_emotions
+            if current_emotion.emotion.value in self._POSITIVE_EMOTIONS
             else "negative"
-            if current_emotion.emotion.value in negative_emotions
+            if current_emotion.emotion.value in self._NEGATIVE_EMOTIONS
             else "neutral"
         )
         memory_valence = (
             "positive"
-            if memory_emotion in positive_emotions
+            if memory_emotion in self._POSITIVE_EMOTIONS
             else "negative"
-            if memory_emotion in negative_emotions
+            if memory_emotion in self._NEGATIVE_EMOTIONS
             else "neutral"
         )
 
@@ -1412,7 +1419,8 @@ class MemoryManager:
         """实体匹配评分"""
         if not entities:
             return 0.0
-        matched = sum(1 for e in entities if e.lower() in text.lower())
+        text_lower = text.lower()
+        matched = sum(1 for e in entities if e.lower() in text_lower)
         return matched / len(entities)
 
     @staticmethod
