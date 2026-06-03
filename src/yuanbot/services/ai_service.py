@@ -8,6 +8,8 @@
 
 from __future__ import annotations
 
+import asyncio
+import time
 from collections.abc import AsyncIterator
 from typing import Any
 
@@ -53,8 +55,6 @@ class CircuitBreakerState:
         self._consecutive_failures[provider_id] = count
 
         if count >= self._threshold:
-            import time
-
             self._open_until[provider_id] = time.time() + self._cooldown_seconds
             logger.warning(
                 "circuit_breaker_opened",
@@ -65,8 +65,6 @@ class CircuitBreakerState:
 
     def is_open(self, provider_id: str) -> bool:
         """检查熔断器是否打开（提供商不可用）"""
-        import time
-
         open_until = self._open_until.get(provider_id)
         if open_until is None:
             return False
@@ -203,8 +201,6 @@ class AIService:
                         error=str(e),
                         wait_seconds=wait_seconds,
                     )
-                    import asyncio
-
                     await asyncio.sleep(wait_seconds)
 
         raise RuntimeError(

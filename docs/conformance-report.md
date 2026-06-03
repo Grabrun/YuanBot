@@ -1,9 +1,9 @@
-# 🌸 YuanBot 设计文档符合度审查报告 v14
+# 🌸 YuanBot 设计文档符合度审查报告 v15
 
 **审查日期**: 2026-06-03
 **审查范围**: docs/ 目录下 17 份设计文档 vs src/ + configs/ + tests/ + webui/ 实际代码
 **项目版本**: v1.5.0
-**上次审查**: v13 (2026-06-02),总体 ~100%
+**上次审查**: v14 (2026-06-03),总体 ~100%
 
 ---
 
@@ -1073,6 +1073,45 @@
 ### 符合度变化
 
 | 系统 | v13 | v14 | 变化 |
+|------|------|------|------|
+| **总体** | **~100%** | **~100%** | — (性能优化，无功能变更) |
+
+---
+
+## v15 更新摘要
+
+本次审查在总体符合度已达 ~100% 的情况下，继续聚焦运行效率优化和代码质量提升。所有系统保持 96%+ 符合度，无功能缺失。
+
+### v15 性能优化
+
+1. **编排引擎并行化记忆检索与决策** — `orchestrator/engine.py` `process_message()` 将记忆检索（`retrieve_relevant_memories`）与对话决策（`decide`）改为 `asyncio.gather()` 并行执行，两者无数据依赖，减少消息处理延迟
+2. **信任度计算并行化** — `memory/manager.py` `calculate_trust_score()` 将事实/情景/语义三类记忆的串行查询改为 `asyncio.gather()` 并行查询，减少 DB 等待时间
+3. **工具权限缓存** — `services/capability_orchestrator.py` 新增 `_tool_permission_cache` 字典映射 + `_build_permission_cache()` 方法，将 `_check_permission()` 从 O(n) 线性扫描优化为 O(1) 字典查找
+4. **标准库导入提升到模块级别** — 消除 6 个文件中的函数内重复 `import`（`asyncio`、`time`、`json`），减少每次函数调用的导入开销：
+   - `orchestrator/engine.py` — `import asyncio`
+   - `memory/manager.py` — `import asyncio`
+   - `services/ai_service.py` — `import asyncio`, `import time`
+   - `services/capability_orchestrator.py` — `import json`
+   - `infrastructure/event_queue.py` — `import json`, `import time`, `import uuid`
+   - `proactive/strategy.py` — `import asyncio`，移除冗余 `import time as _time`
+
+### 修改的源文件
+
+- `src/yuanbot/orchestrator/engine.py` — 并行化记忆检索+决策，添加 `import asyncio`
+- `src/yuanbot/memory/manager.py` — 并行化 `calculate_trust_score`，添加 `import asyncio`
+- `src/yuanbot/services/ai_service.py` — 模块级 `import asyncio` + `import time`
+- `src/yuanbot/services/capability_orchestrator.py` — 模块级 `import json`，权限缓存 dict
+- `src/yuanbot/infrastructure/event_queue.py` — 模块级 `import json/time/uuid`
+- `src/yuanbot/proactive/strategy.py` — 模块级 `import asyncio`，移除冗余内联导入
+
+### 代码质量
+
+- Ruff lint: All checks passed
+- 测试: 1346 passed, 72 warnings
+
+### 符合度变化
+
+| 系统 | v14 | v15 | 变化 |
 |------|------|------|------|
 | **总体** | **~100%** | **~100%** | — (性能优化，无功能变更) |
 

@@ -14,6 +14,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime
 from typing import Any
 
@@ -105,18 +106,19 @@ class OrchestratorEngine:
             content=f"[用户] {message.text or '[媒体消息]'}",
         )
 
-        # 3. 情景触发式检索相关记忆
-        relevant_memories, _ = await self._memory.retrieve_relevant_memories(
+        # 3+4. 并行执行记忆检索与对话决策（两者无依赖关系）
+        relevant_memories_task = self._memory.retrieve_relevant_memories(
             user_id=message.yuanbot_user_id,
             current_input=message.text or "",
         )
-
-        # 4. 对话决策（复用 DialogueDecisionEngine，含意图+情感分析）
-        decision = await self._decision.decide(
+        decision_task = self._decision.decide(
             text=message.text or "",
             user_id=message.yuanbot_user_id,
             session_id=message.session_id,
             capability_domains=self._persona.get_capability_domains(),
+        )
+        (relevant_memories, _), decision = await asyncio.gather(
+            relevant_memories_task, decision_task
         )
 
         logger.info(

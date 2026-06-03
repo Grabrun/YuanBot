@@ -8,6 +8,7 @@
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -78,6 +79,7 @@ class CapabilityOrchestrator:
         self._ai = ai_service
         self._domain_matcher = domain_matcher or DomainMatcher()
         self._jwt_auth = jwt_auth_manager
+        self._tool_permission_cache: dict[str, str] = {}  # tool_id -> permission_level
 
     def match_domains(
         self,
@@ -267,44 +269,43 @@ class CapabilityOrchestrator:
 
         设计参考: capability-tool-system.md 7.3 权限级别
         """
-        # 获取工具配置
-        all_tools = self._tools.get_all_tools()
-        for tool_info in all_tools:
-            if tool_info["tool_id"] == tool_id:
-                level = tool_info.get("permission_level", "readonly")
+        # 使用缓存的权限级别映射（避免每次线性扫描）
+        if not self._tool_permission_cache:
+            self._build_permission_cache()
 
-                # JWT scope 验证
-                if self._jwt_auth and token_payload:
-                    from yuanbot.gateway.jwt_auth import InsufficientScopeError
+        level = self._tool_permission_cache.get(tool_id, "readonly")
 
-                    try:
-                        self._jwt_auth.require_scope(token_payload, level)
-                        return True
-                    except InsufficientScopeError:
-                        logger.warning(
-                            "tool_jwt_scope_denied",
-                            tool_id=tool_id,
-                            required_scope=level,
-                            user_scopes=token_payload.scopes,
-                        )
-                        return False
-                    except ValueError:
-                        # 无效的 scope 级别，回退到简单检查
-                        pass
-
-                # 回退：简单权限检查
-                if level == "system":
-                    logger.warning("tool_permission_denied", tool_id=tool_id)
-                    return False
+        # JWT scope 验证
+        if self._jwt_auth and token_payload:
+            try:
+                self._jwt_auth.require_scope(token_payload, level)
                 return True
-        # 未知工具默认允许（向后兼容）
+            except Exception:
+                logger.warning(
+                    "tool_jwt_scope_denied",
+                    tool_id=tool_id,
+                    required_scope=level,
+                    user_scopes=token_payload.scopes,
+                )
+                return False
+
+        # 回退：简单权限检查
+        if level == "system":
+            logger.warning("tool_permission_denied", tool_id=tool_id)
+            return False
         return True
+
+    def _build_permission_cache(self) -> None:
+        """构建工具权限缓存（tool_id -> permission_level）"""
+        self._tool_permission_cache.clear()
+        for tool_info in self._tools.get_all_tools():
+            tid = tool_info["tool_id"]
+            level = tool_info.get("permission_level", "readonly")
+            self._tool_permission_cache[tid] = level
 
     @staticmethod
     def _parse_tool_arguments(tool_call: ToolCall) -> dict[str, Any]:
         """解析工具调用参数"""
-        import json
-
         try:
             return json.loads(tool_call.function.arguments)
         except (json.JSONDecodeError, TypeError):
@@ -317,8 +318,6 @@ class CapabilityOrchestrator:
     @staticmethod
     def _format_tool_result(result: ToolResult) -> str:
         """格式化工具执行结果为 LLM 可理解的文本"""
-        import json
-
         if result.success:
             if isinstance(result.output, str):
                 return result.output

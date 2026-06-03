@@ -18,6 +18,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import math
 from datetime import datetime
@@ -702,8 +703,6 @@ class MemoryManager:
             )
 
         # 获取用户所有记忆（并发查询减少延迟）
-        import asyncio
-
         episodic, fact, semantic = await asyncio.gather(
             self.get_episodic_memories(user_id),
             self.get_fact_memories(user_id),
@@ -1053,6 +1052,14 @@ class MemoryManager:
         """计算信任度分数"""
         profile = await self.get_or_create_user_profile(user_id)
 
+        # 并行获取三类记忆数量（减少串行等待）
+        fact_task = self.get_fact_memories(user_id)
+        episodic_task = self.get_episodic_memories(user_id)
+        semantic_task = self.get_semantic_memories(user_id)
+        fact_memories, episodic_memories, semantic_memories = await asyncio.gather(
+            fact_task, episodic_task, semantic_task
+        )
+
         factors = []
 
         # 1. 交互天数
@@ -1078,10 +1085,7 @@ class MemoryManager:
             factors.append(depth_score * 0.3)
 
         # 4. 记忆丰富度
-        fact_count = len(await self.get_fact_memories(user_id))
-        episodic_count = len(await self.get_episodic_memories(user_id))
-        semantic_count = len(await self.get_semantic_memories(user_id))
-        total_memories = fact_count + episodic_count + semantic_count
+        total_memories = len(fact_memories) + len(episodic_memories) + len(semantic_memories)
         memory_score = min(total_memories / 50, 1.0)
         factors.append(memory_score * 0.2)
 

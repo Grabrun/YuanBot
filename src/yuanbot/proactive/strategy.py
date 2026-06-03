@@ -13,6 +13,7 @@ v1.4 增强：
 
 from __future__ import annotations
 
+import asyncio
 import time as _time
 from dataclasses import dataclass, field
 from datetime import datetime, time
@@ -200,7 +201,6 @@ class ProactiveStrategy:
         """
         text_lower = message_text.lower().strip()
         if any(pattern in text_lower for pattern in self._negative_feedback_patterns):
-            import time as _time
             cooldown_seconds = 86400  # 24 小时冷却期
             self._feedback_cooldowns[user_id] = _time.time() + cooldown_seconds
             logger.info(
@@ -218,7 +218,6 @@ class ProactiveStrategy:
         Returns:
             True 如果在冷却期（不应发送）
         """
-        import time as _time
         expire = self._feedback_cooldowns.get(user_id)
         if expire is None:
             return False
@@ -468,8 +467,6 @@ class ProactiveStrategy:
                     attempt=attempt + 1,
                     delay_seconds=self._config.retry_delay_seconds,
                 )
-                import asyncio
-
                 await asyncio.sleep(self._config.retry_delay_seconds)
 
         logger.error(

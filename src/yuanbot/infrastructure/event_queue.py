@@ -9,6 +9,9 @@
 from __future__ import annotations
 
 import asyncio
+import json
+import time
+import uuid
 from collections import defaultdict
 from collections.abc import Callable, Coroutine
 from dataclasses import dataclass
@@ -71,9 +74,6 @@ class MemoryEventQueue:
         Returns:
             消息 ID
         """
-        import time
-        import uuid
-
         self._message_counter += 1
         msg = QueueMessage(
             message_id=str(uuid.uuid4()),
@@ -255,8 +255,6 @@ class RedisEventQueue:
 
     async def publish(self, topic: str, payload: dict[str, Any]) -> str:
         """发布消息到 Redis Stream"""
-        import json
-
         if not self._redis:
             raise RuntimeError("Redis event queue not started")
 
@@ -273,8 +271,6 @@ class RedisEventQueue:
 
     async def _consume_loop(self, topic: str) -> None:
         """Redis Stream 消费循环"""
-        import json
-
         while self._running:
             try:
                 # 读取新消息
