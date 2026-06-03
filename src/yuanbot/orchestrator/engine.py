@@ -199,24 +199,21 @@ class OrchestratorEngine:
                 emotion_state=decision.emotion_state,
             )
 
-        # 11. 关系阶段自动评估与更新
+        # 11. 关系阶段自动评估与更新（复用 user_profile 避免重复 DB 读取）
         try:
             trust_score = await self._memory.calculate_trust_score(
-                message.yuanbot_user_id
+                message.yuanbot_user_id, profile=user_profile
             )
-            # 同步更新 persona 的关系阶段（calculate_trust_score 已更新 DB，需重新获取）
+            # calculate_trust_score 已就地更新 profile，直接同步到 persona
             if hasattr(self._persona, "relationship_stage"):
-                updated_profile = await self._memory.get_or_create_user_profile(
-                    message.yuanbot_user_id
-                )
-                if updated_profile.relationship_stage != getattr(
+                if user_profile.relationship_stage != getattr(
                     self._persona, "_relationship_stage", None
                 ):
-                    self._persona.relationship_stage = updated_profile.relationship_stage  # type: ignore[attr-defined]
+                    self._persona.relationship_stage = user_profile.relationship_stage  # type: ignore[attr-defined]
                     logger.info(
                         "persona_relationship_stage_updated",
                         user_id=message.yuanbot_user_id,
-                        stage=updated_profile.relationship_stage,
+                        stage=user_profile.relationship_stage,
                         trust_score=trust_score,
                     )
         except Exception as e:
@@ -261,13 +258,11 @@ class OrchestratorEngine:
         messages: list[Message] = []
         for node in working_memory:
             content = node.content
-            if content.startswith("[用户] "):
-                messages.append(Message(role="user", content=content[5:]))
-            elif content.startswith("[AI] "):
-                messages.append(Message(role="assistant", content=content[5:]))
-            elif content.startswith("[用户]"):
+            if content.startswith("[用户]"):
+                # "[用户] xxx" 或 "[用户]xxx"
                 messages.append(Message(role="user", content=content[4:].lstrip()))
             elif content.startswith("[AI]"):
+                # "[AI] xxx" 或 "[AI]xxx"
                 messages.append(Message(role="assistant", content=content[4:].lstrip()))
             # 跳过 [系统] 消息，不发送给 LLM
         return messages

@@ -285,12 +285,14 @@ class MemoryManager:
         )
 
         # 检查是否已存在相似的事实（冲突解决）
-        existing_facts = await self.get_fact_memories(user_id)
-        for existing in existing_facts:
-            if self._is_similar_fact(existing, node):
-                return await self._resolve_fact_conflict(
-                    user_id, existing, node, content, importance, confidence,
-                )
+        # 快速跳过：无 key_entities 时不可能匹配，跳过全量扫描
+        if key_entities:
+            existing_facts = await self.get_fact_memories(user_id)
+            for existing in existing_facts:
+                if self._is_similar_fact(existing, node):
+                    return await self._resolve_fact_conflict(
+                        user_id, existing, node, content, importance, confidence,
+                    )
 
         if self.has_persistence:
             await self._persist_fact_memory(user_id, node)
@@ -447,8 +449,6 @@ class MemoryManager:
     @staticmethod
     def _parse_date_value(value: str) -> datetime | None:
         """尝试解析多种日期格式"""
-        from datetime import datetime as dt
-
         formats = [
             "%Y-%m-%d",
             "%Y/%m/%d",
@@ -459,8 +459,7 @@ class MemoryManager:
         ]
         for fmt in formats:
             try:
-                parsed = dt.strptime(value.strip(), fmt)
-                return parsed
+                return datetime.strptime(value.strip(), fmt)
             except ValueError:
                 continue
         return None
@@ -1048,9 +1047,19 @@ class MemoryManager:
 
         logger.info("relationship_updated", user_id=user_id, stage=stage)
 
-    async def calculate_trust_score(self, user_id: str) -> float:
-        """计算信任度分数"""
-        profile = await self.get_or_create_user_profile(user_id)
+    async def calculate_trust_score(
+        self,
+        user_id: str,
+        profile: UserProfile | None = None,
+    ) -> float:
+        """计算信任度分数
+
+        Args:
+            user_id: 用户 ID
+            profile: 可选的已加载用户画像，避免重复 DB 读取
+        """
+        if profile is None:
+            profile = await self.get_or_create_user_profile(user_id)
 
         # 并行获取三类记忆数量（减少串行等待）
         fact_task = self.get_fact_memories(user_id)
@@ -1092,14 +1101,21 @@ class MemoryManager:
         trust_score = sum(factors) if factors else 0.0
         profile.trust_score = trust_score
 
+        # 直接更新关系阶段（复用已加载的 profile，避免重复 DB 读取）
         if trust_score >= 0.8:
-            await self.update_relationship_stage(user_id, "deep")
+            new_stage = "deep"
         elif trust_score >= 0.6:
-            await self.update_relationship_stage(user_id, "intimate")
+            new_stage = "intimate"
         elif trust_score >= 0.3:
-            await self.update_relationship_stage(user_id, "familiar")
+            new_stage = "familiar"
         else:
-            await self.update_relationship_stage(user_id, "initial")
+            new_stage = "initial"
+
+        if profile.relationship_stage != new_stage:
+            profile.relationship_stage = new_stage
+            if self.has_persistence:
+                await self._persist_user_profile(profile)
+            logger.info("relationship_updated", user_id=user_id, stage=new_stage)
 
         return trust_score
 
