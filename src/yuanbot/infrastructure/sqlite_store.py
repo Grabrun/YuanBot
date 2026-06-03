@@ -406,6 +406,26 @@ class SQLiteStore:
             return None
         return self._row_to_dict(row, cursor)
 
+    async def touch_user_profile(self, user_id: str) -> dict[str, Any] | None:
+        """原子更新交互计数并返回用户画像
+
+        将 SELECT + UPDATE 合并为单条 SQL，减少 DB 往返。
+        仅在画像已存在时更新；不存在时返回 None（由调用方创建新画像）。
+        """
+        now = time.time()
+        cursor = await self._db.execute(
+            """UPDATE user_profiles
+               SET last_interaction = ?, total_interactions = total_interactions + 1
+               WHERE user_id = ?
+               RETURNING *""",
+            (now, user_id),
+        )
+        row = await cursor.fetchone()
+        if row is None:
+            return None
+        await self._db.commit()
+        return self._row_to_dict(row, cursor)
+
     # ──────────────────────────────────────────
     # 情感记录操作
     # ──────────────────────────────────────────
@@ -562,7 +582,6 @@ class SQLiteStore:
 
         result = self._row_to_dict(row, cursor)
         # 解析 JSON 字段
-        import json
         for field_name in ("quiet_hours", "important_dates"):
             if field_name in result and isinstance(result[field_name], str):
                 try:
@@ -581,7 +600,6 @@ class SQLiteStore:
         settings: dict[str, Any],
     ) -> None:
         """保存用户的主动交互配置（upsert）"""
-        import json as _json
         now = time.time()
         await self._db.execute(
             """INSERT INTO user_proactive_settings
@@ -603,12 +621,12 @@ class SQLiteStore:
                 user_id,
                 int(settings.get("proactive_greeting_enabled", True)),
                 settings.get("proactive_frequency", "medium"),
-                _json.dumps(settings.get("quiet_hours", ["23:00-07:00"]), ensure_ascii=False),
+                json.dumps(settings.get("quiet_hours", ["23:00-07:00"]), ensure_ascii=False),
                 settings.get("max_proactive_per_day", 5),
                 int(settings.get("event_trigger_enabled", True)),
                 settings.get("custom_wake_up_time"),
                 settings.get("custom_sleep_time"),
-                _json.dumps(settings.get("important_dates", []), ensure_ascii=False),
+                json.dumps(settings.get("important_dates", []), ensure_ascii=False),
                 now,
             ),
         )

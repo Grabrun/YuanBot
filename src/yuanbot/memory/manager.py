@@ -1004,13 +1004,10 @@ class MemoryManager:
     async def get_or_create_user_profile(self, user_id: str) -> UserProfile:
         """获取或创建用户画像"""
         if self.has_persistence:
-            row = await self._db.sqlite.get_user_profile(user_id)
+            # 原子更新交互计数并获取画像（单次 DB 往返）
+            row = await self._db.sqlite.touch_user_profile(user_id)
             if row:
-                profile = self._row_to_user_profile(row)
-                profile.last_interaction = datetime.now()
-                profile.total_interactions += 1
-                await self._persist_user_profile(profile)
-                return profile
+                return self._row_to_user_profile(row)
 
             # 创建新画像
             profile = UserProfile(

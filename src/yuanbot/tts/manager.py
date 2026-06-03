@@ -128,20 +128,35 @@ class TTSCache:
         """L2 文件缓存淘汰：按时间排序，超出容量上限时删除最旧文件
 
         遍历所有用户子目录，按访问时间全局排序淘汰。
+        使用 os.scandir + 缓存 stat 结果，避免重复系统调用。
         """
+        import os
+
         max_bytes = self._config.file_cache_max_mb * 1024 * 1024
-        all_files: list[Path] = []
-        # 遍历根目录和所有用户子目录
-        all_files.extend(self._file_dir.glob("*.audio"))
+        # (path, size, atime) — 每个文件只 stat 一次
+        all_entries: list[tuple[Path, int, float]] = []
+
+        def _collect(directory: Path) -> None:
+            try:
+                with os.scandir(directory) as it:
+                    for entry in it:
+                        if entry.is_file() and entry.name.endswith(".audio"):
+                            st = entry.stat(follow_symlinks=False)
+                            all_entries.append((Path(entry.path), st.st_size, st.st_atime))
+            except OSError:
+                pass
+
+        _collect(self._file_dir)
         for user_dir in self._file_dir.iterdir():
             if user_dir.is_dir():
-                all_files.extend(user_dir.glob("*.audio"))
-        all_files.sort(key=lambda f: f.stat().st_atime)
-        total = sum(f.stat().st_size for f in all_files)
-        while total > max_bytes and all_files:
-            oldest = all_files.pop(0)
-            total -= oldest.stat().st_size
-            oldest.unlink(missing_ok=True)
+                _collect(user_dir)
+
+        all_entries.sort(key=lambda e: e[2])  # sort by atime
+        total = sum(e[1] for e in all_entries)
+        while total > max_bytes and all_entries:
+            path, size, _ = all_entries.pop(0)
+            total -= size
+            path.unlink(missing_ok=True)
 
     def clear(self) -> None:
         """清空所有缓存（包括所有用户子目录）"""

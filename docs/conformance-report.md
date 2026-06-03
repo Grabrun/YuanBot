@@ -1,9 +1,9 @@
-# 🌸 YuanBot 设计文档符合度审查报告 v16
+# 🌸 YuanBot 设计文档符合度审查报告 v17
 
-**审查日期**: 2026-06-03
+**审查日期**: 2026-06-04
 **审查范围**: docs/ 目录下 17 份设计文档 vs src/ + configs/ + tests/ + webui/ 实际代码
 **项目版本**: v1.5.0
-**上次审查**: v15 (2026-06-03),总体 ~100%
+**上次审查**: v16 (2026-06-03),总体 ~100%
 
 ---
 
@@ -1142,6 +1142,42 @@
 ### 符合度变化
 
 | 系统 | v15 | v16 | 变化 |
+|------|------|------|------|
+| **总体** | **~100%** | **~100%** | — (性能优化，无功能变更) |
+
+### 剩余待完成项
+
+| 优先级 | 项目 | 预估工作量 | 类型 |
+|--------|------|----------|------|
+| P2 | 本地意图模型 (bert-base ONNX) | 2-3 天 | 外部 ML 依赖 |
+
+---
+
+## v17 更新摘要
+
+本次审查在总体符合度已达 ~100% 的情况下，继续聚焦减少数据库 I/O 往返和消除冗余代码。所有系统保持 96%+ 符合度，无功能缺失。
+
+### v17 性能优化
+
+1. **用户画像原子更新（减少 DB 往返）** — `infrastructure/sqlite_store.py` 新增 `touch_user_profile()` 方法，使用 `UPDATE ... SET last_interaction=?, total_interactions=total_interactions+1 ... RETURNING *` 将原先 `get_or_create_user_profile()` 中的 SELECT + UPDATE 两次 DB 操作合并为单次原子操作。每条消息处理减少 1 次 SQLite 往返
+2. **记忆管理器适配原子更新** — `memory/manager.py` `get_or_create_user_profile()` 改用 `touch_user_profile()`，profile 存在时仅需 1 次 DB 调用（原先 2 次），不存在时仍走创建流程
+3. **TTS 文件缓存淘汰优化** — `tts/manager.py` `_evict_file_cache()` 改用 `os.scandir()` + 单次 `stat()` 缓存，替代原先 `glob()` + 重复 `stat()` 的模式。原先每个文件调用 2-3 次 `stat()`，优化后仅 1 次，减少系统调用开销
+4. **SQLite store 清除冗余内联导入** — `infrastructure/sqlite_store.py` 移除 `get_user_proactive_settings()` 中的 `import json` 和 `save_user_proactive_settings()` 中的 `import json as _json`（模块级已导入 `json`）
+
+### 修改的源文件
+
+- `src/yuanbot/infrastructure/sqlite_store.py` — 新增 `touch_user_profile()` 原子更新方法，移除 2 处冗余 `import json`
+- `src/yuanbot/memory/manager.py` — `get_or_create_user_profile()` 改用 `touch_user_profile()`
+- `src/yuanbot/tts/manager.py` — `_evict_file_cache()` 改用 `os.scandir()` + 缓存 stat
+
+### 代码质量
+
+- Ruff lint: All checks passed
+- 测试: 1346 passed, 72 warnings
+
+### 符合度变化
+
+| 系统 | v16 | v17 | 变化 |
 |------|------|------|------|
 | **总体** | **~100%** | **~100%** | — (性能优化，无功能变更) |
 
