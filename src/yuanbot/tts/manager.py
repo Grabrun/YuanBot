@@ -39,9 +39,13 @@ class TTSConfig:
 class TTSCache:
     """双层音频缓存 (L1 内存 + L2 文件)"""
 
+    # Eviction frequency: only scan files every N puts to avoid repeated stat calls
+    _EVICTION_INTERVAL = 20
+
     def __init__(self, config: TTSCacheConfig) -> None:
         self._config = config
         self._memory: OrderedDict[str, bytes] = OrderedDict()
+        self._put_count: int = 0  # Track put() calls for lazy eviction
         self._file_dir = Path(config.file_cache_path)
         self._file_dir.mkdir(parents=True, exist_ok=True)
 
@@ -97,7 +101,9 @@ class TTSCache:
             cache_dir = self._get_user_cache_dir(user_id)
             file_path = cache_dir / f"{key}.audio"
             file_path.write_bytes(audio)
-            self._evict_file_cache()
+            self._put_count += 1
+            if self._put_count % self._EVICTION_INTERVAL == 0:
+                self._evict_file_cache()
         except OSError as e:
             logger.warning("TTS 文件缓存写入失败: %s", e)
 

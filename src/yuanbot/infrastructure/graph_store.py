@@ -318,7 +318,7 @@ class GraphStore:
         """内存模式获取邻居"""
         neighbors: list[dict[str, Any]] = []
 
-        for edge_id, edge in self._memory_graph.edges.items():
+        for edge in self._memory_graph.edges.values():
             matched = False
             if direction in ("outgoing", "both") and edge["source"] == node_id:
                 if edge_type is None or edge["type"] == edge_type:

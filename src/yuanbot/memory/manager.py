@@ -37,6 +37,20 @@ from yuanbot.memory.emotion_tracker import EmotionTracker
 
 logger = structlog.get_logger(__name__)
 
+# Module-level constants to avoid per-call allocation
+_DATE_FORMATS: list[str] = [
+    "%Y-%m-%d",
+    "%Y/%m/%d",
+    "%m-%d",
+    "%m/%d",
+    "%Y年%m月%d日",
+    "%m月%d日",
+]
+_DATE_KEYWORDS: tuple[str, ...] = (
+    "birthday", "anniversary", "interview_date",
+    "生日", "纪念日", "面试",
+)
+
 
 class MemoryManager:
     """记忆系统管理器
@@ -449,15 +463,7 @@ class MemoryManager:
     @staticmethod
     def _parse_date_value(value: str) -> datetime | None:
         """尝试解析多种日期格式"""
-        formats = [
-            "%Y-%m-%d",
-            "%Y/%m/%d",
-            "%m-%d",
-            "%m/%d",
-            "%Y年%m月%d日",
-            "%m月%d日",
-        ]
-        for fmt in formats:
+        for fmt in _DATE_FORMATS:
             try:
                 return datetime.strptime(value.strip(), fmt)
             except ValueError:
@@ -725,6 +731,8 @@ class MemoryManager:
                 logger.debug("vector_search_fallback", error=str(e))
 
         ids_to_update: list[str] = []
+        # Pre-compute lowered text once (used in entity/topic matching for every memory)
+        current_input_lower = current_input.lower()
 
         for node in all_memories:
             score = 0.0
@@ -742,14 +750,14 @@ class MemoryManager:
 
             # 路径 2: 关键词/实体匹配
             if score == 0:
-                entity_score = self._entity_match_score(current_input, node.key_entities)
+                entity_score = self._entity_match_score(current_input_lower, node.key_entities)
                 if entity_score > 0:
                     score = entity_score
                     match_type = "entity"
 
             # 路径 3: 话题标签匹配
             if score == 0:
-                topic_score = self._topic_match_score(current_input, node.topic_tags)
+                topic_score = self._topic_match_score(current_input_lower, node.topic_tags)
                 if topic_score > 0:
                     score = topic_score * 0.8
                     match_type = "keyword"
@@ -1355,10 +1363,11 @@ class MemoryManager:
         if not memories:
             return "空会话"
 
-        key_contents = []
-        for mem in memories:
-            if mem.content and len(mem.content) > 10:
-                key_contents.append(mem.content[:100])
+        key_contents = [
+            mem.content[:100]
+            for mem in memories
+            if mem.content and len(mem.content) > 10
+        ]
 
         if not key_contents:
             return "简短对话"

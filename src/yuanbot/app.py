@@ -542,8 +542,8 @@ def create_app(config: YuanBotConfig) -> FastAPI:
                         }))
 
                         # 将完整文本包装为单元素异步迭代器
-                        async def _text_iter():
-                            yield text
+                        async def _text_iter(t=text):
+                            yield t
 
                         chunk_count = 0
                         async for audio_chunk in tts.synthesize_streaming_buffered(
@@ -912,13 +912,14 @@ def _register_routes(
             })
 
         # 转换边
-        echarts_links: list[dict[str, Any]] = []
-        for edge in subgraph.get("edges", []):
-            echarts_links.append({
+        echarts_links: list[dict[str, Any]] = [
+            {
                 "source": edge.get("source", ""),
                 "target": edge.get("target", ""),
                 "relation": edge.get("type", "unknown"),
-            })
+            }
+            for edge in subgraph.get("edges", [])
+        ]
 
         return {
             "nodes": echarts_nodes,

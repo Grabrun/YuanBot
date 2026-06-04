@@ -346,10 +346,7 @@ class EmotionTracker:
         # 移除标点符号
         text_clean = re.sub(r"[^\w\s]", "", text)
         # 分词（简化：按空格分割，中文按字符）
-        words = []
-        for word in text_clean.split():
-            if len(word) > 1:
-                words.append(word)
+        words = [word for word in text_clean.split() if len(word) > 1]
         # 对于中文，提取2-4字的词
         for i in range(len(text_clean) - 1):
             for length in [2, 3, 4]:

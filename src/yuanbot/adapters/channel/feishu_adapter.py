@@ -618,7 +618,7 @@ class FeishuAdapter(BaseChannelAdapter):
         parts: list[str] = []
 
         # 支持多语言，取第一个可用的
-        for _lang, lang_content in post_content.items():
+        for lang_content in post_content.values():
             title = lang_content.get("title", "")
             if title:
                 parts.append(title)

@@ -409,11 +409,11 @@ class WeComAdapter(BaseChannelAdapter):
 
             return message
 
-        except ImportError:
+        except ImportError as err:
             raise RuntimeError(
                 "cryptography package is required for WeCom message encryption. "
                 "Install it with: pip install cryptography",
-            )
+            ) from err
 
     def _encrypt_message(self, message: str) -> str:
         """加密消息（AES-256-CBC）"""
@@ -446,8 +446,8 @@ class WeComAdapter(BaseChannelAdapter):
 
             return b64encode(encrypted).decode("utf-8")
 
-        except ImportError:
+        except ImportError as err:
             raise RuntimeError(
                 "cryptography package is required for WeCom message encryption. "
                 "Install it with: pip install cryptography",
-            )
+            ) from err

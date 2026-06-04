@@ -215,16 +215,15 @@ class ProviderManager:
         config = raw.get("config", {})
 
         # 解析模型列表
-        models: list[ModelInfo] = []
-        for m in config.get("models", []):
-            models.append(
-                ModelInfo(
-                    id=m["id"],
-                    type=m.get("type", "chat"),
-                    max_tokens=m.get("max_tokens", 128000),
-                    dimension=m.get("dimension"),
-                )
+        models: list[ModelInfo] = [
+            ModelInfo(
+                id=m["id"],
+                type=m.get("type", "chat"),
+                max_tokens=m.get("max_tokens", 128000),
+                dimension=m.get("dimension"),
             )
+            for m in config.get("models", [])
+        ]
 
         default_model = config.get("default")
         embedding_model = config.get("embedding_model")
@@ -409,16 +408,15 @@ class ProviderManager:
 
         # 解析新配置（支持 v2.0 格式）
         config_data = new_config.get("config", {})
-        models = []
-        for m in config_data.get("models", []):
-            models.append(
-                ModelInfo(
-                    id=m["id"],
-                    type=m.get("type", "chat"),
-                    max_tokens=m.get("max_tokens", 128000),
-                    dimension=m.get("dimension"),
-                )
+        models = [
+            ModelInfo(
+                id=m["id"],
+                type=m.get("type", "chat"),
+                max_tokens=m.get("max_tokens", 128000),
+                dimension=m.get("dimension"),
             )
+            for m in config_data.get("models", [])
+        ]
 
         default_model = config_data.get("default")
         embedding_model = config_data.get("embedding_model")
@@ -512,9 +510,8 @@ class ProviderManager:
         Returns:
             包含 provider 信息的字典列表
         """
-        result = []
-        for config in self._providers.values():
-            result.append({
+        result = [
+            {
                 "provider_id": config.provider_id,
                 "name": config.name,
                 "adapter": config.adapter,
@@ -524,7 +521,9 @@ class ProviderManager:
                 "model_count": len(config.models),
                 "is_default": config.provider_id == self._default_provider_id,
                 "is_embedding": config.provider_id == self._embedding_provider_id,
-            })
+            }
+            for config in self._providers.values()
+        ]
         return result
 
     async def close_all(self) -> None:

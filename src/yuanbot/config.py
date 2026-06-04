@@ -679,7 +679,7 @@ def _load_from_directory(loader: ConfigLoader) -> dict[str, Any]:
 
     # 构建 channels 兼容格式
     channel_list: list[dict[str, Any]] = []
-    for _name, ch in channels.items():
+    for ch in channels.values():
         channel_list.append(
             {
                 "platform": ch.platform,

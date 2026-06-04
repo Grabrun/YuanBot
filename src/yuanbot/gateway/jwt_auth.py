@@ -178,10 +178,10 @@ class JWTAuthManager:
                 self._secret_key,
                 algorithms=[self._algorithm],
             )
-        except jwt.ExpiredSignatureError:
-            raise TokenExpiredError("Token has expired")
-        except jwt.InvalidTokenError as e:
-            raise InvalidTokenError(f"Invalid token: {e}")
+        except jwt.ExpiredSignatureError as err:
+            raise TokenExpiredError("Token has expired") from err
+        except jwt.InvalidTokenError as err:
+            raise InvalidTokenError(f"Invalid token: {err}") from err
 
         return TokenPayload(
             sub=decoded.get("sub", ""),

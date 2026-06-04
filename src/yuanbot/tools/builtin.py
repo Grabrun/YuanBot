@@ -60,13 +60,14 @@ async def _search_bing(query: str, max_results: int) -> dict[str, Any]:
         resp.raise_for_status()
         data = resp.json()
 
-    results = []
-    for item in data.get("webPages", {}).get("value", [])[:max_results]:
-        results.append({
+    results = [
+        {
             "title": item.get("name", ""),
             "url": item.get("url", ""),
             "snippet": item.get("snippet", ""),
-        })
+        }
+        for item in data.get("webPages", {}).get("value", [])[:max_results]
+    ]
 
     return {"success": True, "query": query, "results": results}
 
@@ -85,13 +86,14 @@ async def _search_serpapi(query: str, max_results: int) -> dict[str, Any]:
         resp.raise_for_status()
         data = resp.json()
 
-    results = []
-    for item in data.get("organic_results", [])[:max_results]:
-        results.append({
+    results = [
+        {
             "title": item.get("title", ""),
             "url": item.get("link", ""),
             "snippet": item.get("snippet", ""),
-        })
+        }
+        for item in data.get("organic_results", [])[:max_results]
+    ]
 
     return {"success": True, "query": query, "results": results}
 
@@ -120,13 +122,15 @@ async def _search_duckduckgo(query: str, max_results: int) -> dict[str, Any]:
         })
 
     # Related topics
-    for topic in data.get("RelatedTopics", [])[:max_results]:
-        if isinstance(topic, dict) and "Text" in topic:
-            results.append({
-                "title": topic.get("Text", "")[:80],
-                "url": topic.get("FirstURL", ""),
-                "snippet": topic.get("Text", ""),
-            })
+    results.extend(
+        {
+            "title": topic.get("Text", "")[:80],
+            "url": topic.get("FirstURL", ""),
+            "snippet": topic.get("Text", ""),
+        }
+        for topic in data.get("RelatedTopics", [])[:max_results]
+        if isinstance(topic, dict) and "Text" in topic
+    )
 
     if not results:
         results.append({

@@ -80,7 +80,7 @@ async def create_user(
         )
         return {"user": user.to_safe_dict()}
     except ValueError as e:
-        raise HTTPException(status_code=409, detail=str(e))
+        raise HTTPException(status_code=409, detail=str(e)) from e
 
 
 @router.delete("/users/{user_id}")

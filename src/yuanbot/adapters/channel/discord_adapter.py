@@ -257,11 +257,11 @@ class DiscordAdapter(BaseChannelAdapter):
                 # 事件循环
                 await self._event_loop(ws)
 
-        except ImportError:
+        except ImportError as err:
             raise RuntimeError(
                 "websockets package is required for Discord adapter. "
                 "Install it with: pip install websockets",
-            )
+            ) from err
 
     async def _send_identify(self, ws: Any) -> None:
         """发送 Identify 负载"""

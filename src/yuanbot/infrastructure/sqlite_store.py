@@ -233,7 +233,7 @@ class SQLiteStore:
                 (user_id,),
             )
         rows = await cursor.fetchall()
-        return [self._row_to_dict(row, cursor) for row in rows]
+        return self._rows_to_dicts(rows, cursor)
 
     async def delete_fact_memory(self, id: str) -> None:
         """软删除事实记忆"""
@@ -317,7 +317,7 @@ class SQLiteStore:
             params,
         )
         rows = await cursor.fetchall()
-        return [self._row_to_dict(row, cursor) for row in rows]
+        return self._rows_to_dicts(rows, cursor)
 
     async def update_episodic_access(self, id: str) -> None:
         """更新情景记忆的访问信息"""
@@ -488,7 +488,7 @@ class SQLiteStore:
             (user_id, limit),
         )
         rows = await cursor.fetchall()
-        return [self._row_to_dict(row, cursor) for row in rows]
+        return self._rows_to_dicts(rows, cursor)
 
     # ──────────────────────────────────────────
     # 身份映射操作
@@ -553,15 +553,7 @@ class SQLiteStore:
             "SELECT platform, platform_user_id, yuanbot_user_id, created_at FROM identity_mappings"
         )
         rows = await cursor.fetchall()
-        return [
-            {
-                "platform": row[0],
-                "platform_user_id": row[1],
-                "yuanbot_user_id": row[2],
-                "created_at": row[3],
-            }
-            for row in rows
-        ]
+        return self._rows_to_dicts(rows, cursor)
 
     # ──────────────────────────────────────────
     # 主动交互配置操作
@@ -643,3 +635,11 @@ class SQLiteStore:
             columns = [desc[0] for desc in cursor.description]
             return dict(zip(columns, row, strict=False))
         return {}
+
+    @staticmethod
+    def _rows_to_dicts(rows: list[Any], cursor: Any) -> list[dict[str, Any]]:
+        """批量将数据库行转换为字典（列名只计算一次）"""
+        if not rows or not cursor.description:
+            return []
+        columns = [desc[0] for desc in cursor.description]
+        return [dict(zip(columns, row, strict=False)) for row in rows]
