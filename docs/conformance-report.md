@@ -1,9 +1,9 @@
-# 🌸 YuanBot 设计文档符合度审查报告 v17
+# 🌸 YuanBot 设计文档符合度审查报告 v18
 
 **审查日期**: 2026-06-04
 **审查范围**: docs/ 目录下 17 份设计文档 vs src/ + configs/ + tests/ + webui/ 实际代码
 **项目版本**: v1.5.0
-**上次审查**: v16 (2026-06-03),总体 ~100%
+**上次审查**: v17 (2026-06-04),总体 ~100%
 
 ---
 
@@ -566,7 +566,7 @@
 
 ## 与上次检查对比
 
-| 指标 | v1 | v2 | v3 | v4 | v5 | v6 | v7 | v10 | v12 | v13 | v15 | v16 (本次) | 变化 |
+| 指标 | v1 | v2 | v3 | v4 | v5 | v6 | v7 | v10 | v12 | v13 | v15 | v18 (本次) | 变化 |
 |------|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----------|------|
 | 总体符合度 | ~77% | ~88% | ~91% | ~93% | ~95% | ~97% | ~98% | ~99.8% | ~100% | ~100% | ~100% | **~100%** | — |
 | 接入与通信 | 85% | 90% | 95% | 95% | 95% | 95% | 95% | 97% | 97% | 97% | 97% | **97%** | — |
@@ -1180,6 +1180,67 @@
 | 系统 | v16 | v17 | 变化 |
 |------|------|------|------|
 | **总体** | **~100%** | **~100%** | — (性能优化，无功能变更) |
+
+### 剩余待完成项
+
+| 优先级 | 项目 | 预估工作量 | 类型 |
+|--------|------|----------|------|
+| P2 | 本地意图模型 (bert-base ONNX) | 2-3 天 | 外部 ML 依赖 |
+
+---
+
+## v18 更新摘要
+
+本次审查在总体符合度已达 ~100% 的情况下，聚焦代码质量提升和微性能优化，修复了 1 个潜在 Bug，改善了异常链可读性，并将多处 for-append 模式改为更高效的列表推导式。
+
+### v18 性能优化
+
+1. **SQLite 行转字典批量提取** — `infrastructure/sqlite_store.py` 新增 `_rows_to_dicts()` 静态方法，将原先 4 处重复的 `[self._row_to_dict(row, cursor) for row in rows]` 改为 `self._rows_to_dicts(rows, cursor)`，列名仅计算一次
+2. **日期格式常量提升** — `memory/manager.py` 将 `_parse_date_value()` 中的 6 种日期格式字符串提取为模块级常量 `_DATE_FORMATS`，避免每次调用时重新创建列表
+3. **记忆检索预计算小写文本** — `memory/manager.py` `retrieve_relevant_memories()` 将 `current_input.lower()` 提取到循环外，避免对同一文本重复调用 `.lower()`
+4. **TTS 缓存懒淘汰** — `tts/manager.py` `put()` 方法改为每 20 次写入才触发一次文件缓存淘汰扫描，避免频繁 stat 系统调用
+5. **列表推导式替换 for-append** — 8 处代码改为列表推导式或 `list.extend` 生成器表达式（`providers/manager.py` 3 处、`tools/builtin.py` 3 处、`memory/manager.py` 1 处、`memory/emotion_tracker.py` 1 处、`app.py` 1 处）
+6. **字典 `.values()` 替代 `.items()`** — 3 处仅使用字典值的循环改用 `.values()`（`graph_store.py`、`config.py`、`feishu_adapter.py`）
+
+### v18 Bug 修复
+
+1. **B023: 循环变量绑定** — `app.py` `_text_iter()` 闭包绑定循环变量 `text`（`t=text`），避免异步迭代器消费时引用错误的变量值
+
+### v18 异常链可读性
+
+1. **B904: `raise ... from err`** — 6 处 `except` 块中新增 `from err` 保留原始异常链，改善调试体验：
+   - `discord_adapter.py` — ImportError
+   - `wecom_adapter.py` — ImportError（2 处）
+   - `jwt_auth.py` — ExpiredSignatureError / InvalidTokenError（2 处）
+   - `admin_routes.py` — ValueError
+
+### 修改的源文件
+
+- `src/yuanbot/app.py` — B023 修复 + PERF401 echarts_links
+- `src/yuanbot/adapters/channel/discord_adapter.py` — B904 异常链
+- `src/yuanbot/adapters/channel/feishu_adapter.py` — PERF102 .values()
+- `src/yuanbot/adapters/channel/wecom_adapter.py` — B904 异常链（2 处）
+- `src/yuanbot/auth/admin_routes.py` — B904 异常链
+- `src/yuanbot/config.py` — PERF102 .values()
+- `src/yuanbot/gateway/jwt_auth.py` — B904 异常链（2 处）
+- `src/yuanbot/infrastructure/graph_store.py` — PERF102 .values()
+- `src/yuanbot/infrastructure/sqlite_store.py` — _rows_to_dicts 批量提取
+- `src/yuanbot/memory/emotion_tracker.py` — PERF401 列表推导式
+- `src/yuanbot/memory/manager.py` — 常量提升 + 预计算 + PERF401
+- `src/yuanbot/providers/manager.py` — PERF401 列表推导式（3 处）
+- `src/yuanbot/tools/builtin.py` — PERF401 列表推导式（3 处）
+- `src/yuanbot/tts/manager.py` — 懒淘汰优化
+
+### 代码质量
+
+- Ruff lint: All checks passed
+- 测试: 1346 passed, 72 warnings
+
+### 符合度变化
+
+| 系统 | v17 | v18 | 变化 |
+|------|------|------|------|
+| **总体** | **~100%** | **~100%** | — (代码质量 + 微性能优化，无功能变更) |
 
 ### 剩余待完成项
 
