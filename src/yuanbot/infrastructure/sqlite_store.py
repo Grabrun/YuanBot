@@ -346,6 +346,16 @@ class SQLiteStore:
         await self._db.execute("DELETE FROM episodic_metadata WHERE id=?", (id,))
         await self._db.commit()
 
+    async def batch_delete_episodic_metadata(self, ids: list[str]) -> None:
+        """批量删除情景记忆元数据（单次提交，减少 I/O）"""
+        if not ids:
+            return
+        await self._db.executemany(
+            "DELETE FROM episodic_metadata WHERE id=?",
+            [(id,) for id in ids],
+        )
+        await self._db.commit()
+
     # ──────────────────────────────────────────
     # 用户画像操作
     # ──────────────────────────────────────────

@@ -184,6 +184,19 @@ class VectorStore:
         elif self._memory_store:
             self._memory_store.delete_vector(id)
 
+    async def batch_delete_vectors(self, ids: list[str]) -> None:
+        """批量删除向量（减少逐条调用开销）"""
+        if not ids:
+            return
+        if not self._initialized:
+            await self.initialize()
+
+        for id in ids:
+            if self._milvus_client:
+                await self._delete_milvus(id)
+            elif self._memory_store:
+                self._memory_store.delete_vector(id)
+
     async def _add_vector_milvus(
         self,
         id: str,

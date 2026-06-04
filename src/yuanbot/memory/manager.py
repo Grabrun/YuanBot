@@ -21,6 +21,7 @@ from __future__ import annotations
 import asyncio
 import json
 import math
+from collections import defaultdict
 from datetime import datetime
 from typing import Any
 
@@ -812,6 +813,7 @@ class MemoryManager:
         for memory_type_key in ["episodic", "semantic"]:
             memories = getattr(self, f"_{memory_type_key}_memories").get(user_id, [])
             survived = []
+            forgotten_ids: list[str] = []
 
             for node in memories:
                 days_since_access = (now - node.last_accessed).days
@@ -824,19 +826,22 @@ class MemoryManager:
                     survived.append(node)
                 else:
                     removed += 1
-                    # 持久化删除
                     if self.has_persistence and memory_type_key == "episodic":
-                        try:
-                            await self._db.sqlite.delete_episodic_metadata(node.id)
-                            await self._db.vector.delete_vector(node.id)
-                        except Exception:
-                            pass
+                        forgotten_ids.append(node.id)
                     logger.info(
                         "memory_forgotten",
                         node_id=node.id,
                         memory_type=memory_type_key,
                         effective_score=effective_score,
                     )
+
+            # 批量持久化删除（单次 DB 提交，减少 I/O）
+            if forgotten_ids and self.has_persistence:
+                try:
+                    await self._db.sqlite.batch_delete_episodic_metadata(forgotten_ids)
+                    await self._db.vector.batch_delete_vectors(forgotten_ids)
+                except Exception:
+                    pass
 
             getattr(self, f"_{memory_type_key}_memories")[user_id] = survived
 
@@ -852,11 +857,9 @@ class MemoryManager:
 
         episodic = await self.get_episodic_memories(user_id)
 
-        topic_counts: dict[str, list[MemoryNode]] = {}
+        topic_counts: dict[str, list[MemoryNode]] = defaultdict(list)
         for node in episodic:
             for tag in node.topic_tags:
-                if tag not in topic_counts:
-                    topic_counts[tag] = []
                 topic_counts[tag].append(node)
 
         removed_ids: set[str] = set()
@@ -882,14 +885,13 @@ class MemoryManager:
             ]
             stats["removed"] = original_count - len(self._episodic_memories[user_id])
 
-            # 持久化删除
+            # 批量持久化删除（单次 DB 提交，减少 I/O）
             if self.has_persistence:
-                for rid in removed_ids:
-                    try:
-                        await self._db.sqlite.delete_episodic_metadata(rid)
-                        await self._db.vector.delete_vector(rid)
-                    except Exception:
-                        pass
+                try:
+                    await self._db.sqlite.batch_delete_episodic_metadata(list(removed_ids))
+                    await self._db.vector.batch_delete_vectors(list(removed_ids))
+                except Exception:
+                    pass
 
         logger.info("memory_consolidation", user_id=user_id, **stats)
         return stats
