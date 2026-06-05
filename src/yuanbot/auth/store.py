@@ -508,16 +508,18 @@ class ConversationStore:
             if not conv:
                 continue
             messages = self._messages.get(cid, [])
-            for msg in messages:
-                if query_lower in msg.content.lower():
-                    results.append({
-                        "conversation_id": cid,
-                        "conversation_title": conv.title,
-                        "message_id": msg.message_id,
-                        "role": msg.role,
-                        "content": msg.content,
-                        "timestamp": msg.timestamp.isoformat(),
-                    })
+            results.extend(
+                {
+                    "conversation_id": cid,
+                    "conversation_title": conv.title,
+                    "message_id": msg.message_id,
+                    "role": msg.role,
+                    "content": msg.content,
+                    "timestamp": msg.timestamp.isoformat(),
+                }
+                for msg in messages
+                if query_lower in msg.content.lower()
+            )
 
         # 按时间倒序排列
         results.sort(key=lambda r: r["timestamp"], reverse=True)

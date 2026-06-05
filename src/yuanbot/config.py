@@ -678,15 +678,14 @@ def _load_from_directory(loader: ConfigLoader) -> dict[str, Any]:
             ai_provider["base_url"] = provider_cfg["base_url"]
 
     # 构建 channels 兼容格式
-    channel_list: list[dict[str, Any]] = []
-    for ch in channels.values():
-        channel_list.append(
-            {
-                "platform": ch.platform,
-                "enabled": ch.enabled,
-                "config": ch.config,
-            }
-        )
+    channel_list = [
+        {
+            "platform": ch.platform,
+            "enabled": ch.enabled,
+            "config": ch.config,
+        }
+        for ch in channels.values()
+    ]
 
     # 构建 memory 兼容格式
     memory: dict[str, Any] = {

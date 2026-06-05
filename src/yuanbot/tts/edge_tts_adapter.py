@@ -76,10 +76,11 @@ class EdgeTTSAdapter(TTSAdapter):
             pitch=pitch_str,
         )
 
-        audio_chunks: list[bytes] = []
-        async for chunk in communicate.stream():
-            if chunk["type"] == "audio":
-                audio_chunks.append(chunk["data"])
+        audio_chunks = [
+            chunk["data"]
+            async for chunk in communicate.stream()
+            if chunk["type"] == "audio"
+        ]
 
         return b"".join(audio_chunks)
 

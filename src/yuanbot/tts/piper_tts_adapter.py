@@ -136,13 +136,11 @@ class PiperTTSAdapter(TTSAdapter):
         assert self._model is not None
 
         # 收集所有音频 chunk
-        audio_chunks: list[bytes] = []
-        for chunk in self._model.synthesize_stream_raw(
+        audio_chunks = list(self._model.synthesize_stream_raw(
             text,
             length_scale=length_scale,
             sentence_silence=self._sentence_silence,
-        ):
-            audio_chunks.append(chunk)
+        ))
 
         raw_audio = b"".join(audio_chunks)
 

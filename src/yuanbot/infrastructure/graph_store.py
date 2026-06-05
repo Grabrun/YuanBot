@@ -797,15 +797,17 @@ class GraphStore:
             for neighbor in outgoing + incoming:
                 nid = neighbor["node_id"]
                 second_hop = await self.get_neighbors(nid, direction="both")
-                for n2 in second_hop:
-                    if n2["node_id"] != entity_id:
-                        related_entities.append({
-                            "entity_id": n2["node_id"],
-                            "entity_type": n2.get("node_type", "unknown"),
-                            "properties": n2.get("properties", {}),
-                            "via": nid,
-                            "via_relation": neighbor.get("edge_type", ""),
-                        })
+                related_entities.extend(
+                    {
+                        "entity_id": n2["node_id"],
+                        "entity_type": n2.get("node_type", "unknown"),
+                        "properties": n2.get("properties", {}),
+                        "via": nid,
+                        "via_relation": neighbor.get("edge_type", ""),
+                    }
+                    for n2 in second_hop
+                    if n2["node_id"] != entity_id
+                )
 
         return {
             "node": node,

@@ -222,8 +222,7 @@ class InfoPanel(Static):
         lines = ["[bold]🧠 最近记忆[/bold]", ""]
         memories = (data or {}).get("memories", [])
         if memories:
-            for m in memories[:8]:
-                lines.append(f"  · {m[:30]}")
+            lines.extend(f"  · {m[:30]}" for m in memories[:8])
         else:
             lines.append("  [dim]暂无记忆数据[/dim]")
         lines.extend(["", "[dim]/memory 查看更多[/dim]"])

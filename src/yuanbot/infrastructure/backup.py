@@ -408,9 +408,11 @@ class BackupManager:
 
             target_dir = self._base_dir / source_dir_name
             if dry_run:
-                for f in source_dir.rglob("*"):
-                    if f.is_file():
-                        restored_files.append(str(f.relative_to(dir_path)))
+                restored_files.extend(
+                    str(f.relative_to(dir_path))
+                    for f in source_dir.rglob("*")
+                    if f.is_file()
+                )
                 continue
 
             # 实际恢复
@@ -418,9 +420,11 @@ class BackupManager:
                 shutil.rmtree(str(target_dir))
             shutil.copytree(str(source_dir), str(target_dir))
 
-            for f in source_dir.rglob("*"):
-                if f.is_file():
-                    restored_files.append(str(f.relative_to(dir_path)))
+            restored_files.extend(
+                str(f.relative_to(dir_path))
+                for f in source_dir.rglob("*")
+                if f.is_file()
+            )
 
         return {
             "success": True,

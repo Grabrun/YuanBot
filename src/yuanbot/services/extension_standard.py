@@ -432,9 +432,11 @@ class ExtensionValidator:
         elif manifest.type == "channel":
             required_methods = channel_methods
 
-        for method in required_methods:
-            if not implementation_check.get(method, False):
-                errors.append(f"Missing required method: {method}")
+        errors.extend(
+            f"Missing required method: {method}"
+            for method in required_methods
+            if not implementation_check.get(method, False)
+        )
 
         return errors
 
