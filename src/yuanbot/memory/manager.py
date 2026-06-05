@@ -1068,13 +1068,16 @@ class MemoryManager:
         if profile is None:
             profile = await self.get_or_create_user_profile(user_id)
 
-        # 并行获取三类记忆数量（减少串行等待）
-        fact_task = self.get_fact_memories(user_id)
-        episodic_task = self.get_episodic_memories(user_id)
-        semantic_task = self.get_semantic_memories(user_id)
-        fact_memories, episodic_memories, semantic_memories = await asyncio.gather(
-            fact_task, episodic_task, semantic_task
-        )
+        # 使用 COUNT 查询代替拉取全部记忆行
+        if self.has_persistence:
+            counts = await self._db.sqlite.get_memory_counts(user_id)
+            total_memories = counts["fact"] + counts["episodic"] + counts["semantic"]
+        else:
+            total_memories = (
+                len(self._fact_memories.get(user_id, []))
+                + len(self._episodic_memories.get(user_id, []))
+                + len(self._semantic_memories.get(user_id, []))
+            )
 
         factors = []
 
@@ -1101,7 +1104,6 @@ class MemoryManager:
             factors.append(depth_score * 0.3)
 
         # 4. 记忆丰富度
-        total_memories = len(fact_memories) + len(episodic_memories) + len(semantic_memories)
         memory_score = min(total_memories / 50, 1.0)
         factors.append(memory_score * 0.2)
 
@@ -1180,19 +1182,10 @@ class MemoryManager:
             metadata=profile.metadata,
         )
 
-    @staticmethod
-    def _row_to_fact_memory_node(row: dict[str, Any]) -> MemoryNode:
+    @classmethod
+    def _row_to_fact_memory_node(cls, row: dict[str, Any]) -> MemoryNode:
         """将数据库行转换为事实记忆节点"""
-        metadata = {}
-        raw_meta = row.get("metadata", "{}")
-        if isinstance(raw_meta, str):
-            try:
-                metadata = json.loads(raw_meta)
-            except (json.JSONDecodeError, TypeError):
-                metadata = {}
-        elif isinstance(raw_meta, dict):
-            metadata = raw_meta
-
+        metadata: dict[str, Any] = cls._parse_json_field(row.get("metadata", "{}"))  # type: ignore[assignment]
         metadata["category"] = row.get("category", "general")
         metadata["confidence"] = row.get("confidence", 1.0)
         metadata["source"] = row.get("source", "explicit_statement")
@@ -1207,18 +1200,10 @@ class MemoryManager:
             metadata=metadata,
         )
 
-    @staticmethod
-    def _row_to_episodic_memory_node(row: dict[str, Any]) -> MemoryNode:
+    @classmethod
+    def _row_to_episodic_memory_node(cls, row: dict[str, Any]) -> MemoryNode:
         """将数据库行转换为情景记忆节点"""
-        key_entities = []
-        raw_entities = row.get("key_entities", "[]")
-        if isinstance(raw_entities, str):
-            try:
-                key_entities = json.loads(raw_entities)
-            except (json.JSONDecodeError, TypeError):
-                key_entities = []
-        elif isinstance(raw_entities, list):
-            key_entities = raw_entities
+        key_entities: list[str] = cls._parse_json_field(row.get("key_entities", "[]"), default=[])  # type: ignore[assignment]
 
         topic_tags = []
         topic = row.get("topic", "")
@@ -1252,47 +1237,25 @@ class MemoryManager:
         )
 
     @staticmethod
-    def _row_to_user_profile(row: dict[str, Any]) -> UserProfile:
+    def _parse_json_field(raw: Any, default: dict | list | None = None) -> dict | list:
+        """统一解析数据库 JSON 字段（str → json.loads, dict/list → 直接返回）"""
+        if isinstance(raw, str):
+            try:
+                return json.loads(raw)
+            except (json.JSONDecodeError, TypeError):
+                return default if default is not None else {}
+        if isinstance(raw, (dict, list)):
+            return raw
+        return default if default is not None else {}
+
+    @classmethod
+    def _row_to_user_profile(cls, row: dict[str, Any]) -> UserProfile:
         """将数据库行转换为用户画像"""
-        preferences = {}
-        raw_prefs = row.get("preferences", "{}")
-        if isinstance(raw_prefs, str):
-            try:
-                preferences = json.loads(raw_prefs)
-            except (json.JSONDecodeError, TypeError):
-                preferences = {}
-        elif isinstance(raw_prefs, dict):
-            preferences = raw_prefs
-
-        mood_patterns = {}
-        raw_mood = row.get("typical_mood_patterns", "{}")
-        if isinstance(raw_mood, str):
-            try:
-                mood_patterns = json.loads(raw_mood)
-            except (json.JSONDecodeError, TypeError):
-                mood_patterns = {}
-        elif isinstance(raw_mood, dict):
-            mood_patterns = raw_mood
-
-        platform_ids = {}
-        raw_pids = row.get("platform_ids", "{}")
-        if isinstance(raw_pids, str):
-            try:
-                platform_ids = json.loads(raw_pids)
-            except (json.JSONDecodeError, TypeError):
-                platform_ids = {}
-        elif isinstance(raw_pids, dict):
-            platform_ids = raw_pids
-
-        metadata = {}
-        raw_meta = row.get("metadata", "{}")
-        if isinstance(raw_meta, str):
-            try:
-                metadata = json.loads(raw_meta)
-            except (json.JSONDecodeError, TypeError):
-                metadata = {}
-        elif isinstance(raw_meta, dict):
-            metadata = raw_meta
+        pf = cls._parse_json_field
+        preferences: dict[str, Any] = pf(row.get("preferences", "{}"))  # type: ignore[assignment]
+        mood_patterns: dict[str, Any] = pf(row.get("typical_mood_patterns", "{}"))  # type: ignore[assignment]
+        platform_ids: dict[str, Any] = pf(row.get("platform_ids", "{}"))  # type: ignore[assignment]
+        metadata: dict[str, Any] = pf(row.get("metadata", "{}"))  # type: ignore[assignment]
 
         fi_ts = row.get("first_interaction")
         li_ts = row.get("last_interaction")
@@ -1432,15 +1395,19 @@ class MemoryManager:
 
     @staticmethod
     def _cosine_similarity(a: list[float], b: list[float]) -> float:
-        """计算余弦相似度"""
+        """计算余弦相似度（单遍扫描，减少迭代次数）"""
         if len(a) != len(b):
             return 0.0
-        dot_product = sum(x * y for x, y in zip(a, b, strict=False))
-        norm_a = math.sqrt(sum(x * x for x in a))
-        norm_b = math.sqrt(sum(x * x for x in b))
-        if norm_a == 0 or norm_b == 0:
+        dot_product = 0.0
+        norm_a_sq = 0.0
+        norm_b_sq = 0.0
+        for x, y in zip(a, b, strict=False):
+            dot_product += x * y
+            norm_a_sq += x * x
+            norm_b_sq += y * y
+        if norm_a_sq == 0 or norm_b_sq == 0:
             return 0.0
-        return dot_product / (norm_a * norm_b)
+        return dot_product / math.sqrt(norm_a_sq * norm_b_sq)
 
     @staticmethod
     def _entity_match_score(text: str, entities: list[str]) -> float:

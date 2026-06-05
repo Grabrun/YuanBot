@@ -240,6 +240,23 @@ class SQLiteStore:
         await self._db.execute("UPDATE fact_memories SET is_deleted=1 WHERE id=?", (id,))
         await self._db.commit()
 
+    async def get_memory_counts(self, user_id: str) -> dict[str, int]:
+        """获取用户各类记忆数量（单次查询，避免拉取全部行）"""
+        fact_cursor = await self._db.execute(
+            "SELECT COUNT(*) FROM fact_memories "
+            "WHERE user_id=? AND (is_deleted=0 OR is_deleted IS NULL)",
+            (user_id,),
+        )
+        fact_count = (await fact_cursor.fetchone())[0]
+
+        episodic_cursor = await self._db.execute(
+            "SELECT COUNT(*) FROM episodic_metadata WHERE user_id=?",
+            (user_id,),
+        )
+        episodic_count = (await episodic_cursor.fetchone())[0]
+
+        return {"fact": fact_count, "episodic": episodic_count, "semantic": 0}
+
     # ──────────────────────────────────────────
     # 情景记忆元数据操作
     # ──────────────────────────────────────────

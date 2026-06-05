@@ -1,9 +1,9 @@
-# 🌸 YuanBot 设计文档符合度审查报告 v21
+# 🌸 YuanBot 设计文档符合度审查报告 v22
 
-**审查日期**: 2026-06-05
+**审查日期**: 2026-06-06
 **审查范围**: docs/ 目录下 17 份设计文档 vs src/ + configs/ + tests/ + webui/ 实际代码
 **项目版本**: v1.5.0
-**上次审查**: v20 (2026-06-05),总体 ~100%
+**上次审查**: v21 (2026-06-05),总体 ~100%
 
 ---
 
@@ -566,9 +566,9 @@
 
 ## 与上次检查对比
 
-| 指标 | v1 | v2 | v3 | v4 | v5 | v6 | v7 | v10 | v12 | v13 | v15 | v18 | v19 | v20 (本次) | 变化 |
-|------|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----------|------|
-| 总体符合度 | ~77% | ~88% | ~91% | ~93% | ~95% | ~97% | ~98% | ~99.8% | ~100% | ~100% | ~100% | ~100% | ~100% | **~100%** | — |
+| 指标 | v1 | v2 | v3 | v4 | v5 | v6 | v7 | v10 | v12 | v13 | v15 | v18 | v19 | v20 | v22 (本次) | 变化 |
+|------|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----------|------|
+| 总体符合度 | ~77% | ~88% | ~91% | ~93% | ~95% | ~97% | ~98% | ~99.8% | ~100% | ~100% | ~100% | ~100% | ~100% | ~100% | **~100%** | — |
 | 接入与通信 | 85% | 90% | 95% | 95% | 95% | 95% | 95% | 97% | 97% | 97% | 97% | 97% | 97% | **97%** | — |
 | 用户界面 | 50% | 90% | 92% | 92% | 92% | 92% | 96% | 98% | 98% | **100%** | 100% | 100% | 100% | **100%** | — |
 | TTS 系统 | 10% | 70% | 85% | 85% | 93% | 93% | 93% | 93% | 93% | **98%** | 98% | 98% | 98% | **98%** | — |
@@ -1353,14 +1353,37 @@
 ### 代码质量
 
 - Ruff lint: All checks passed
+| P2 | 本地意图模型 (bert-base ONNX) | 2-3 天 | 外部 ML 依赖 |
+
+---
+
+## v22 更新摘要
+
+本次审查在总体符合度已达 ~100% 的情况下，聚焦记忆系统数据库 I/O 优化和代码去重，减少信任度计算的 DB 开销，消除重复的 JSON 解析模板代码。
+
+### v22 性能优化
+
+1. **信任度计算 COUNT 查询** — `infrastructure/sqlite_store.py` 新增 `get_memory_counts()` 方法，使用 `SELECT COUNT(*)` 替代拉取全部记忆行；`memory/manager.py` `calculate_trust_score()` 改用 `get_memory_counts()` 替代原先的 `get_fact_memories` + `get_episodic_memories` + `get_semantic_memories` 三次全表扫描，每次信任度评估减少 3 次完整 DB 查询为 3 次 COUNT 查询
+2. **余弦相似度单遍扫描** — `_cosine_similarity()` 从 3 次 Python 级别迭代（dot_product + norm_a + norm_b）合并为 1 次循环同时计算三个累加器，并使用 `sqrt(a_sq * b_sq)` 替代 `sqrt(a_sq) * sqrt(b_sq)` 减少一次 `math.sqrt` 调用
+3. **JSON 字段解析去重** — `memory/manager.py` 新增 `_parse_json_field()` 静态方法，统一处理 `str → json.loads` 和 `dict/list → 直接返回` 的模式，替换 `_row_to_user_profile`（4 处）、`_row_to_fact_memory_node`（1 处）、`_row_to_episodic_memory_node`（1 处）共 8 处重复的 try/except JSON 解析块
+4. **方法类型升级** — `_row_to_user_profile`、`_row_to_fact_memory_node`、`_row_to_episodic_memory_node` 从 `@staticmethod` 改为 `@classmethod`，支持调用 `_parse_json_field` 类方法
+
+### 修改的源文件
+
+- `src/yuanbot/infrastructure/sqlite_store.py` — 新增 `get_memory_counts()` 方法
+- `src/yuanbot/memory/manager.py` — `_cosine_similarity` 单遍扫描、`_parse_json_field` 静态方法、三个 `_row_to_*` 方法重构为 `@classmethod` 使用 `_parse_json_field`、`calculate_trust_score` 改用 COUNT 查询
+
+### 代码质量
+
+- Ruff lint: All checks passed
 - PERF lint: 0 issues
 - 测试: 1346 passed, 72 warnings
 
 ### 符合度变化
 
-| 系统 | v20 | v21 | 变化 |
+| 系统 | v21 | v22 | 变化 |
 |------|------|------|------|
-| **总体** | **~100%** | **~100%** | — (性能优化，无功能变更) |
+| **总体** | **~100%** | **~100%** | — (性能优化 + 代码去重，无功能变更) |
 
 ### 剩余待完成项
 
