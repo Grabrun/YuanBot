@@ -1,9 +1,9 @@
-# 🌸 YuanBot 设计文档符合度审查报告 v20
+# 🌸 YuanBot 设计文档符合度审查报告 v21
 
 **审查日期**: 2026-06-05
 **审查范围**: docs/ 目录下 17 份设计文档 vs src/ + configs/ + tests/ + webui/ 实际代码
 **项目版本**: v1.5.0
-**上次审查**: v19 (2026-06-05),总体 ~100%
+**上次审查**: v20 (2026-06-05),总体 ~100%
 
 ---
 
@@ -1324,6 +1324,43 @@
 | 系统 | v19 | v20 | 变化 |
 |------|------|------|------|
 | **总体** | **~100%** | **~100%** | — (代码质量优化，无功能变更) |
+
+### 剩余待完成项
+
+| 优先级 | 项目 | 预估工作量 | 类型 |
+|--------|------|----------|------|
+| P2 | 本地意图模型 (bert-base ONNX) | 2-3 天 | 外部 ML 依赖 |
+
+---
+
+## v21 更新摘要
+
+本次审查在总体符合度已达 ~100% 的情况下，聚焦情感分析热路径的性能优化，消除每条消息处理中的冗余计算和内存分配。
+
+### v21 性能优化
+
+1. **预排序情感词典键** — `emotion_tracker.py` 将 `sorted(EMOTION_LEXICON.keys(), key=len, reverse=True)` 从 `_analyze_with_rules()` 方法内提取为模块级常量 `_SORTED_EMOTION_WORDS`（tuple），消除每条消息分析时对 ~40 个词的排序开销
+2. **情感分类 frozenset 常量** — 新增 7 个模块级 `frozenset` 常量：`_POSITIVE_EMOTIONS`、`_NEGATIVE_EMOTIONS`、`_HIGH_AROUSAL_EMOTIONS`、`_LOW_AROUSAL_EMOTIONS`、`_HIGH_DOMINANCE_EMOTIONS`、`_LOW_DOMINANCE_EMOTIONS`、`_COMFORT_EMOTIONS`，替代 `_determine_valence`/`_determine_arousal`/`_determine_dominance`/`_needs_comfort` 中每次调用时创建的临时 set 对象
+3. **消除冗余双重字符串扫描** — `_analyze_with_rules()` 将 `if word in text_lower: word_pos = text_lower.find(word)` 改为 `word_pos = text_lower.find(word); if word_pos >= 0:`，对每个匹配的词减少一次字符串扫描
+4. **否定词 frozenset** — `NEGATION_WORDS` 从 `set` 改为 `frozenset`，`NEGATION_PATTERNS` 从 `list` 改为 `tuple`，作为不可变常量
+5. **否定情感分类 frozenset** — 新增 `_NEGATION_POSITIVE_EMOTIONS` 和 `_NEGATION_NEGATIVE_EMOTIONS` 两个 `frozenset[str]` 常量，替代 `_analyze_with_rules()` 中否定词处理分支每次创建的临时列表
+6. **方法静态化** — `_determine_valence`、`_determine_arousal`、`_determine_dominance`、`_needs_comfort` 改为 `@staticmethod`（不再需要 `self` 参数），消除不必要的实例绑定开销
+
+### 修改的源文件
+
+- `src/yuanbot/memory/emotion_tracker.py` — 预排序词典键、7 个 frozenset 常量、消除双重扫描、否定词 frozenset、方法静态化
+
+### 代码质量
+
+- Ruff lint: All checks passed
+- PERF lint: 0 issues
+- 测试: 1346 passed, 72 warnings
+
+### 符合度变化
+
+| 系统 | v20 | v21 | 变化 |
+|------|------|------|------|
+| **总体** | **~100%** | **~100%** | — (性能优化，无功能变更) |
 
 ### 剩余待完成项
 

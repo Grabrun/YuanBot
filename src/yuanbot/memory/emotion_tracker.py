@@ -87,8 +87,41 @@ INTENSITY_MODIFIERS: dict[str, float] = {
 }
 
 # 否定词（仅匹配独立的否定词）
-NEGATION_WORDS = {"不", "没", "没有", "别", "莫", "勿", "未", "无"}
-NEGATION_PATTERNS = ["不是", "不会", "不能", "不要", "没有", "别这样"]
+NEGATION_WORDS = frozenset({"不", "没", "没有", "别", "莫", "勿", "未", "无"})
+NEGATION_PATTERNS = ("不是", "不会", "不能", "不要", "没有", "别这样")
+
+# 预排序情感词典键（按长度降序，优先匹配长词）——避免每次分析时重新排序
+_SORTED_EMOTION_WORDS: tuple[str, ...] = tuple(
+    sorted(EMOTION_LEXICON.keys(), key=len, reverse=True)
+)
+
+# 情感分类 frozenset 常量——避免每次方法调用时重新创建集合
+_POSITIVE_EMOTIONS: frozenset[EmotionCategory] = frozenset({
+    EmotionCategory.JOY, EmotionCategory.TRUST, EmotionCategory.ANTICIPATION,
+})
+_NEGATIVE_EMOTIONS: frozenset[EmotionCategory] = frozenset({
+    EmotionCategory.SADNESS, EmotionCategory.ANGER,
+    EmotionCategory.FEAR, EmotionCategory.DISGUST,
+})
+_HIGH_AROUSAL_EMOTIONS: frozenset[EmotionCategory] = frozenset({
+    EmotionCategory.ANGER, EmotionCategory.FEAR, EmotionCategory.SURPRISE,
+})
+_LOW_AROUSAL_EMOTIONS: frozenset[EmotionCategory] = frozenset({
+    EmotionCategory.SADNESS, EmotionCategory.TRUST,
+})
+_HIGH_DOMINANCE_EMOTIONS: frozenset[EmotionCategory] = frozenset({
+    EmotionCategory.ANGER, EmotionCategory.DISGUST, EmotionCategory.JOY,
+})
+_LOW_DOMINANCE_EMOTIONS: frozenset[EmotionCategory] = frozenset({
+    EmotionCategory.FEAR, EmotionCategory.SADNESS,
+})
+_COMFORT_EMOTIONS: frozenset[EmotionCategory] = frozenset({
+    EmotionCategory.SADNESS, EmotionCategory.FEAR, EmotionCategory.ANGER,
+})
+
+# 否定词反转时使用的字符串常量（避免在循环中重复创建列表）
+_NEGATION_POSITIVE_EMOTIONS: frozenset[str] = frozenset({"joy", "trust", "anticipation"})
+_NEGATION_NEGATIVE_EMOTIONS: frozenset[str] = frozenset({"sadness", "anger", "fear", "disgust"})
 
 
 class EmotionTracker:
@@ -194,14 +227,12 @@ class EmotionTracker:
         # 检查否定词
         has_negation = any(neg in text_lower for neg in NEGATION_WORDS)
 
-        # 遍历情感词典（按词长度降序，优先匹配长词）
-        sorted_words = sorted(EMOTION_LEXICON.keys(), key=len, reverse=True)
-
-        for word in sorted_words:
-            emotions = EMOTION_LEXICON[word]
-            if word in text_lower:
+        # 遍历情感词典（使用预排序的元组，按词长度降序，优先匹配长词）
+        # 使用 find() 替代 in + find 双重搜索，减少一次字符串扫描
+        for word in _SORTED_EMOTION_WORDS:
+            word_pos = text_lower.find(word)
+            if word_pos >= 0:
                 # 检查前面是否有强度修饰词
-                word_pos = text_lower.find(word)
                 prefix = text_lower[max(0, word_pos - 6) : word_pos]
 
                 intensity_multiplier = 1.0
@@ -211,14 +242,14 @@ class EmotionTracker:
                         break
 
                 # 添加情感分数
-                for emotion, score in emotions.items():
+                for emotion, score in EMOTION_LEXICON[word].items():
                     if emotion != "valence":
                         adjusted_score = score * intensity_multiplier
                         if has_negation:
                             # 否定词反转情感（简化处理）
-                            if emotion in ["joy", "trust", "anticipation"]:
+                            if emotion in _NEGATION_POSITIVE_EMOTIONS:
                                 adjusted_score *= -0.5
-                            elif emotion in ["sadness", "anger", "fear", "disgust"]:
+                            elif emotion in _NEGATION_NEGATIVE_EMOTIONS:
                                 adjusted_score *= 0.7
                         scores[emotion] += adjusted_score
 
@@ -230,56 +261,37 @@ class EmotionTracker:
 
         return dict(scores)
 
-    def _determine_valence(self, emotion: EmotionCategory) -> str:
+    @staticmethod
+    def _determine_valence(emotion: EmotionCategory) -> str:
         """确定情感效价"""
-        positive_emotions = {
-            EmotionCategory.JOY,
-            EmotionCategory.TRUST,
-            EmotionCategory.ANTICIPATION,
-        }
-        negative_emotions = {
-            EmotionCategory.SADNESS,
-            EmotionCategory.ANGER,
-            EmotionCategory.FEAR,
-            EmotionCategory.DISGUST,
-        }
-
-        if emotion in positive_emotions:
+        if emotion in _POSITIVE_EMOTIONS:
             return "positive"
-        elif emotion in negative_emotions:
+        elif emotion in _NEGATIVE_EMOTIONS:
             return "negative"
         return "neutral"
 
-    def _determine_arousal(self, emotion: EmotionCategory, intensity: float) -> str:
+    @staticmethod
+    def _determine_arousal(emotion: EmotionCategory, intensity: float) -> str:
         """确定情感唤醒度"""
-        high_arousal_emotions = {
-            EmotionCategory.ANGER,
-            EmotionCategory.FEAR,
-            EmotionCategory.SURPRISE,
-        }
-        low_arousal_emotions = {EmotionCategory.SADNESS, EmotionCategory.TRUST}
-
-        if emotion in high_arousal_emotions:
+        if emotion in _HIGH_AROUSAL_EMOTIONS:
             return "high" if intensity > 0.5 else "medium"
-        elif emotion in low_arousal_emotions:
+        elif emotion in _LOW_AROUSAL_EMOTIONS:
             return "low" if intensity > 0.5 else "medium"
         return "medium"
 
-    def _determine_dominance(self, emotion: EmotionCategory) -> str:
+    @staticmethod
+    def _determine_dominance(emotion: EmotionCategory) -> str:
         """确定情感主导度"""
-        high_dominance = {EmotionCategory.ANGER, EmotionCategory.DISGUST, EmotionCategory.JOY}
-        low_dominance = {EmotionCategory.FEAR, EmotionCategory.SADNESS}
-
-        if emotion in high_dominance:
+        if emotion in _HIGH_DOMINANCE_EMOTIONS:
             return "high"
-        elif emotion in low_dominance:
+        elif emotion in _LOW_DOMINANCE_EMOTIONS:
             return "low"
         return "medium"
 
-    def _needs_comfort(self, emotion: EmotionCategory, intensity: float) -> bool:
+    @staticmethod
+    def _needs_comfort(emotion: EmotionCategory, intensity: float) -> bool:
         """判断是否需要立即安慰"""
-        comfort_emotions = {EmotionCategory.SADNESS, EmotionCategory.FEAR, EmotionCategory.ANGER}
-        return emotion in comfort_emotions and intensity > 0.6
+        return emotion in _COMFORT_EMOTIONS and intensity > 0.6
 
     async def _check_pattern_update(
         self,
