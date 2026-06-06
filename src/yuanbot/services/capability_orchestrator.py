@@ -181,7 +181,7 @@ class CapabilityOrchestrator:
         result = ToolExecutionLoopResult(final_response="", tool_calls_made=0)
         current_messages = list(messages)
         tool_id_map = {
-            td.name: tid for td, tid in zip(tool_definitions, tool_ids)
+            td.name: tid for td, tid in zip(tool_definitions, tool_ids, strict=False)
         }
 
         for round_num in range(max_rounds):

@@ -71,10 +71,10 @@ class DecisionPlugin(ABC):
         """优先级，数值越小越先执行"""
         return self._priority
 
-    async def initialize(self) -> None:
+    async def initialize(self) -> None:  # noqa: B027
         """异步初始化，子类可覆盖"""
 
-    async def shutdown(self) -> None:
+    async def shutdown(self) -> None:  # noqa: B027
         """清理资源，子类可覆盖"""
 
     @abstractmethod

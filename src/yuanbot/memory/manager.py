@@ -1132,11 +1132,22 @@ class MemoryManager:
 
     async def get_memory_stats(self, user_id: str) -> dict[str, Any]:
         """获取记忆统计信息"""
+        # 使用 COUNT 查询代替拉取全部记忆行
+        if self.has_persistence:
+            counts = await self._db.sqlite.get_memory_counts(user_id)
+            fact_count = counts["fact"]
+            episodic_count = counts["episodic"]
+            semantic_count = counts["semantic"]
+        else:
+            fact_count = len(self._fact_memories.get(user_id, []))
+            episodic_count = len(self._episodic_memories.get(user_id, []))
+            semantic_count = len(self._semantic_memories.get(user_id, []))
+
         return {
             "working_memory_sessions": len(self._working_memories),
-            "fact_memories": len(await self.get_fact_memories(user_id)),
-            "episodic_memories": len(await self.get_episodic_memories(user_id)),
-            "semantic_memories": len(await self.get_semantic_memories(user_id)),
+            "fact_memories": fact_count,
+            "episodic_memories": episodic_count,
+            "semantic_memories": semantic_count,
             "emotion_records": len(self._emotion_tracker._records.get(user_id, [])),
             "emotion_patterns": len(self._emotion_tracker._patterns.get(user_id, [])),
             "user_profile": await self.get_or_create_user_profile(user_id)
@@ -1408,20 +1419,18 @@ class MemoryManager:
         return dot_product / math.sqrt(norm_a_sq * norm_b_sq)
 
     @staticmethod
-    def _entity_match_score(text: str, entities: list[str]) -> float:
-        """实体匹配评分"""
+    def _entity_match_score(text_lower: str, entities: list[str]) -> float:
+        """实体匹配评分（text_lower 必须已转为小写）"""
         if not entities:
             return 0.0
-        text_lower = text.lower()
         matched = sum(1 for e in entities if e.lower() in text_lower)
         return matched / len(entities)
 
     @staticmethod
-    def _topic_match_score(text: str, tags: list[str]) -> float:
-        """话题标签匹配评分"""
+    def _topic_match_score(text_lower: str, tags: list[str]) -> float:
+        """话题标签匹配评分（text_lower 必须已转为小写）"""
         if not tags:
             return 0.0
-        text_lower = text.lower()
         matched = sum(1 for t in tags if t.lower() in text_lower)
         return matched / len(tags)
 

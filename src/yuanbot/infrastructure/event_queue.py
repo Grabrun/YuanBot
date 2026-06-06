@@ -285,7 +285,7 @@ class RedisEventQueue:
                 if not messages:
                     continue
 
-                for stream, entries in messages:
+                for _stream, entries in messages:
                     for message_id, fields in entries:
                         payload = json.loads(fields.get("payload", "{}"))
 

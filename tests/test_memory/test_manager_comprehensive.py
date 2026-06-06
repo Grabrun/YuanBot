@@ -278,7 +278,7 @@ class TestEntityMatchScore:
         assert MemoryManager._entity_match_score("test", []) == 0.0
 
     def test_case_insensitive(self):
-        score = MemoryManager._entity_match_score("HELLO", ["hello"])
+        score = MemoryManager._entity_match_score("hello", ["hello"])
         assert score == 1.0
 
 
