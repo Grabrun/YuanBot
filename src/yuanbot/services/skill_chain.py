@@ -177,9 +177,8 @@ class SkillChainManager:
                 continue
 
             # 人格过滤
-            if chain.persona_filters and persona_id:
-                if persona_id not in chain.persona_filters:
-                    continue
+            if chain.persona_filters and persona_id and persona_id not in chain.persona_filters:
+                continue
 
             score = chain.priority
             triggered = False

@@ -312,11 +312,10 @@ class EmotionTracker:
             if (
                 pattern.typical_response.emotion == emotion_state.emotion
                 and pattern.pattern_type == "topic_based"
-            ):
-                # 检查话题相似性
-                if any(
+                and any(
                     keyword in text for keyword in pattern.trigger_conditions.get("keywords", [])
-                ):
+                )
+            ):
                     similar_pattern = pattern
                     break
 

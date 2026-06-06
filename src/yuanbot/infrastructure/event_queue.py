@@ -215,7 +215,7 @@ class RedisEventQueue:
             self._consumer_name = f"consumer-{uuid.uuid4().hex[:8]}"
 
             # 创建消费者组
-            for topic in self._handlers.keys():
+            for topic in self._handlers:
                 try:
                     await self._redis.xgroup_create(
                         topic, self._consumer_group, id="0", mkstream=True

@@ -1,9 +1,9 @@
-# 🌸 YuanBot 设计文档符合度审查报告 v24
+# 🌸 YuanBot 设计文档符合度审查报告 v25
 
-**审查日期**: 2026-06-06
+**审查日期**: 2026-06-07
 **审查范围**: docs/ 目录下 17 份设计文档 vs src/ + configs/ + tests/ + webui/ 实际代码
 **项目版本**: v1.5.0
-**上次审查**: v23 (2026-06-06),总体 ~100%
+**上次审查**: v24 (2026-06-06),总体 ~100%
 
 ---
 
@@ -1465,6 +1465,58 @@
 | 系统 | v23 | v24 | 变化 |
 |------|------|------|------|
 | **总体** | **~100%** | **~100%** | — (性能优化 + 代码清理，无功能变更) |
+
+### 剩余待完成项
+
+| 优先级 | 项目 | 预估工作量 | 类型 |
+|--------|------|----------|------|
+| P2 | 本地意图模型 (bert-base ONNX) | 2-3 天 | 外部 ML 依赖 |
+
+---
+
+## v25 更新摘要
+
+本次审查在总体符合度已达 ~100% 的情况下，聚焦代码质量提升和内存分配优化，修复了多处 SIM 代码风格问题，并使用 `itertools.chain` 消除记忆检索中的临时列表分配。
+
+### v25 代码质量
+
+1. **SIM102 嵌套 if 合并** — 10 处嵌套 `if` 语句合并为单层条件表达式，提升可读性：
+   - `orchestrator/engine.py` — 关系阶段更新条件
+   - `proactive/strategy.py` — 用户级开关检查（2 处）+ 免打扰时段检查
+   - `infrastructure/graph_store.py` — 边方向+类型双重过滤（2 处）
+   - `services/extension_standard.py` — 类型特定验证（3 处）+ persona 类型检查
+   - `services/skill_chain.py` — 人格过滤
+   - `memory/emotion_tracker.py` — 情感模式匹配
+2. **SIM103 内联条件** — `infrastructure/config_watcher.py` 前缀匹配方法直接返回条件结果
+3. **SIM118 移除冗余 `.keys()`** — `infrastructure/event_queue.py` 消费者组创建循环
+
+### v25 性能优化
+
+1. **消除记忆检索临时列表分配** — `memory/manager.py` `retrieve_relevant_memories()` 将 `episodic + fact + semantic` 三列表拼接改为 `itertools.chain(episodic, fact, semantic)`，避免创建 O(N) 临时列表，减少内存分配
+
+### 修改的源文件
+
+- `src/yuanbot/orchestrator/engine.py` — SIM102 合并嵌套 if
+- `src/yuanbot/proactive/strategy.py` — SIM102 合并嵌套 if（3 处）
+- `src/yuanbot/infrastructure/event_queue.py` — SIM118 移除 `.keys()`
+- `src/yuanbot/infrastructure/config_watcher.py` — SIM103 内联条件
+- `src/yuanbot/infrastructure/graph_store.py` — SIM102 合并嵌套 if（2 处）+ 修复缩进
+- `src/yuanbot/services/extension_standard.py` — SIM102 合并嵌套 if（4 处）
+- `src/yuanbot/services/skill_chain.py` — SIM102 合并嵌套 if
+- `src/yuanbot/memory/emotion_tracker.py` — SIM102 合并嵌套 if
+- `src/yuanbot/memory/manager.py` — `itertools.chain` 替代列表拼接
+
+### 代码质量
+
+- Ruff lint (src/): All checks passed
+- PERF lint: 0 issues
+- 测试: 1346 passed, 72 warnings
+
+### 符合度变化
+
+| 系统 | v24 | v25 | 变化 |
+|------|------|------|------|
+| **总体** | **~100%** | **~100%** | — (代码质量 + 内存优化，无功能变更) |
 
 ### 剩余待完成项
 

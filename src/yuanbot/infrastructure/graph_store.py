@@ -320,36 +320,42 @@ class GraphStore:
 
         for edge in self._memory_graph.edges.values():
             matched = False
-            if direction in ("outgoing", "both") and edge["source"] == node_id:
-                if edge_type is None or edge["type"] == edge_type:
-                    target = self._memory_graph.nodes.get(edge["target"])
-                    if target:
-                        neighbors.append(
-                            {
-                                "node_id": edge["target"],
-                                "node_type": target["type"],
-                                "properties": target["properties"],
-                                "edge_type": edge["type"],
-                                "edge_properties": edge["properties"],
-                                "direction": "outgoing",
-                            }
-                        )
-                        matched = True
+            if (
+                direction in ("outgoing", "both")
+                and edge["source"] == node_id
+                and (edge_type is None or edge["type"] == edge_type)
+            ):
+                target = self._memory_graph.nodes.get(edge["target"])
+                if target:
+                    neighbors.append(
+                        {
+                            "node_id": edge["target"],
+                            "node_type": target["type"],
+                            "properties": target["properties"],
+                            "edge_type": edge["type"],
+                            "edge_properties": edge["properties"],
+                            "direction": "outgoing",
+                        }
+                    )
+                    matched = True
 
-            if direction in ("incoming", "both") and edge["target"] == node_id:
-                if edge_type is None or edge["type"] == edge_type:
-                    source = self._memory_graph.nodes.get(edge["source"])
-                    if source and not matched:
-                        neighbors.append(
-                            {
-                                "node_id": edge["source"],
-                                "node_type": source["type"],
-                                "properties": source["properties"],
-                                "edge_type": edge["type"],
-                                "edge_properties": edge["properties"],
-                                "direction": "incoming",
-                            }
-                        )
+            if (
+                direction in ("incoming", "both")
+                and edge["target"] == node_id
+                and (edge_type is None or edge["type"] == edge_type)
+            ):
+                source = self._memory_graph.nodes.get(edge["source"])
+                if source and not matched:
+                    neighbors.append(
+                        {
+                            "node_id": edge["source"],
+                            "node_type": source["type"],
+                            "properties": source["properties"],
+                            "edge_type": edge["type"],
+                            "edge_properties": edge["properties"],
+                            "direction": "incoming",
+                        }
+                    )
 
         return neighbors
 

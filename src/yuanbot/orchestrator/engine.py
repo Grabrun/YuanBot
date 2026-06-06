@@ -205,10 +205,12 @@ class OrchestratorEngine:
                 message.yuanbot_user_id, profile=user_profile
             )
             # calculate_trust_score 已就地更新 profile，直接同步到 persona
-            if hasattr(self._persona, "relationship_stage"):
-                if user_profile.relationship_stage != getattr(
+            if (
+                hasattr(self._persona, "relationship_stage")
+                and user_profile.relationship_stage != getattr(
                     self._persona, "_relationship_stage", None
-                ):
+                )
+            ):
                     self._persona.relationship_stage = user_profile.relationship_stage  # type: ignore[attr-defined]
                     logger.info(
                         "persona_relationship_stage_updated",

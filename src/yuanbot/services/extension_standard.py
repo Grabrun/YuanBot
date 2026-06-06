@@ -165,16 +165,13 @@ class ExtensionManifest:
             errors.append("Missing required field: version")
 
         # 类型特定检查
-        if self.type == "ai_provider":
-            if not self.supported_models:
-                errors.append("AI provider must declare supported_models")
+        if self.type == "ai_provider" and not self.supported_models:
+            errors.append("AI provider must declare supported_models")
 
-        if self.type == "channel":
-            if not self.platform:
-                errors.append("Channel must declare platform")
+        if self.type == "channel" and not self.platform:
+            errors.append("Channel must declare platform")
 
-        if self.type == "tool":
-            if self.permission_level not in ("safe", "restricted", "dangerous"):
+        if self.type == "tool" and self.permission_level not in ("safe", "restricted", "dangerous"):
                 errors.append(f"Invalid permission_level: {self.permission_level}")
 
         # 版本号格式检查
@@ -379,9 +376,8 @@ class ExtensionValidator:
             if not has_executor and not has_dockerfile:
                 errors.append("Tool extension must contain executor.py or Dockerfile")
 
-        elif manifest.type == "persona":
-            if not (ext_path / "persona.yaml").exists():
-                errors.append("Persona extension must contain persona.yaml")
+        elif manifest.type == "persona" and not (ext_path / "persona.yaml").exists():
+            errors.append("Persona extension must contain persona.yaml")
 
         # 检查 README
         if not (ext_path / "README.md").exists():

@@ -304,15 +304,16 @@ class ProactiveStrategy:
         user_config = await self._get_user_config(user_id)
 
         # 用户级开关
-        if not user_config.get("proactive_greeting_enabled", True):
-            if task_type == "greeting":
-                logger.debug("user_greeting_disabled", user_id=user_id)
-                return False
+        if not user_config.get("proactive_greeting_enabled", True) and task_type == "greeting":
+            logger.debug("user_greeting_disabled", user_id=user_id)
+            return False
 
-        if not user_config.get("event_trigger_enabled", True):
-            if task_type in ("weather", "special_date", "emotion_alert"):
-                logger.debug("user_event_triggers_disabled", user_id=user_id)
-                return False
+        if (
+            not user_config.get("event_trigger_enabled", True)
+            and task_type in ("weather", "special_date", "emotion_alert")
+        ):
+            logger.debug("user_event_triggers_disabled", user_id=user_id)
+            return False
 
         # 3. 免打扰时段检查（全局配置 + 用户自定义）
         user_quiet = self._parse_quiet_hours(user_config.get("quiet_hours", []))
@@ -324,11 +325,10 @@ class ProactiveStrategy:
             # 无用户自定义，使用全局配置
             in_quiet = self._is_quiet_hours()
 
-        if in_quiet:
+        if in_quiet and task_type not in ("care", "emotion_alert"):
             # 高优先级事件可豁免免打扰
-            if task_type not in ("care", "emotion_alert"):
-                logger.debug("quiet_hours", user_id=user_id, task_type=task_type)
-                return False
+            logger.debug("quiet_hours", user_id=user_id, task_type=task_type)
+            return False
 
         # 4. 每日次数限制（取全局和用户配置的较小值）
         user_max = user_config.get("max_proactive_per_day", self._config.max_per_day)

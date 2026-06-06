@@ -19,6 +19,7 @@
 from __future__ import annotations
 
 import asyncio
+import itertools
 import json
 import math
 from collections import defaultdict
@@ -713,7 +714,8 @@ class MemoryManager:
             self.get_semantic_memories(user_id),
         )
 
-        all_memories = episodic + fact + semantic
+        # 使用 itertools.chain 避免创建临时拼接列表
+        all_memories = itertools.chain(episodic, fact, semantic)
 
         # 如果有向量存储且有 embedding，先进行向量检索
         vector_results: dict[str, float] = {}

@@ -160,10 +160,7 @@ class ConfigWatcher:
             return fnmatch(relative_str, pattern)
 
         # 前缀匹配（如 "Providers" 匹配 "Providers/openai.yaml"）
-        if relative_str.startswith(pattern.rstrip("/*")):
-            return True
-
-        return False
+        return relative_str.startswith(pattern.rstrip("/*"))
 
     async def _watch_loop(self) -> None:
         """配置监听主循环"""
