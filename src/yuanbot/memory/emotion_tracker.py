@@ -123,6 +123,9 @@ _COMFORT_EMOTIONS: frozenset[EmotionCategory] = frozenset({
 _NEGATION_POSITIVE_EMOTIONS: frozenset[str] = frozenset({"joy", "trust", "anticipation"})
 _NEGATION_NEGATIVE_EMOTIONS: frozenset[str] = frozenset({"sadness", "anger", "fear", "disgust"})
 
+# 预编译正则表达式（避免每次 _extract_keywords 调用时重新编译）
+_NON_WORD_PATTERN: re.Pattern[str] = re.compile(r"[^\w\s]")
+
 
 class EmotionTracker:
     """情感追踪系统
@@ -355,17 +358,17 @@ class EmotionTracker:
 
     def _extract_keywords(self, text: str) -> list[str]:
         """提取文本中的关键词（简化实现）"""
-        # 移除标点符号
-        text_clean = re.sub(r"[^\w\s]", "", text)
+        # 移除标点符号（使用预编译正则）
+        text_clean = _NON_WORD_PATTERN.sub("", text)
         # 分词（简化：按空格分割，中文按字符）
         words = [word for word in text_clean.split() if len(word) > 1]
         # 对于中文，提取2-4字的词
-        for i in range(len(text_clean) - 1):
-            for length in [2, 3, 4]:
-                if i + length <= len(text_clean):
-                    candidate = text_clean[i : i + length]
-                    if len(candidate) >= 2:
-                        words.append(candidate)
+        text_len = len(text_clean)
+        for i in range(text_len - 1):
+            end = min(i + 4, text_len)
+            words.extend(
+                text_clean[i : i + length] for length in range(2, end - i + 1)
+            )
         return list(set(words))[:5]  # 返回最多5个关键词
 
     async def get_session_emotion_summary(self, session_id: str) -> dict[str, Any]:

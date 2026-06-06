@@ -419,11 +419,9 @@ class MemoryManager:
             if category in ("important_date", "personal_info"):
                 is_date = True
 
-            # 2. key 包含日期相关关键词
-            date_keywords = ("birthday", "anniversary", "interview_date",
-                             "生日", "纪念日", "面试")
+            # 2. key 包含日期相关关键词（使用模块级常量）
             all_entities = " ".join(fact.key_entities) if fact.key_entities else ""
-            if any(kw in all_entities for kw in date_keywords):
+            if any(kw in all_entities for kw in _DATE_KEYWORDS):
                 is_date = True
 
             if not is_date:
