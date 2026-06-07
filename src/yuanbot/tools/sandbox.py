@@ -550,11 +550,8 @@ class WasmSandboxExecutor:
             param_bytes = params_json.encode("utf-8")
             # 调用 malloc 或使用固定偏移
             malloc = exports.get("malloc") or exports.get("allocate")
-            if malloc:
-                param_ptr = malloc(store, len(param_bytes))
-            else:
-                # 使用偏移 1024 作为默认写入位置（跳过前 1KB 保留区）
-                param_ptr = 1024
+            # 使用偏移 1024 作为默认写入位置（跳过前 1KB 保留区）
+            param_ptr = malloc(store, len(param_bytes)) if malloc else 1024
 
             # 写入 memory
             mem_data = memory.data_ptr(store)

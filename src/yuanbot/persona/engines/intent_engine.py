@@ -103,15 +103,15 @@ _INTENT_PATTERNS: dict[str, dict[str, Any]] = {
     },
 }
 
-# 命令模式（高置信度直接匹配）
-_COMMAND_PATTERNS: dict[str, str] = {
-    r"^/set_reminder": "set_reminder",
-    r"^/search": "search",
-    r"^/translate": "translate",
-    r"^/help": "help",
-    r"^/status": "status",
-    r"^/memory": "memory_query",
-}
+# 命令模式（高置信度直接匹配，预编译正则）
+_COMMAND_PATTERNS: list[tuple[re.Pattern[str], str]] = [
+    (re.compile(r"^/set_reminder"), "set_reminder"),
+    (re.compile(r"^/search"), "search"),
+    (re.compile(r"^/translate"), "translate"),
+    (re.compile(r"^/help"), "help"),
+    (re.compile(r"^/status"), "status"),
+    (re.compile(r"^/memory"), "memory_query"),
+]
 
 
 class IntentEngine:
@@ -141,9 +141,9 @@ class IntentEngine:
         text_clean = text.strip()
         text_lower = text_clean.lower()
 
-        # 1. 命令模式匹配（高置信度）
-        for pattern, intent in _COMMAND_PATTERNS.items():
-            if re.match(pattern, text_clean):
+        # 1. 命令模式匹配（高置信度，使用预编译正则）
+        for pattern, intent in _COMMAND_PATTERNS:
+            if pattern.match(text_clean):
                 return IntentResult(
                     primary=intent,
                     confidence=0.99,

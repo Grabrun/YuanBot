@@ -1,9 +1,9 @@
-# 🌸 YuanBot 设计文档符合度审查报告 v25
+# 🌸 YuanBot 设计文档符合度审查报告 v26
 
 **审查日期**: 2026-06-07
 **审查范围**: docs/ 目录下 17 份设计文档 vs src/ + configs/ + tests/ + webui/ 实际代码
 **项目版本**: v1.5.0
-**上次审查**: v24 (2026-06-06),总体 ~100%
+**上次审查**: v25 (2026-06-07),总体 ~100%
 
 ---
 
@@ -566,7 +566,7 @@
 
 ## 与上次检查对比
 
-| 指标 | v1 | v2 | v3 | v4 | v5 | v6 | v7 | v10 | v12 | v13 | v15 | v18 | v19 | v20 | v23 | v24 (本次) | 变化 |
+| 指标 | v1 | v2 | v3 | v4 | v5 | v6 | v7 | v10 | v12 | v13 | v15 | v18 | v19 | v20 | v23 | v26 (本次) | 变化 |
 |------|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----------|------|
 | 总体符合度 | ~77% | ~88% | ~91% | ~93% | ~95% | ~97% | ~98% | ~99.8% | ~100% | ~100% | ~100% | ~100% | ~100% | ~100% | ~100% | **~100%** | — |
 | 接入与通信 | 85% | 90% | 95% | 95% | 95% | 95% | 95% | 97% | 97% | 97% | 97% | 97% | 97% | **97%** | — |
@@ -1517,6 +1517,56 @@
 | 系统 | v24 | v25 | 变化 |
 |------|------|------|------|
 | **总体** | **~100%** | **~100%** | — (代码质量 + 内存优化，无功能变更) |
+
+### 剩余待完成项
+
+| 优先级 | 项目 | 预估工作量 | 类型 |
+|--------|------|----------|------|
+| P2 | 本地意图模型 (bert-base ONNX) | 2-3 天 | 外部 ML 依赖 |
+
+---
+
+## v26 更新摘要
+
+本次审查在总体符合度已达 ~100% 的情况下，聚焦消除冗余计算（DomainMatcher 重复调用）、命令正则预编译、只读查询优化，以及修复 11 项 SIM/E501 lint 警告。
+
+### v26 性能优化
+
+1. **DomainMatcher 单次调用** — `persona/engines/dialogue_decision.py` 将 `DomainMatcher.match()` 从 `_recommend_skills()` 和 `_recommend_tools()` 两次独立调用合并为 `decide()` 中一次调用，结果传递给两个方法。每条消息处理减少 1 次三维加权评分计算。提取 `_DOMAIN_SKILL_MAP` 为类级常量
+2. **命令正则预编译** — `persona/engines/intent_engine.py` 将 `_COMMAND_PATTERNS` 从 `dict[str, str]`（每次 `re.match()` 隐式编译）改为 `list[tuple[re.Pattern, str]]` 预编译模式，使用 `pattern.match()` 直接匹配
+3. **只读用户画像获取** — `memory/manager.py` 新增 `_get_user_profile_readonly()` 方法，`get_memory_stats()` 调用此方法替代 `get_or_create_user_profile()`，避免统计查询时意外递增交互计数
+
+### v26 代码质量
+
+1. **SIM108 三元表达式 (2 处)** — `dingtalk_adapter.py`、`sandbox.py` 简化 if-else 为三元
+2. **SIM102 合并嵌套 if** — `web_adapter.py` 会话清理条件合并
+3. **SIM114 合并 if 分支 (2 处)** — `backup.py` 恢复过滤逻辑简化
+4. **SIM117 合并嵌套 with (6 处)** — `mysql_store.py` 将 `async with pool.acquire() as conn: async with conn.cursor() as cursor:` 合并为 `async with pool.acquire() as conn, conn.cursor() as cursor:`
+5. **E501 行长修复 (3 处)** — `web_adapter.py`、`backup.py` 长行换行
+
+### 修改的源文件
+
+- `src/yuanbot/persona/engines/dialogue_decision.py` — DomainMatcher 单次调用 + `_DOMAIN_SKILL_MAP` 类常量
+- `src/yuanbot/persona/engines/intent_engine.py` — 命令正则预编译
+- `src/yuanbot/memory/manager.py` — `_get_user_profile_readonly()` 只读方法
+- `src/yuanbot/adapters/channel/dingtalk_adapter.py` — SIM108 三元
+- `src/yuanbot/adapters/channel/web_adapter.py` — SIM102 合并嵌套 if + E501
+- `src/yuanbot/infrastructure/backup.py` — SIM114 合并分支 + E501
+- `src/yuanbot/infrastructure/mysql_store.py` — SIM117 合并嵌套 with (6 处)
+- `src/yuanbot/tools/sandbox.py` — SIM108 三元
+
+### 代码质量
+
+- Ruff lint (src/): All checks passed
+- PERF lint: 0 issues
+- SIM lint: 0 issues (fixable)
+- 测试: 1346 passed, 72 warnings
+
+### 符合度变化
+
+| 系统 | v25 | v26 | 变化 |
+|------|------|------|------|
+| **总体** | **~100%** | **~100%** | — (性能优化 + 代码质量，无功能变更) |
 
 ### 剩余待完成项
 

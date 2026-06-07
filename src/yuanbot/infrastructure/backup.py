@@ -273,9 +273,8 @@ class BackupManager:
                     name = member.name
                     if name == "backup_meta.json":
                         continue
-                    if restore_data and name.startswith("data/"):
-                        restored_files.append(name)
-                    elif restore_configs and name.startswith("configs/"):
+                    if ((restore_data and name.startswith("data/"))
+                            or (restore_configs and name.startswith("configs/"))):
                         restored_files.append(name)
             return {
                 "success": True,
@@ -292,11 +291,10 @@ class BackupManager:
                     continue
 
                 # 过滤要恢复的目录
-                should_restore = False
-                if restore_data and name.startswith("data/"):
-                    should_restore = True
-                elif restore_configs and name.startswith("configs/"):
-                    should_restore = True
+                should_restore = (
+                    (restore_data and name.startswith("data/"))
+                    or (restore_configs and name.startswith("configs/"))
+                )
 
                 if not should_restore:
                     continue

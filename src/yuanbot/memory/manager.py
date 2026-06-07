@@ -1040,6 +1040,15 @@ class MemoryManager:
         profile.total_interactions += 1
         return profile
 
+    async def _get_user_profile_readonly(self, user_id: str) -> UserProfile | None:
+        """只读获取用户画像（不更新交互计数，用于统计查询）"""
+        if self.has_persistence:
+            row = await self._db.sqlite.get_user_profile(user_id)
+            if row:
+                return self._row_to_user_profile(row)
+            return None
+        return self._user_profiles.get(user_id)
+
     async def update_relationship_stage(
         self,
         user_id: str,
@@ -1152,7 +1161,7 @@ class MemoryManager:
             "semantic_memories": semantic_count,
             "emotion_records": len(self._emotion_tracker._records.get(user_id, [])),
             "emotion_patterns": len(self._emotion_tracker._patterns.get(user_id, [])),
-            "user_profile": await self.get_or_create_user_profile(user_id)
+            "user_profile": await self._get_user_profile_readonly(user_id)
             if self.has_persistence
             else self._user_profiles.get(user_id),
         }

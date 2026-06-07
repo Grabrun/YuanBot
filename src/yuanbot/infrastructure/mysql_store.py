@@ -253,21 +253,20 @@ class MySQLStore:
         category: str | None = None,
     ) -> list[dict[str, Any]]:
         """获取用户的事实记忆"""
-        async with self._pool.acquire() as conn:
-            async with conn.cursor() as cursor:
-                if category:
-                    await cursor.execute(
-                        "SELECT * FROM fact_memories"
-                        " WHERE user_id=%s AND category=%s AND is_deleted=0",
-                        (user_id, category),
-                    )
-                else:
-                    await cursor.execute(
-                        "SELECT * FROM fact_memories WHERE user_id=%s AND is_deleted=0",
-                        (user_id,),
-                    )
-                rows = await cursor.fetchall()
-                return self._rows_to_dicts(rows, cursor)
+        async with self._pool.acquire() as conn, conn.cursor() as cursor:
+            if category:
+                await cursor.execute(
+                    "SELECT * FROM fact_memories"
+                    " WHERE user_id=%s AND category=%s AND is_deleted=0",
+                    (user_id, category),
+                )
+            else:
+                await cursor.execute(
+                    "SELECT * FROM fact_memories WHERE user_id=%s AND is_deleted=0",
+                    (user_id,),
+                )
+            rows = await cursor.fetchall()
+            return self._rows_to_dicts(rows, cursor)
 
     async def delete_fact_memory(self, id: str) -> None:
         """软删除事实记忆"""
@@ -352,14 +351,13 @@ class MySQLStore:
             params.append(f"%{topic}%")
 
         where = " AND ".join(conditions)
-        async with self._pool.acquire() as conn:
-            async with conn.cursor() as cursor:
-                await cursor.execute(
-                    f"SELECT * FROM episodic_metadata WHERE {where} ORDER BY created_at DESC",
-                    params,
-                )
-                rows = await cursor.fetchall()
-                return self._rows_to_dicts(rows, cursor)
+        async with self._pool.acquire() as conn, conn.cursor() as cursor:
+            await cursor.execute(
+                f"SELECT * FROM episodic_metadata WHERE {where} ORDER BY created_at DESC",
+                params,
+            )
+            rows = await cursor.fetchall()
+            return self._rows_to_dicts(rows, cursor)
 
     async def update_episodic_access(self, id: str) -> None:
         """更新情景记忆的访问信息"""
@@ -438,15 +436,14 @@ class MySQLStore:
 
     async def get_user_profile(self, user_id: str) -> dict[str, Any] | None:
         """获取用户画像"""
-        async with self._pool.acquire() as conn:
-            async with conn.cursor() as cursor:
-                await cursor.execute(
-                    "SELECT * FROM user_profiles WHERE user_id=%s", (user_id,)
-                )
-                row = await cursor.fetchone()
-                if row is None:
-                    return None
-                return self._row_to_dict(row, cursor)
+        async with self._pool.acquire() as conn, conn.cursor() as cursor:
+            await cursor.execute(
+                "SELECT * FROM user_profiles WHERE user_id=%s", (user_id,)
+            )
+            row = await cursor.fetchone()
+            if row is None:
+                return None
+            return self._row_to_dict(row, cursor)
 
     # ──────────────────────────────────────────
     # 情感记录操作
@@ -507,15 +504,14 @@ class MySQLStore:
         limit: int = 100,
     ) -> list[dict[str, Any]]:
         """获取情感记录"""
-        async with self._pool.acquire() as conn:
-            async with conn.cursor() as cursor:
-                await cursor.execute(
-                    "SELECT * FROM emotion_records"
-                    " WHERE user_id=%s ORDER BY timestamp DESC LIMIT %s",
-                    (user_id, limit),
-                )
-                rows = await cursor.fetchall()
-                return self._rows_to_dicts(rows, cursor)
+        async with self._pool.acquire() as conn, conn.cursor() as cursor:
+            await cursor.execute(
+                "SELECT * FROM emotion_records"
+                " WHERE user_id=%s ORDER BY timestamp DESC LIMIT %s",
+                (user_id, limit),
+            )
+            rows = await cursor.fetchall()
+            return self._rows_to_dicts(rows, cursor)
 
     # ──────────────────────────────────────────
     # 身份映射操作
@@ -556,15 +552,14 @@ class MySQLStore:
         platform_user_id: str,
     ) -> str | None:
         """根据平台用户 ID 获取 YuanBot 用户 ID"""
-        async with self._pool.acquire() as conn:
-            async with conn.cursor() as cursor:
-                await cursor.execute(
-                    "SELECT yuanbot_user_id FROM identity_mappings "
-                    "WHERE platform=%s AND platform_user_id=%s",
-                    (platform, platform_user_id),
-                )
-                row = await cursor.fetchone()
-                return row[0] if row else None
+        async with self._pool.acquire() as conn, conn.cursor() as cursor:
+            await cursor.execute(
+                "SELECT yuanbot_user_id FROM identity_mappings "
+                "WHERE platform=%s AND platform_user_id=%s",
+                (platform, platform_user_id),
+            )
+            row = await cursor.fetchone()
+            return row[0] if row else None
 
     # ──────────────────────────────────────────
     # 主动交互配置操作
@@ -575,29 +570,28 @@ class MySQLStore:
         user_id: str,
     ) -> dict[str, Any] | None:
         """获取用户的主动交互配置"""
-        async with self._pool.acquire() as conn:
-            async with conn.cursor() as cursor:
-                await cursor.execute(
-                    "SELECT * FROM user_proactive_settings WHERE user_id=%s",
-                    (user_id,),
-                )
-                row = await cursor.fetchone()
-                if not row:
-                    return None
+        async with self._pool.acquire() as conn, conn.cursor() as cursor:
+            await cursor.execute(
+                "SELECT * FROM user_proactive_settings WHERE user_id=%s",
+                (user_id,),
+            )
+            row = await cursor.fetchone()
+            if not row:
+                return None
 
-                result = self._row_to_dict(row, cursor)
-                # 解析 JSON 字段
-                for field_name in ("quiet_hours", "important_dates"):
-                    if field_name in result and isinstance(result[field_name], str):
-                        try:
-                            result[field_name] = json.loads(result[field_name])
-                        except (json.JSONDecodeError, TypeError):
-                            pass
-                # 转换布尔字段
-                for field_name in ("proactive_greeting_enabled", "event_trigger_enabled"):
-                    if field_name in result:
-                        result[field_name] = bool(result[field_name])
-                return result
+            result = self._row_to_dict(row, cursor)
+            # 解析 JSON 字段
+            for field_name in ("quiet_hours", "important_dates"):
+                if field_name in result and isinstance(result[field_name], str):
+                    try:
+                        result[field_name] = json.loads(result[field_name])
+                    except (json.JSONDecodeError, TypeError):
+                        pass
+            # 转换布尔字段
+            for field_name in ("proactive_greeting_enabled", "event_trigger_enabled"):
+                if field_name in result:
+                    result[field_name] = bool(result[field_name])
+            return result
 
     async def save_user_proactive_settings(
         self,

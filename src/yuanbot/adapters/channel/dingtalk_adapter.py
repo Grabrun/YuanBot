@@ -641,10 +641,7 @@ class DingTalkAdapter(BaseChannelAdapter):
         # 分段发送
         chunks = self._split_text(text, max_len=20000)
         for chunk in chunks:
-            if scene == "single":
-                target_id = f"session:{sender_id}"
-            else:
-                target_id = f"group:{conversation_id}"
+            target_id = f"session:{sender_id}" if scene == "single" else f"group:{conversation_id}"
 
             result = await self.send_message(
                 target_id,
