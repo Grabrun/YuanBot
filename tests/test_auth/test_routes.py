@@ -23,7 +23,7 @@ def app(tmp_path):
     conv_store = ConversationStore(data_dir=tmp_path)
 
     # 初始化认证
-    auth_manager = AuthManager(secret_key="test-secret-key", token_expire_hours=1)
+    auth_manager = AuthManager(secret_key="test-secret-key-for-jwt-auth-32bytes", token_expire_hours=1)
     auth_manager.set_user_store(user_store)
 
     # 注册路由

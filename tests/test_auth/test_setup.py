@@ -22,7 +22,7 @@ def app(tmp_path):
     """创建测试用 FastAPI 应用（仅认证路由）"""
     application = FastAPI()
     user_store = UserStore(data_dir=tmp_path)
-    auth_manager = AuthManager(secret_key="test-secret", token_expire_hours=1)
+    auth_manager = AuthManager(secret_key="test-secret-key-for-jwt-auth-32b", token_expire_hours=1)
     auth_manager.set_user_store(user_store)
     application.include_router(auth_router)
     init_auth_manager(auth_manager)

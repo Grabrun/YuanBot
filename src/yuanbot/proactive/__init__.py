@@ -6,6 +6,7 @@
 from yuanbot.proactive.event_engine import EventEngine, EventOccurrence, EventTrigger, EventType
 from yuanbot.proactive.scheduler import ProactiveScheduler, ScheduledTask
 from yuanbot.proactive.strategy import ProactiveConfig, ProactiveDecision, ProactiveStrategy
+from yuanbot.proactive.trigger import ProactiveTrigger, TriggerManager, TriggerResult
 
 __all__ = [
     "EventEngine",
@@ -16,5 +17,8 @@ __all__ = [
     "ProactiveDecision",
     "ProactiveScheduler",
     "ProactiveStrategy",
+    "ProactiveTrigger",
     "ScheduledTask",
+    "TriggerManager",
+    "TriggerResult",
 ]

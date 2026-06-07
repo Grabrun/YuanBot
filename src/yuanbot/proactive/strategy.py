@@ -330,6 +330,22 @@ class ProactiveStrategy:
             logger.debug("quiet_hours", user_id=user_id, task_type=task_type)
             return False
 
+        # 3.5 动态问候时间窗口检查
+        # 设计参考: proactive-companion-system.md 3.2
+        # 根据用户作息习惯（wake_up_time/sleep_time）动态调整问候时间窗口
+        if task_type == "greeting":
+            wake_time = user_config.get("custom_wake_up_time")
+            sleep_time = user_config.get("custom_sleep_time")
+            if wake_time and sleep_time:
+                if not self._is_in_greeting_window(wake_time, sleep_time):
+                    logger.debug(
+                        "greeting_time_window_miss",
+                        user_id=user_id,
+                        wake_time=wake_time,
+                        sleep_time=sleep_time,
+                    )
+                    return False
+
         # 4. 每日次数限制（取全局和用户配置的较小值）
         user_max = user_config.get("max_proactive_per_day", self._config.max_per_day)
         effective_max = min(self._config.max_per_day, user_max)
@@ -677,6 +693,41 @@ class ProactiveStrategy:
             return start_hour <= current_hour < end_hour
         else:
             return current_hour >= start_hour or current_hour < end_hour
+
+    @staticmethod
+    def _is_in_greeting_window(wake_time_str: str, sleep_time_str: str) -> bool:
+        """判断当前时间是否在用户问候窗口内
+
+        问候窗口为起床时间后 2 小时内，且在睡眠时间之前。
+        例如 wake_time="07:30", sleep_time="23:00" 则窗口为 07:30-09:30。
+        超出窗口的问候会被跳过，避免在不合适的时间打扰用户。
+
+        设计参考: proactive-companion-system.md 3.2 动态时间调整
+        """
+        try:
+            now = datetime.now()
+            wake_parts = wake_time_str.split(":")
+            sleep_parts = sleep_time_str.split(":")
+            wake_hour = int(wake_parts[0])
+            wake_min = int(wake_parts[1]) if len(wake_parts) > 1 else 0
+            sleep_hour = int(sleep_parts[0])
+            sleep_min = int(sleep_parts[1]) if len(sleep_parts) > 1 else 0
+
+            current_minutes = now.hour * 60 + now.minute
+            wake_minutes = wake_hour * 60 + wake_min
+            sleep_minutes = sleep_hour * 60 + sleep_min
+            # 问候窗口: 起床后 2 小时内
+            greeting_end = wake_minutes + 120
+
+            if wake_minutes <= sleep_minutes:
+                # 正常作息 (e.g., 07:00 - 23:00)
+                return wake_minutes <= current_minutes < min(greeting_end, sleep_minutes)
+            else:
+                # 跨午夜作息 (e.g., 23:00 - 07:00)
+                return wake_minutes <= current_minutes < wake_minutes + 120
+        except (ValueError, IndexError):
+            # 解析失败时不限制
+            return True
 
     def _reset_daily_counts_if_needed(self) -> None:
         """如果日期变更，重置每日计数"""

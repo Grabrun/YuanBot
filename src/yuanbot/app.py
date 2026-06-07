@@ -34,8 +34,9 @@ from yuanbot.orchestrator.engine import OrchestratorEngine
 from yuanbot.persona.engines.context_builder import ContextBuilder
 from yuanbot.persona.engines.dialogue_decision import DialogueDecisionEngine
 from yuanbot.proactive.event_engine import EventEngine
-from yuanbot.proactive.scheduler import ProactiveScheduler
+from yuanbot.proactive.scheduler import ProactiveScheduler, ScheduledTask
 from yuanbot.proactive.strategy import ProactiveStrategy
+from yuanbot.proactive.trigger import TriggerManager
 from yuanbot.providers.manager import ProviderManager
 from yuanbot.providers.registry import ProviderRegistry
 from yuanbot.services.ai_service import AIService
@@ -247,6 +248,14 @@ def create_app(config: YuanBotConfig) -> FastAPI:
         await proactive_scheduler.start()
         await event_engine.start()
 
+        # 加载自定义触发器插件
+        trigger_mgr = app.state.trigger_manager
+        plugins_dir = Path("configs/Plugins/proactive_triggers")
+        if plugins_dir.exists():
+            loaded = await trigger_mgr.load_plugins(plugins_dir)
+            if loaded:
+                print(f"  ✅ 已加载 {loaded} 个自定义触发器插件")
+
         # 启动配置热加载监听器
         await config_watcher.start()
         print("🌸 YuanBot 启动完成（含主动陪伴系统 + 配置热加载）")
@@ -293,6 +302,11 @@ def create_app(config: YuanBotConfig) -> FastAPI:
     app.state.proactive_scheduler = proactive_scheduler
     app.state.proactive_strategy = proactive_strategy
     app.state.event_engine = event_engine
+
+    # 初始化自定义触发器管理器
+    trigger_manager = TriggerManager()
+    app.state.trigger_manager = trigger_manager
+
     app.state.config_watcher = config_watcher
     app.state.auth_manager = auth_manager
     app.state.user_store = user_store
@@ -1069,6 +1083,193 @@ def _register_routes(
         return {
             "daily_stats": strategy.get_daily_stats(),
             "config": strategy.get_config().__dict__,
+        }
+
+    @app.post("/api/proactive/trigger")
+    async def trigger_proactive_message(request: dict[str, Any]):
+        """手动触发主动消息
+
+        请求体：
+            {
+                "user_id": "u_abc123",
+                "task_type": "greeting",
+                "message": "可选的自定义消息"
+            }
+        """
+        from fastapi.responses import JSONResponse
+
+        strategy: ProactiveStrategy = app.state.proactive_strategy
+
+        user_id = request.get("user_id")
+        task_type = request.get("task_type", "greeting")
+        custom_message = request.get("message")
+
+        if not user_id:
+            return JSONResponse(status_code=400, content={"error": "user_id is required"})
+
+        # 克制策略检查
+        should = await strategy.should_send(user_id, task_type)
+        if not should:
+            return JSONResponse(
+                status_code=429,
+                content={
+                    "error": "blocked by proactive strategy",
+                    "reason": "quiet_hours_or_limit",
+                },
+            )
+
+        # 生成消息
+        if custom_message:
+            message_text = custom_message
+        else:
+            message_text = await strategy.generate_message(user_id, task_type)
+
+        return {
+            "status": "triggered",
+            "user_id": user_id,
+            "task_type": task_type,
+            "message": message_text,
+        }
+
+    @app.post("/api/proactive/tasks")
+    async def create_proactive_task(request: dict[str, Any]):
+        """注册新的定时任务
+
+        请求体：
+            {
+                "name": "custom_reminder",
+                "trigger": "0 9 * * *",
+                "task_type": "cron",
+                "target_users": ["u_abc123"],
+                "priority": 5,
+                "metadata": {"action": "custom"}
+            }
+        """
+        from fastapi.responses import JSONResponse
+
+        scheduler: ProactiveScheduler = app.state.proactive_scheduler
+
+        name = request.get("name", "")
+        trigger_expr = request.get("trigger", "")
+        task_type = request.get("task_type", "cron")
+
+        if not trigger_expr:
+            return JSONResponse(status_code=400, content={"error": "trigger is required"})
+
+        task = ScheduledTask(
+            task_type=task_type,
+            trigger=trigger_expr,
+            name=name,
+            target_users=request.get("target_users", []),
+            priority=request.get("priority", 5),
+            max_retries=request.get("max_retries", 3),
+            metadata=request.get("metadata", {}),
+        )
+        task_id = scheduler.register_task(task)
+
+        return {
+            "status": "created",
+            "task_id": task_id,
+            "name": name,
+            "next_run": task.next_run.isoformat() if task.next_run else None,
+        }
+
+    @app.put("/api/proactive/tasks/{task_id}")
+    async def update_proactive_task(task_id: str, request: dict[str, Any]):
+        """更新任务（启用/禁用/修改优先级）
+
+        请求体：
+            {
+                "enabled": true,
+                "priority": 7
+            }
+        """
+        from fastapi.responses import JSONResponse
+
+        scheduler: ProactiveScheduler = app.state.proactive_scheduler
+        task = scheduler.get_task(task_id)
+
+        if not task:
+            return JSONResponse(status_code=404, content={"error": "task not found"})
+
+        if "enabled" in request:
+            if request["enabled"]:
+                scheduler.enable_task(task_id)
+            else:
+                scheduler.disable_task(task_id)
+
+        if "priority" in request:
+            task.priority = int(request["priority"])
+
+        if "name" in request:
+            task.name = request["name"]
+
+        return {
+            "status": "updated",
+            "task_id": task_id,
+            "enabled": task.enabled,
+            "priority": task.priority,
+            "next_run": task.next_run.isoformat() if task.next_run else None,
+        }
+
+    @app.delete("/api/proactive/tasks/{task_id}")
+    async def delete_proactive_task(task_id: str):
+        """删除定时任务"""
+        from fastapi.responses import JSONResponse
+
+        scheduler: ProactiveScheduler = app.state.proactive_scheduler
+        removed = scheduler.unregister_task(task_id)
+
+        if not removed:
+            return JSONResponse(status_code=404, content={"error": "task not found"})
+
+        return {"status": "deleted", "task_id": task_id}
+
+    @app.get("/api/proactive/triggers")
+    async def get_proactive_triggers():
+        """获取已注册的自定义触发器列表"""
+        trigger_mgr = getattr(app.state, "trigger_manager", None)
+        if not trigger_mgr:
+            return {"triggers": []}
+
+        triggers_info = []
+        for name, trigger_obj in trigger_mgr._triggers.items():
+            triggers_info.append({
+                "name": name,
+                "event_type": trigger_obj.get_event_type(),
+                "priority": trigger_obj.get_priority(),
+            })
+        return {"triggers": triggers_info}
+
+    @app.post("/api/proactive/triggers/{name}/check")
+    async def check_proactive_trigger(name: str, request: dict[str, Any]):
+        """运行指定触发器的检查
+
+        请求体：
+            {
+                "user_id": "u_abc123"
+            }
+        """
+        from fastapi.responses import JSONResponse
+
+        trigger_mgr = getattr(app.state, "trigger_manager", None)
+        if not trigger_mgr:
+            return JSONResponse(status_code=404, content={"error": "trigger manager not available"})
+
+        trigger = trigger_mgr.get(name)
+        if not trigger:
+            return JSONResponse(status_code=404, content={"error": f"trigger '{name}' not found"})
+
+        user_id = request.get("user_id")
+        if not user_id:
+            return JSONResponse(status_code=400, content={"error": "user_id is required"})
+
+        result = await trigger.check(user_id)
+        return {
+            "triggered": result.triggered,
+            "event_type": result.event_type,
+            "data": result.data,
+            "priority": result.priority,
         }
 
     @app.get("/api/providers")
