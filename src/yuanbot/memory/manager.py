@@ -19,6 +19,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import itertools
 import json
 import math
@@ -790,10 +791,8 @@ class MemoryManager:
 
         # 批量更新访问计数（单次 DB 提交）
         if ids_to_update:
-            try:
+            with contextlib.suppress(Exception):
                 await self._db.sqlite.batch_update_episodic_access(ids_to_update)
-            except Exception:
-                pass
 
         results.sort(key=lambda r: r.score, reverse=True)
         return results[:max_results], current_emotion

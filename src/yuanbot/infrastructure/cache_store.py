@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import time
 from typing import Any
 
@@ -67,10 +68,8 @@ class CacheStore:
     async def close(self) -> None:
         """关闭缓存存储"""
         if self._redis:
-            try:
+            with contextlib.suppress(Exception):
                 await self._redis.close()
-            except Exception:
-                pass
             self._redis = None
         self._memory_cache = None
         self._initialized = False

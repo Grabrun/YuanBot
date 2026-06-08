@@ -500,26 +500,12 @@ class SandboxClient:
 
     async def list_tools(self) -> list[ToolInfoData]:
         """列出可用工具"""
-        if _HAS_GRPC and self._connected and self._channel:
-            try:
-                # stub = pb2_grpc.ToolExecutorServiceStub(self._channel)
-                # response = await stub.ListTools(pb2.ListToolsRequest())
-                # return [...]
-                pass
-            except Exception:
-                pass
+        # TODO: gRPC ListTools 实现
         return []
 
     async def health_check(self) -> dict[str, Any]:
         """健康检查"""
-        if _HAS_GRPC and self._connected and self._channel:
-            try:
-                # stub = pb2_grpc.ToolExecutorServiceStub(self._channel)
-                # response = await stub.HealthCheck(pb2.HealthCheckRequest())
-                # return {...}
-                pass
-            except Exception:
-                pass
+        # TODO: gRPC HealthCheck 实现
         return {"healthy": False, "connected": self._connected}
 
     async def close(self) -> None:

@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 from collections.abc import Callable, Coroutine
 from pathlib import Path
 from typing import Any
@@ -85,10 +86,8 @@ class ConfigWatcher:
         self._running = False
         if self._loop_task and not self._loop_task.done():
             self._loop_task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await self._loop_task
-            except asyncio.CancelledError:
-                pass
         self._loop_task = None
         logger.info("config_watcher_stopped")
 
@@ -98,10 +97,8 @@ class ConfigWatcher:
             return
 
         for yaml_file in self._config_dir.rglob("*.yaml"):
-            try:
+            with contextlib.suppress(OSError):
                 self._file_mtimes[str(yaml_file)] = yaml_file.stat().st_mtime
-            except OSError:
-                pass
 
     def _detect_changes(self) -> list[Path]:
         """检测配置文件变化

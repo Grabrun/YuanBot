@@ -336,8 +336,7 @@ class ProactiveStrategy:
         if task_type == "greeting":
             wake_time = user_config.get("custom_wake_up_time")
             sleep_time = user_config.get("custom_sleep_time")
-            if wake_time and sleep_time:
-                if not self._is_in_greeting_window(wake_time, sleep_time):
+            if wake_time and sleep_time and not self._is_in_greeting_window(wake_time, sleep_time):
                     logger.debug(
                         "greeting_time_window_miss",
                         user_id=user_id,
@@ -608,16 +607,21 @@ class ProactiveStrategy:
             return context
 
         try:
-            profile = await self._memory_manager.get_or_create_user_profile(user_id)
+            # 四个 DB 调用互相独立，并行执行减少延迟
+            profile, facts, emotion_trend, user_config = await asyncio.gather(
+                self._memory_manager.get_or_create_user_profile(user_id),
+                self._memory_manager.get_fact_memories(user_id),
+                self._memory_manager.get_emotion_trend(user_id, days=3),
+                self._get_user_config(user_id),
+            )
+
             context["display_name"] = getattr(profile, "display_name", None)
             context["relationship_stage"] = getattr(profile, "relationship_stage", "initial")
             context["preferences"] = getattr(profile, "preferences", {})
 
-            facts = await self._memory_manager.get_fact_memories(user_id)
             if facts:
                 context["recent_facts"] = [f.content for f in facts[-5:]]
 
-            emotion_trend = await self._memory_manager.get_emotion_trend(user_id, days=3)
             if emotion_trend:
                 context["emotion_trend"] = {
                     "dominant": emotion_trend.dominant_emotion.value
@@ -626,8 +630,6 @@ class ProactiveStrategy:
                     "stability": emotion_trend.mood_stability,
                 }
 
-            # 获取用户级主动配置中的重要日期
-            user_config = await self._get_user_config(user_id)
             context["important_dates"] = user_config.get("important_dates", [])
             context["custom_wake_up_time"] = user_config.get("custom_wake_up_time")
             context["custom_sleep_time"] = user_config.get("custom_sleep_time")

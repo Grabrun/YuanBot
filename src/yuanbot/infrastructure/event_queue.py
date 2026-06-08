@@ -9,6 +9,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import time
 import uuid
@@ -118,10 +119,8 @@ class MemoryEventQueue:
         self._running = False
         for topic, task in self._consumer_tasks.items():
             task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await task
-            except asyncio.CancelledError:
-                pass
             logger.info("consumer_stopped", topic=topic)
         self._consumer_tasks.clear()
 
@@ -216,12 +215,10 @@ class RedisEventQueue:
 
             # 创建消费者组
             for topic in self._handlers:
-                try:
+                with contextlib.suppress(Exception):  # 组已存在
                     await self._redis.xgroup_create(
                         topic, self._consumer_group, id="0", mkstream=True
                     )
-                except Exception:
-                    pass  # 组已存在
 
                 task = asyncio.create_task(self._consume_loop(topic))
                 self._consumer_tasks[topic] = task
@@ -242,10 +239,8 @@ class RedisEventQueue:
         self._running = False
         for task in self._consumer_tasks.values():
             task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await task
-            except asyncio.CancelledError:
-                pass
         self._consumer_tasks.clear()
 
         if self._redis:

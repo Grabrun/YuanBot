@@ -71,13 +71,11 @@ class ProactiveTrigger(ABC):
         """触发优先级 1-10，默认 5"""
         return 5
 
-    async def initialize(self, config: dict[str, Any] | None = None) -> None:
+    async def initialize(self, config: dict[str, Any] | None = None) -> None:  # noqa: B027
         """可选的初始化钩子，在加载后调用"""
-        pass
 
-    async def shutdown(self) -> None:
+    async def shutdown(self) -> None:  # noqa: B027
         """可选的关闭钩子，在卸载前调用"""
-        pass
 
 
 class TriggerManager:

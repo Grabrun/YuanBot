@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import time
 from collections.abc import Awaitable, Callable
@@ -315,15 +316,11 @@ class DingTalkAdapter(BaseChannelAdapter):
 
         except Exception as exc:
             logger.error("dingtalk_webhook_error", error=str(exc))
-            try:
+            with contextlib.suppress(Exception):
                 self._send_http_response(writer, 500, "Internal Server Error")
-            except Exception:
-                pass
         finally:
-            try:
+            with contextlib.suppress(Exception):
                 writer.close()
-            except Exception:
-                pass
 
     def _send_http_response(
         self,

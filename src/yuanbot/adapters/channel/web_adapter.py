@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import time
 import uuid
@@ -272,10 +273,8 @@ class WebAdapter(BaseChannelAdapter):
 
     async def _send_error(self, session: WebSession, message: str) -> None:
         """发送错误消息"""
-        try:
+        with contextlib.suppress(Exception):
             await session.ws.send_text(json.dumps({"type": "error", "message": message}))
-        except Exception:
-            pass
 
     async def _cleanup_session(self, session: WebSession) -> None:
         """清理会话"""
@@ -307,10 +306,8 @@ class WebAdapter(BaseChannelAdapter):
         """关闭适配器"""
         if self._ping_task:
             self._ping_task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await self._ping_task
-            except asyncio.CancelledError:
-                pass
 
         # 关闭所有会话
         for session in list(self._sessions.values()):

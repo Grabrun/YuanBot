@@ -10,6 +10,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
 from datetime import datetime
 from typing import Any
@@ -280,10 +281,8 @@ class PrivacyManager:
                 if self._db and hasattr(self._db, "sqlite"):
                     await self._db.sqlite.delete_episodic_metadata(e.id)
                 if self._db and hasattr(self._db, "vector"):
-                    try:
+                    with contextlib.suppress(Exception):
                         await self._db.vector.delete_vector(e.id)
-                    except Exception:
-                        pass
             result["items_deleted"]["episodic_memories"] = len(episodic)
 
             # 删除语义记忆（从事实记忆表中的 semantic category）
@@ -295,10 +294,8 @@ class PrivacyManager:
 
             # 删除用户画像
             if self._db and hasattr(self._db, "sqlite"):
-                try:
+                with contextlib.suppress(Exception):
                     await self._db.sqlite.delete_user_profile(user_id)
-                except Exception:
-                    pass
             result["items_deleted"]["user_profile"] = 1
 
             # 清除内存缓存

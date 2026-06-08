@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import time
 from collections.abc import Awaitable, Callable
@@ -471,10 +472,8 @@ class FeishuAdapter(BaseChannelAdapter):
 
         except Exception as exc:
             logger.error("feishu_webhook_error", error=str(exc))
-            try:
+            with contextlib.suppress(Exception):
                 writer.close()
-            except Exception:
-                pass
 
     async def _handle_event(self, body: dict[str, Any]) -> None:
         """处理飞书事件回调

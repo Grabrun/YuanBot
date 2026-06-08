@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -119,10 +120,8 @@ class ProactiveScheduler:
         self._running = False
         if self._loop_task and not self._loop_task.done():
             self._loop_task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await self._loop_task
-            except asyncio.CancelledError:
-                pass
         self._loop_task = None
         logger.info("scheduler_stopped")
 

@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import uuid
 from collections.abc import Callable, Coroutine
 from dataclasses import dataclass, field
@@ -113,10 +114,8 @@ class EventEngine:
         self._running = False
         if self._loop_task and not self._loop_task.done():
             self._loop_task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await self._loop_task
-            except asyncio.CancelledError:
-                pass
         self._loop_task = None
         logger.info("event_engine_stopped")
 

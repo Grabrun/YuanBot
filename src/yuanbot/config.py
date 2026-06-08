@@ -8,6 +8,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import os
 import re
 from pathlib import Path
@@ -509,15 +510,11 @@ def _set_nested(d: dict, keys: list[str], value: Any) -> None:
     if isinstance(existing, bool):
         value = value.lower() in ("true", "1", "yes")  # type: ignore[assignment]
     elif isinstance(existing, int):
-        try:
+        with contextlib.suppress(ValueError):
             value = int(value)  # type: ignore[assignment]
-        except ValueError:
-            pass
     elif isinstance(existing, float):
-        try:
+        with contextlib.suppress(ValueError):
             value = float(value)  # type: ignore[assignment]
-        except ValueError:
-            pass
     d[keys[-1]] = value
 
 

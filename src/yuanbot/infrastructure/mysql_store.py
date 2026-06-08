@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
 import time
 from typing import Any
@@ -173,11 +174,8 @@ class MySQLStore:
 
                 # 创建索引（忽略已存在的索引）
                 for sql in _CREATE_INDEXES:
-                    try:
+                    with contextlib.suppress(Exception):  # 索引可能已存在
                         await cursor.execute(sql)
-                    except Exception:
-                        # 索引可能已存在，忽略错误
-                        pass
 
             await conn.commit()
 
@@ -583,10 +581,8 @@ class MySQLStore:
             # 解析 JSON 字段
             for field_name in ("quiet_hours", "important_dates"):
                 if field_name in result and isinstance(result[field_name], str):
-                    try:
+                    with contextlib.suppress(json.JSONDecodeError, TypeError):
                         result[field_name] = json.loads(result[field_name])
-                    except (json.JSONDecodeError, TypeError):
-                        pass
             # 转换布尔字段
             for field_name in ("proactive_greeting_enabled", "event_trigger_enabled"):
                 if field_name in result:

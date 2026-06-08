@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import random
 from collections.abc import Awaitable, Callable
@@ -201,16 +202,12 @@ class DiscordAdapter(BaseChannelAdapter):
         """关闭适配器"""
         if self._heartbeat_task:
             self._heartbeat_task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await self._heartbeat_task
-            except asyncio.CancelledError:
-                pass
 
         if self._ws_connection:
-            try:
+            with contextlib.suppress(Exception):
                 await self._ws_connection.close()
-            except Exception:
-                pass
 
         if self._session:
             await self._session.aclose()

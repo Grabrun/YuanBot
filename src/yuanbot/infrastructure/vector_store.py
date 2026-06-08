@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import math
 from dataclasses import dataclass, field
 from typing import Any
@@ -107,10 +108,8 @@ class VectorStore:
     async def close(self) -> None:
         """关闭向量存储"""
         if self._milvus_client:
-            try:
+            with contextlib.suppress(Exception):
                 self._milvus_client.close()
-            except Exception:
-                pass
             self._milvus_client = None
         self._memory_store = None
         self._initialized = False

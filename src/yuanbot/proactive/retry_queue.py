@@ -9,6 +9,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import sqlite3
 import time
@@ -436,10 +437,8 @@ class PersistentRetryQueue:
         self._running = False
         if self._consumer_task and not self._consumer_task.done():
             self._consumer_task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await self._consumer_task
-            except asyncio.CancelledError:
-                pass
         self._consumer_task = None
         logger.info("retry_consumer_stopped")
 
@@ -495,10 +494,8 @@ class PersistentRetryQueue:
     def _row_to_task(self, row: sqlite3.Row) -> RetryTask:
         """将数据库行转换为 RetryTask"""
         metadata = {}
-        try:
+        with contextlib.suppress(json.JSONDecodeError, KeyError):
             metadata = json.loads(row["metadata"])
-        except (json.JSONDecodeError, KeyError):
-            pass
 
         return RetryTask(
             task_id=row["task_id"],

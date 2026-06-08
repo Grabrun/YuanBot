@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import contextlib
 import json
 import time
 from collections.abc import Awaitable, Callable
@@ -745,10 +746,8 @@ class QQAdapter(BaseChannelAdapter):
 
         if self._ws_task and not self._ws_task.done():
             self._ws_task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await self._ws_task
-            except asyncio.CancelledError:
-                pass
 
         if self._client:
             await self._client.aclose()

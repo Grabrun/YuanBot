@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import sqlite3
 import time
 from pathlib import Path
@@ -407,8 +408,6 @@ class DatabaseMigrator:
             self._sqlite_conn.close()
             self._sqlite_conn = None
         if self._mysql_conn:
-            try:
+            with contextlib.suppress(Exception):
                 self._mysql_conn.close()
-            except Exception:
-                pass
             self._mysql_conn = None

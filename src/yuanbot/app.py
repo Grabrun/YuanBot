@@ -9,7 +9,7 @@
 from __future__ import annotations
 
 import os
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -73,10 +73,8 @@ def create_app(config: YuanBotConfig) -> FastAPI:
 
     # 设置默认提供商（从 bot.yaml 读取）
     if hasattr(config, "ai") and hasattr(config.ai, "default_provider"):
-        try:
+        with suppress(ValueError):
             provider_manager.set_default_provider(config.ai.default_provider)
-        except ValueError:
-            pass
 
     ai_service = AIService(
         provider_manager=provider_manager,

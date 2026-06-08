@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import logging.handlers
 import os
@@ -138,12 +139,10 @@ def set_log_level(level: str) -> dict[str, Any]:
         _file_handler.setLevel(numeric_level)
 
     # 调整 structlog 级别
-    try:
+    with contextlib.suppress(Exception):  # structlog 配置可能尚未初始化
         structlog.configure(
             wrapper_class=structlog.make_filtering_bound_logger(numeric_level),
         )
-    except Exception:
-        pass  # structlog 配置可能尚未初始化
 
     old_level = _current_level
     _current_level = level_upper
