@@ -425,76 +425,88 @@ class TTSManager:
         final_rate = rate if rate is not None else resolved_rate
         final_pitch = pitch if pitch is not None else resolved_pitch
 
-        buffer = ""
+        buffer_parts: list[str] = []
+        buffer_len = 0
 
         async for token in text_stream:
-            buffer += token
+            buffer_parts.append(token)
+            buffer_len += len(token)
 
             # 在句末标点或超过阈值时触发合成
             should_flush = False
             if self._SENTENCE_END_RE.search(token):
                 should_flush = True
-            elif len(buffer) >= buffer_threshold:
+            elif buffer_len >= buffer_threshold:
                 # 超过阈值但没有标点，也在逗号处切分
                 should_flush = True
 
-            if should_flush and buffer.strip():
-                # 按句末标点切分，合成完整句子
-                parts = self._SENTENCE_SPLIT_RE.split(buffer)
-                complete = ""
-                remainder = ""
-                for i, part in enumerate(parts):
-                    if self._SENTENCE_END_RE.fullmatch(part):
-                        complete += part
-                    elif i < len(parts) - 1:
-                        # 中间段且后面还有标点 → 包含在完整部分
-                        complete += part
-                    else:
-                        remainder = part
+            if should_flush and buffer_len > 0:
+                buffer = "".join(buffer_parts)
+                if not buffer.strip():
+                    buffer_parts.clear()
+                    buffer_len = 0
+                else:
+                    # 按句末标点切分，合成完整句子
+                    parts = self._SENTENCE_SPLIT_RE.split(buffer)
+                    complete_parts: list[str] = []
+                    remainder = ""
+                    for i, part in enumerate(parts):
+                        if self._SENTENCE_END_RE.fullmatch(part):
+                            complete_parts.append(part)
+                        elif i < len(parts) - 1:
+                            # 中间段且后面还有标点 → 包含在完整部分
+                            complete_parts.append(part)
+                        else:
+                            remainder = part
 
-                if complete.strip():
-                    # 查缓存
-                    cached = self._cache.get(
-                        adapter.engine_id, final_voice, complete,
-                        user_id=user_id,
-                    )
-                    if cached is not None:
-                        yield cached
-                    else:
-                        try:
-                            audio = await adapter.synthesize(
-                                complete, final_voice, final_rate, final_pitch,
-                                output_format,
-                            )
-                            if audio:
-                                self._cache.put(
-                                    adapter.engine_id, final_voice, complete, audio,
-                                    user_id=user_id,
+                    complete = "".join(complete_parts)
+
+                    if complete.strip():
+                        # 查缓存
+                        cached = self._cache.get(
+                            adapter.engine_id, final_voice, complete,
+                            user_id=user_id,
+                        )
+                        if cached is not None:
+                            yield cached
+                        else:
+                            try:
+                                audio = await adapter.synthesize(
+                                    complete, final_voice, final_rate, final_pitch,
+                                    output_format,
                                 )
-                                yield audio
-                        except Exception as e:
-                            logger.warning(
-                                "streaming_buffer_synthesize_failed",
-                                text_preview=complete[:50],
-                                error=str(e),
-                            )
-                buffer = remainder
+                                if audio:
+                                    self._cache.put(
+                                        adapter.engine_id, final_voice, complete, audio,
+                                        user_id=user_id,
+                                    )
+                                    yield audio
+                            except Exception as e:
+                                logger.warning(
+                                    "streaming_buffer_synthesize_failed",
+                                    text_preview=complete[:50],
+                                    error=str(e),
+                                )
+                    buffer_parts = [remainder] if remainder else []
+                    buffer_len = len(remainder)
 
         # 处理剩余缓冲区
-        if buffer.strip():
-            try:
-                audio = await adapter.synthesize(
-                    buffer.strip(), final_voice, final_rate, final_pitch,
-                    output_format,
-                )
-                if audio:
-                    yield audio
-            except Exception as e:
-                logger.warning(
-                    "streaming_buffer_final_synthesize_failed",
-                    text_preview=buffer[:50],
-                    error=str(e),
-                )
+        if buffer_parts:
+            final_text = "".join(buffer_parts).strip()
+            if final_text:
+                try:
+                    audio = await adapter.synthesize(
+                        final_text, final_voice, final_rate, final_pitch,
+                        output_format,
+                    )
+                    if audio:
+                        yield audio
+                except Exception as e:
+                    logger.warning(
+                        "streaming_buffer_final_synthesize_failed",
+                        text_preview=final_text[:50],
+                        error=str(e),
+                    )
 
     # ------------------------------------------------------------------
     # 缓存预热：启动时预加载人格常用问候语到 L1 缓存

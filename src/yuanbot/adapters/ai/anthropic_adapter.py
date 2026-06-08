@@ -108,7 +108,7 @@ class AnthropicAdapter(BaseAIProvider):
                 "Anthropic API key not configured. "
                 "Set YUAN_AI_ANTHROPIC_API_KEY or pass config['api_key']"
             )
-        return ValidationResult(valid=len(errors) == 0, errors=errors)
+        return ValidationResult(valid=not errors, errors=errors)
 
     async def chat_completion(
         self,

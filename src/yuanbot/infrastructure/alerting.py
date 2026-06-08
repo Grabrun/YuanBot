@@ -123,7 +123,7 @@ class WebhookDelivery:
     @property
     def has_targets(self) -> bool:
         """是否有配置的 webhook 端点"""
-        return len(self._urls) > 0
+        return bool(self._urls)
 
     def add_url(self, url: str) -> None:
         """添加 webhook 端点"""

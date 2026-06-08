@@ -103,7 +103,7 @@ class OllamaAdapter(BaseAIProvider):
                 "Ollama default_model or models list not configured. "
                 "Set YUAN_AI_OLLAMA_DEFAULT or pass config['default']"
             )
-        return ValidationResult(valid=len(errors) == 0, errors=errors)
+        return ValidationResult(valid=not errors, errors=errors)
 
     async def chat_completion(
         self,

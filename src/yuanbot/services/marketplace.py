@@ -714,7 +714,7 @@ class ExtensionReviewStore:
             (ext_id,),
         ).fetchall()
 
-        distribution = {i: 0 for i in range(1, 6)}
+        distribution = dict.fromkeys(range(1, 6), 0)
         for r in dist_rows:
             distribution[r["rating"]] = r["cnt"]
 

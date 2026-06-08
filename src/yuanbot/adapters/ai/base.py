@@ -28,7 +28,7 @@ def sanitize_log_data(data: dict[str, Any]) -> dict[str, Any]:
         if isinstance(key, str) and (
             _SENSITIVE_PATTERN.search(key) or key.lower() in _SENSITIVE_KEYS
         ):
-            if isinstance(value, str) and len(value) > 0:
+            if isinstance(value, str) and value:
                 sanitized[key] = "****"
             else:
                 sanitized[key] = value

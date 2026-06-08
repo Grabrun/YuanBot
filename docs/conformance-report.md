@@ -1,9 +1,9 @@
-# 🌸 YuanBot 设计文档符合度审查报告 v28
+# 🌸 YuanBot 设计文档符合度审查报告 v29
 
 **审查日期**: 2026-06-08
 **审查范围**: docs/ 目录下 17 份设计文档 vs src/ + configs/ + tests/ + webui/ 实际代码
 **项目版本**: v1.5.0
-**上次审查**: v27 (2026-06-08),总体 ~100%
+**上次审查**: v28 (2026-06-08),总体 ~100%
 
 ---
 
@@ -566,7 +566,7 @@
 
 ## 与上次检查对比
 
-| 指标 | v1 | v2 | v3 | v4 | v5 | v6 | v7 | v10 | v12 | v13 | v15 | v18 | v19 | v20 | v27 | v28 (本次) | 变化 |
+| 指标 | v1 | v2 | v3 | v4 | v5 | v6 | v7 | v10 | v12 | v13 | v15 | v18 | v19 | v20 | v27 | v29 (本次) | 变化 |
 |------|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----------|------|
 | 总体符合度 | ~77% | ~88% | ~91% | ~93% | ~95% | ~97% | ~98% | ~99.8% | ~100% | ~100% | ~100% | ~100% | ~100% | ~100% | ~100% | ~100% | — |
 | 接入与通信 | 85% | 90% | 95% | 95% | 95% | 95% | 95% | 97% | 97% | 97% | 97% | 97% | 97% | **97%** | — |
@@ -1632,7 +1632,7 @@
 
 ---
 
-## v28 更新摘要
+## v29 更新摘要
 
 本次审查在总体符合度已达 ~100% 的情况下，聚焦代码质量提升和运行效率优化，修复了全部 SIM 类 lint 警告，并将主动消息构建中的 4 次串行 DB 查询改为并行执行。
 
@@ -1660,6 +1660,56 @@
 | 系统 | v27 | v28 | 变化 |
 |------|------|------|------|
 | **总体** | **~100%** | **~100%** | — (代码质量 + 性能优化，无功能变更) |
+
+### 剩余待完成项
+
+| 优先级 | 项目 | 预估工作量 | 类型 |
+|--------|------|----------|------|
+| P2 | 本地意图模型 (bert-base ONNX) | 2-3 天 | 外部 ML 依赖 |
+
+---
+
+## v29 更新摘要
+
+本次审查在总体符合度已达 ~100% 的情况下，聚焦热路径性能优化和代码质量提升。
+
+### v29 性能优化
+
+1. **TTS 流式缓冲区消除 O(n²) 字符串拼接** — `tts/manager.py` `synthesize_streaming_buffered()` 将 `buffer += token` 和 `complete += part` 改为 `list.append()` + `"".join()` 模式。原先每收到一个 token 都创建新字符串对象（O(n²) 总开销），改为列表累积后一次性 join（O(n)），大幅减少长文本流的内存分配和 GC 压力
+2. **实体相似性检测短路优化** — `memory/manager.py` `_is_similar_fact()` 将 `set(a) & set(b)` + `len() > 0` 改为 `set(a).isdisjoint(b)` 取反。`isdisjoint` 在找到第一个公共元素时立即返回，无需计算完整交集，对大实体列表减少不必要的集合运算
+3. **字典推导式优化** — `services/marketplace.py` C420 将 `{i: 0 for i in range(1, 6)}` 改为 `dict.fromkeys(range(1, 6), 0)`，减少不必要的 lambda 创建开销
+4. **长度检查简化为真值检查** — 7 处 `len(x) == 0` / `len(x) > 0` 改为 `not x` / `bool(x)` / `x`，消除冗余函数调用：
+   - `adapters/ai/anthropic_adapter.py` — `len(errors) == 0` → `not errors`
+   - `adapters/ai/ollama_adapter.py` — `len(errors) == 0` → `not errors`
+   - `adapters/ai/openai_adapter.py` — `len(errors) == 0` → `not errors`
+   - `adapters/ai/base.py` — `len(value) > 0` → `value`
+   - `infrastructure/alerting.py` — `len(self._urls) > 0` → `bool(self._urls)`
+   - `services/extension_standard.py` — `len(req) == 0 or len(avail) == 0` → `not req or not avail`
+   - `memory/manager.py` — `len(common_entities) > 0` → `bool(common_entities)` → `isdisjoint`
+
+### 修改的源文件
+
+- `src/yuanbot/tts/manager.py` — TTS 流式缓冲区 O(n²) → O(n) 字符串拼接
+- `src/yuanbot/memory/manager.py` — `_is_similar_fact` 使用 `isdisjoint` 短路
+- `src/yuanbot/services/marketplace.py` — `dict.fromkeys` 替代字典推导式
+- `src/yuanbot/services/extension_standard.py` — 真值检查
+- `src/yuanbot/adapters/ai/anthropic_adapter.py` — 真值检查
+- `src/yuanbot/adapters/ai/ollama_adapter.py` — 真值检查
+- `src/yuanbot/adapters/ai/openai_adapter.py` — 真值检查
+- `src/yuanbot/adapters/ai/base.py` — 真值检查
+- `src/yuanbot/infrastructure/alerting.py` — 真值检查
+
+### 代码质量
+
+- Ruff lint (src/): All checks passed
+- C4/SIM/B/PERF lint: All checks passed
+- 测试: 1379 passed, 14 warnings
+
+### 符合度变化
+
+| 系统 | v28 | v29 | 变化 |
+|------|------|------|------|
+| **总体** | **~100%** | **~100%** | — (性能优化 + 代码质量，无功能变更) |
 
 ### 剩余待完成项
 

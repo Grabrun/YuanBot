@@ -1377,8 +1377,7 @@ class MemoryManager:
         """检查是否是相似的事实"""
         if not existing.key_entities or not new_node.key_entities:
             return False
-        common_entities = set(existing.key_entities) & set(new_node.key_entities)
-        return len(common_entities) > 0
+        return not set(existing.key_entities).isdisjoint(new_node.key_entities)
 
     # Emotion valence sets (shared across instances, avoid re-creation per call)
     _POSITIVE_EMOTIONS = frozenset({"joy", "trust", "anticipation"})

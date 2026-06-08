@@ -87,7 +87,7 @@ def is_version_compatible(required: str, available: str) -> bool:
         return True
     req = parse_version(required)
     avail = parse_version(available)
-    if len(req) == 0 or len(avail) == 0:
+    if not req or not avail:
         return True
     # 主版本号必须相同
     if req[0] != avail[0]:
