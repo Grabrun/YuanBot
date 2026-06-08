@@ -19,6 +19,10 @@ import structlog
 
 logger = structlog.get_logger(__name__)
 
+# 模块级常量，避免每次调用时分配
+_MAX_RECENT_EVENTS = 200  # 限制最近事件列表大小，防止内存泄漏
+_NEGATIVE_EMOTIONS: frozenset[str] = frozenset({"sadness", "anger", "fear", "disgust"})
+
 # 事件处理器类型: async (event_data: dict) -> None
 EventHandler = Callable[[dict[str, Any]], Coroutine[Any, Any, None]]
 
@@ -82,6 +86,7 @@ class EventEngine:
         self._memory_manager = memory_manager
         self._weather_tool = weather_tool  # 可选：天气查询工具
         self._triggers: dict[str, EventTrigger] = {}
+        self._triggers_by_type: dict[EventType, list[EventTrigger]] = {}  # 预索引
         self._event_handlers: dict[str, list[EventHandler]] = {}
         self._recent_events: list[EventOccurrence] = []
         self._last_check_times: dict[str, datetime] = {}
@@ -176,6 +181,8 @@ class EventEngine:
     def register_trigger(self, trigger: EventTrigger) -> str:
         """注册事件触发器"""
         self._triggers[trigger.trigger_id] = trigger
+        # 维护预索引
+        self._triggers_by_type.setdefault(trigger.event_type, []).append(trigger)
         logger.info(
             "event_trigger_registered",
             trigger_id=trigger.trigger_id,
@@ -186,8 +193,14 @@ class EventEngine:
 
     def unregister_trigger(self, trigger_id: str) -> bool:
         """注销事件触发器"""
-        if trigger_id in self._triggers:
-            del self._triggers[trigger_id]
+        trigger = self._triggers.pop(trigger_id, None)
+        if trigger is not None:
+            # 从预索引中移除
+            by_type = self._triggers_by_type.get(trigger.event_type)
+            if by_type is not None:
+                self._triggers_by_type[trigger.event_type] = [
+                    t for t in by_type if t.trigger_id != trigger_id
+                ]
             return True
         return False
 
@@ -214,6 +227,8 @@ class EventEngine:
                     },
                 )
                 self._recent_events.append(event)
+                if len(self._recent_events) > _MAX_RECENT_EVENTS:
+                    self._recent_events = self._recent_events[-_MAX_RECENT_EVENTS:]
                 return event
         return None
 
@@ -225,9 +240,7 @@ class EventEngine:
         threshold: float = 0.7,
     ) -> EventOccurrence | None:
         """检测情绪风险事件"""
-        negative_emotions = {"sadness", "anger", "fear", "disgust"}
-
-        if emotion in negative_emotions and intensity >= threshold:
+        if emotion in _NEGATIVE_EMOTIONS and intensity >= threshold:
             trigger = self._find_trigger(EventType.EMOTION_RISK, user_id)
             if trigger:
                 event = EventOccurrence(
@@ -241,6 +254,8 @@ class EventEngine:
                     },
                 )
                 self._recent_events.append(event)
+                if len(self._recent_events) > _MAX_RECENT_EVENTS:
+                    self._recent_events = self._recent_events[-_MAX_RECENT_EVENTS:]
                 return event
         return None
 
@@ -268,6 +283,8 @@ class EventEngine:
                         data={"date_name": date_name, "date": date_str},
                     )
                     self._recent_events.append(event)
+                    if len(self._recent_events) > _MAX_RECENT_EVENTS:
+                        self._recent_events = self._recent_events[-_MAX_RECENT_EVENTS:]
                     return event
         return None
 
@@ -287,6 +304,8 @@ class EventEngine:
                 data={"event_name": event_name, **(data or {})},
             )
             self._recent_events.append(event)
+            if len(self._recent_events) > _MAX_RECENT_EVENTS:
+                self._recent_events = self._recent_events[-_MAX_RECENT_EVENTS:]
             return event
         return None
 
@@ -313,10 +332,13 @@ class EventEngine:
         """事件监听主循环"""
         try:
             while self._running:
-                await self._check_user_silence()
-                await self._check_emotion_alerts()
-                await self._check_weather_changes()
-                await self._check_special_dates()
+                # 四项检查互相独立，并行执行减少循环延迟
+                await asyncio.gather(
+                    self._check_user_silence(),
+                    self._check_emotion_alerts(),
+                    self._check_weather_changes(),
+                    self._check_special_dates(),
+                )
                 # 使用较短的间隔便于测试
                 min_interval = min(
                     self._silence_check_interval,
@@ -413,13 +435,9 @@ class EventEngine:
         event_type: EventType,
         user_id: str,
     ) -> EventTrigger | None:
-        """查找匹配的触发器"""
-        for trigger in self._triggers.values():
-            if (
-                trigger.enabled
-                and trigger.event_type == event_type
-                and (not trigger.user_ids or user_id in trigger.user_ids)
-            ):
+        """查找匹配的触发器（使用预索引，O(1) 事件类型过滤）"""
+        for trigger in self._triggers_by_type.get(event_type, ()):
+            if trigger.enabled and (not trigger.user_ids or user_id in trigger.user_ids):
                 return trigger
         return None
 

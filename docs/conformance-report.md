@@ -1,9 +1,9 @@
-# 🌸 YuanBot 设计文档符合度审查报告 v29
+# 🌸 YuanBot 设计文档符合度审查报告 v30
 
-**审查日期**: 2026-06-08
+**审查日期**: 2026-06-09
 **审查范围**: docs/ 目录下 17 份设计文档 vs src/ + configs/ + tests/ + webui/ 实际代码
 **项目版本**: v1.5.0
-**上次审查**: v28 (2026-06-08),总体 ~100%
+**上次审查**: v29 (2026-06-08),总体 ~100%
 
 ---
 
@@ -1710,6 +1710,41 @@
 | 系统 | v28 | v29 | 变化 |
 |------|------|------|------|
 | **总体** | **~100%** | **~100%** | — (性能优化 + 代码质量，无功能变更) |
+
+### 剩余待完成项
+
+| 优先级 | 项目 | 预估工作量 | 类型 |
+|--------|------|----------|------|
+| P2 | 本地意图模型 (bert-base ONNX) | 2-3 天 | 外部 ML 依赖 |
+
+---
+
+## v30 更新摘要
+
+本次审查在总体符合度已达 ~100% 的情况下，聚焦主动陪伴事件引擎的性能优化，消除了事件循环中的串行阻塞、触发器查找的线性扫描和事件列表的无界增长。
+
+### v30 性能优化
+
+1. **事件引擎主循环并行化** — `proactive/event_engine.py` `_run_loop()` 将 `_check_user_silence`、`_check_emotion_alerts`、`_check_weather_changes`、`_check_special_dates` 四项互相独立的检查从串行 `await` 改为 `asyncio.gather()` 并行执行。每次事件循环迭代从串行 4 次 I/O 等待减少为 1 次并行等待
+2. **触发器预索引（O(1) 事件类型过滤）** — 新增 `_triggers_by_type: dict[EventType, list[EventTrigger]]` 预索引，`register_trigger()` 自动维护索引，`unregister_trigger()` 同步清理。`_find_trigger()` 从遍历所有触发器 O(n) 改为仅遍历同类型触发器 O(k)，k << n
+3. **事件列表大小限制（防内存泄漏）** — `_recent_events` 列表新增 `_MAX_RECENT_EVENTS = 200` 上限，每次追加后自动裁剪，防止长时间运行的事件引擎内存持续增长
+4. **情绪风险检测 frozenset 常量** — `check_emotion_risk()` 中的 `negative_emotions` 临时 set 提升为模块级 `_NEGATIVE_EMOTIONS: frozenset[str]` 常量，消除每次调用时的集合对象分配
+
+### 修改的源文件
+
+- `src/yuanbot/proactive/event_engine.py` — 事件循环并行化、触发器预索引、事件列表限制、frozenset 常量
+
+### 代码质量
+
+- Ruff lint (src/): All checks passed
+- PERF/SIM/C4 lint: 0 issues
+- 测试: 1379 passed, 14 warnings
+
+### 符合度变化
+
+| 系统 | v29 | v30 | 变化 |
+|------|------|------|------|
+| **总体** | **~100%** | **~100%** | — (性能优化，无功能变更) |
 
 ### 剩余待完成项
 
