@@ -32,3 +32,5 @@ Thumbs.db
 yuanbot.yaml
 *.tar.gz
 *.zip
+public/
+site/
