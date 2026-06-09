@@ -403,12 +403,22 @@ class EventEngine:
             return
 
         profiles = getattr(self._memory_manager, "_user_profiles", {})
-        for user_id in profiles:
+        user_ids = list(profiles.keys())
+
+        # Batch fetch emotion trends for all users in parallel
+        trends = await asyncio.gather(
+            *(
+                self._memory_manager.get_emotion_trend(uid, days=self._emotion_alert_days)
+                for uid in user_ids
+            ),
+            return_exceptions=True,
+        )
+
+        for user_id, trend in zip(user_ids, trends):
+            if isinstance(trend, Exception):
+                logger.debug("emotion_check_skip", user_id=user_id)
+                continue
             try:
-                trend = await self._memory_manager.get_emotion_trend(
-                    user_id,
-                    days=self._emotion_alert_days,
-                )
                 if trend and hasattr(trend, "valence_ratio"):
                     negative_ratio = trend.valence_ratio.get("negative", 0.0)
                     if negative_ratio >= 0.6:
@@ -459,24 +469,38 @@ class EventEngine:
             return
 
         profiles = getattr(self._memory_manager, "_user_profiles", {})
-        for user_id, profile in profiles.items():
-            try:
-                location = getattr(profile, "preferences", {}).get("location")
-                if not location:
-                    continue
 
-                # 调用天气工具
+        # Pre-filter users with locations
+        user_locations: list[tuple[str, str, Any]] = []
+        for user_id, profile in profiles.items():
+            location = getattr(profile, "preferences", {}).get("location")
+            if location:
+                user_locations.append((user_id, location, profile))
+
+        # Batch fetch weather for all users in parallel
+        async def _fetch_weather(location: str) -> dict[str, Any] | None:
+            try:
                 if hasattr(self._weather_tool, "invoke"):
                     result = await self._weather_tool.invoke({"city": location})
-                    if not result.success:
-                        continue
-                    current_weather = result.output
+                    return result.output if result.success else None
                 elif callable(self._weather_tool):
-                    current_weather = await self._weather_tool(location)
-                else:
+                    return await self._weather_tool(location)
+            except Exception:
+                return None
+            return None
+
+        weather_results = await asyncio.gather(
+            *(_fetch_weather(loc) for _, loc, _ in user_locations),
+            return_exceptions=True,
+        )
+
+        # Process results sequentially for state tracking and event emission
+        for (user_id, location, _), weather in zip(user_locations, weather_results):
+            try:
+                if isinstance(weather, Exception) or weather is None:
                     continue
 
-                # 与上次天气对比
+                current_weather = weather
                 prev_weather = self._last_weather.get(user_id)
                 self._last_weather[user_id] = current_weather
 
@@ -542,34 +566,43 @@ class EventEngine:
 
         today_str = now.strftime("%m-%d")
         profiles = getattr(self._memory_manager, "_user_profiles", {})
+        user_ids = list(profiles.keys())
 
-        for user_id in profiles:
+        # Batch fetch proactive settings for all users in parallel
+        if hasattr(self._memory_manager, "get_user_proactive_settings"):
+            settings_list = await asyncio.gather(
+                *(self._memory_manager.get_user_proactive_settings(uid) for uid in user_ids),
+                return_exceptions=True,
+            )
+        else:
+            settings_list = [{}] * len(user_ids)
+
+        for user_id, user_config in zip(user_ids, settings_list):
             try:
-                # 从用户级配置获取重要日期
-                if hasattr(self._memory_manager, "get_user_proactive_settings"):
-                    user_config = await self._memory_manager.get_user_proactive_settings(user_id)
-                    important_dates = user_config.get("important_dates", [])
+                if isinstance(user_config, Exception):
+                    continue
+                important_dates = user_config.get("important_dates", [])
 
-                    for date_entry in important_dates:
-                        if isinstance(date_entry, dict):
-                            date_str = date_entry.get("date", "")
-                            desc = date_entry.get("description", "特殊日期")
-                        elif isinstance(date_entry, str):
-                            # 支持 "MM-DD:description" 格式
-                            parts = date_entry.split(":", 1)
-                            date_str = parts[0]
-                            desc = parts[1] if len(parts) > 1 else "特殊日期"
-                        else:
-                            continue
+                for date_entry in important_dates:
+                    if isinstance(date_entry, dict):
+                        date_str = date_entry.get("date", "")
+                        desc = date_entry.get("description", "特殊日期")
+                    elif isinstance(date_entry, str):
+                        # 支持 "MM-DD:description" 格式
+                        parts = date_entry.split(":", 1)
+                        date_str = parts[0]
+                        desc = parts[1] if len(parts) > 1 else "特殊日期"
+                    else:
+                        continue
 
-                        if date_str == today_str:
-                            event = self.check_special_date(
-                                user_id, {desc: date_str}
+                    if date_str == today_str:
+                        event = self.check_special_date(
+                            user_id, {desc: date_str}
+                        )
+                        if event:
+                            await self.emit_event(
+                                EventType.SPECIAL_DATE,
+                                {**event.data, "user_id": user_id},
                             )
-                            if event:
-                                await self.emit_event(
-                                    EventType.SPECIAL_DATE,
-                                    {**event.data, "user_id": user_id},
-                                )
             except Exception:
                 logger.debug("special_date_check_skip", user_id=user_id)

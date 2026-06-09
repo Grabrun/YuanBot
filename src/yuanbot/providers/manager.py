@@ -528,10 +528,16 @@ class ProviderManager:
 
     async def close_all(self) -> None:
         """关闭所有适配器"""
-        for pid, adapter in self._adapters.items():
+        import asyncio
+
+        async def _close_one(pid: str, adapter: Any) -> None:
             try:
                 if hasattr(adapter, "close"):
                     await adapter.close()
             except Exception as e:
                 logger.error("adapter_close_error", provider_id=pid, error=str(e))
+
+        await asyncio.gather(
+            *(_close_one(pid, adapter) for pid, adapter in self._adapters.items()),
+        )
         self._adapters.clear()

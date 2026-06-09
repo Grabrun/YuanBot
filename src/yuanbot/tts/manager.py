@@ -361,9 +361,16 @@ class TTSManager:
 
     async def get_status(self) -> dict[str, Any]:
         """返回 TTS 系统状态"""
+        import asyncio
+
+        engine_ids = list(self._adapters.keys())
+        results = await asyncio.gather(
+            *(self._adapters[eid].is_available() for eid in engine_ids),
+            return_exceptions=True,
+        )
         engine_status: dict[str, bool] = {}
-        for eid, adapter in self._adapters.items():
-            engine_status[eid] = await adapter.is_available()
+        for eid, result in zip(engine_ids, results):
+            engine_status[eid] = result if isinstance(result, bool) else False
 
         return {
             "enabled": self._config.enabled,

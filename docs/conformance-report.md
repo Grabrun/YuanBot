@@ -1788,3 +1788,44 @@
 | 优先级 | 项目 | 预估工作量 | 类型 |
 |--------|------|----------|------|
 | P2 | 本地意图模型 (bert-base ONNX) | 2-3 天 | 外部 ML 依赖 |
+
+---
+
+## v32 审查记录
+
+**审查日期**: 2026-06-09
+**审查版本**: v32
+**审查人**: 自动化开发助手
+
+本次审查在总体符合度已达 ~100% 的情况下，聚焦多处串行异步调用的并行化优化，消除事件引擎和管理器中的 N+1 异步查询模式，提升系统在多用户场景下的响应效率。
+
+### v32 性能优化
+
+1. **TTS 管理器状态查询并行化** — `tts/manager.py` `get_status()` 将多个适配器的 `is_available()` 串行调用改为 `asyncio.gather` 并行执行，使用 `return_exceptions=True` 防止单个引擎故障影响整体状态查询
+2. **Provider 管理器批量关闭并行化** — `providers/manager.py` `close_all()` 将多个适配器的 `close()` 串行调用改为 `asyncio.gather` 并行执行，缩短系统关闭时间
+3. **事件引擎情感告警批量查询** — `proactive/event_engine.py` `_check_emotion_alerts()` 将逐用户串行调用 `get_emotion_trend()` 改为 `asyncio.gather` 并行获取所有用户情感趋势，然后顺序处理结果触发事件
+4. **事件引擎天气检查批量查询** — `_check_weather_changes()` 将逐用户串行调用天气工具改为 `asyncio.gather` 并行获取所有用户天气数据，预过滤有 location 配置的用户，然后顺序处理状态变化和事件触发
+5. **事件引擎特殊日期批量查询** — `_check_special_dates()` 将逐用户串行调用 `get_user_proactive_settings()` 改为 `asyncio.gather` 并行获取所有用户主动配置，然后顺序匹配日期
+
+### 修改的源文件
+
+- `src/yuanbot/tts/manager.py` — `get_status()` 并行化
+- `src/yuanbot/providers/manager.py` — `close_all()` 并行化
+- `src/yuanbot/proactive/event_engine.py` — `_check_emotion_alerts()`、`_check_weather_changes()`、`_check_special_dates()` 批量并行化
+
+### 代码质量
+
+- Ruff lint (src/): All checks passed
+- 测试: 1379 passed, 14 warnings
+
+### 符合度变化
+
+| 系统 | v31 | v32 | 变化 |
+|------|------|------|------|
+| **总体** | **~100%** | **~100%** | — (性能优化，无功能变更) |
+
+### 剩余待完成项
+
+| 优先级 | 项目 | 预估工作量 | 类型 |
+|--------|------|----------|------|
+| P2 | 本地意图模型 (bert-base ONNX) | 2-3 天 | 外部 ML 依赖 |
