@@ -2136,7 +2136,7 @@ def _run_intent_status(args: argparse.Namespace) -> None:
         from yuanbot.config import load_config
         config = load_config()
         intent_config = config.orchestrator.intent_engine
-        print(f"  配置状态:")
+        print("  配置状态:")
         print(f"    use_ml_model:         {intent_config.use_ml_model}")
         print(f"    model_path:           {intent_config.model_path}")
         print(f"    tokenizer_path:       {intent_config.tokenizer_path}")

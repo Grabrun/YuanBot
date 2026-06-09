@@ -1,9 +1,9 @@
-# 🌸 YuanBot 设计文档符合度审查报告 v33
+# 🌸 YuanBot 设计文档符合度审查报告 v34
 
-**审查日期**: 2026-06-09
+**审查日期**: 2026-06-10
 **审查范围**: docs/ 目录下 17 份设计文档 vs src/ + configs/ + tests/ + webui/ 实际代码
 **项目版本**: v1.5.0
-**上次审查**: v32 (2026-06-09),总体 ~100%
+**上次审查**: v33 (2026-06-09),总体 ~100%
 
 ---
 
@@ -1869,3 +1869,39 @@
 | 优先级 | 项目 | 预估工作量 | 类型 |
 |--------|------|----------|------|
 | ~~P2~~ | ~~本地意图模型 (bert-base ONNX)~~ | ~~2-3 天~~ | ✅ 已实现 |
+
+---
+
+## v34 更新摘要
+
+本次审查在总体符合度已达 ~100% 的情况下，修复了 1 个 Ruff lint 问题，并实现了多项性能优化（SQLite 索引优化 + 记忆冲突检测优化）。
+
+### v34 Lint 修复
+
+1. **F541 f-string 无占位符** — `cli.py:2139` `print(f"  配置状态:")` 改为 `print("  配置状态:")`，移除多余的 f 前缀
+
+### v34 性能优化
+
+1. **SQLite 复合索引** — `infrastructure/sqlite_store.py` 新增 3 个复合索引：
+   - `idx_fact_user_deleted ON fact_memories(user_id, is_deleted)` — 大多数事实记忆查询都过滤 `is_deleted=0`
+   - `idx_episodic_user_date ON episodic_metadata(user_id, date)` — 情景记忆日期范围查询
+   - `idx_emotion_user_ts ON emotion_records(user_id, timestamp)` — 情感趋势查询
+2. **事实记忆冲突检测 DB 级过滤** — `memory/manager.py` `add_fact_memory()` 原先加载用户全部事实记忆做冲突检测，改为先通过 `key` 列（第一个实体）做 DB 级精确匹配初筛，再补充 category 级扫描。新增 `SQLiteStore.find_facts_by_keys()` 方法
+3. **key_entities 持久化修复** — `memory/manager.py` `_persist_fact_memory()` 将 `key_entities` 存入 metadata JSON，`_row_to_fact_memory_node()` 从 metadata 恢复 `key_entities`。修复了持久化模式下冲突检测失效的隐藏 Bug（原 `_row_to_fact_memory_node` 硬编码 `key_entities=[]`，导致 `_is_similar_fact()` 永远返回 False）
+
+### 修改的源文件
+
+- `src/yuanbot/cli.py` — 移除 f-string 多余前缀
+- `src/yuanbot/infrastructure/sqlite_store.py` — 新增 3 个复合索引 + `find_facts_by_keys()` 方法
+- `src/yuanbot/memory/manager.py` — `_persist_fact_memory` 存储 key_entities、`_row_to_fact_memory_node` 恢复 key_entities、`add_fact_memory` DB 级过滤、新增 `_find_similar_facts_by_entities()` 方法
+
+### 代码质量
+
+- Ruff lint (src/): All checks passed
+- 测试: 1405 passed, 14 warnings
+
+### 符合度变化
+
+| 系统 | v33 | v34 | 变化 |
+|------|------|------|------|
+| **总体** | **~100%** | **~100%** | — (性能优化，无功能变更) |

@@ -106,9 +106,18 @@ _CREATE_TABLES = [
 _CREATE_INDEXES = [
     "CREATE INDEX IF NOT EXISTS idx_fact_memories_user ON fact_memories(user_id)",
     "CREATE INDEX IF NOT EXISTS idx_fact_memories_category ON fact_memories(category)",
+    # Composite index: most queries filter by (user_id, is_deleted)
+    (
+        "CREATE INDEX IF NOT EXISTS idx_fact_user_deleted"
+        " ON fact_memories(user_id, is_deleted)"
+    ),
     "CREATE INDEX IF NOT EXISTS idx_episodic_user ON episodic_metadata(user_id)",
     "CREATE INDEX IF NOT EXISTS idx_episodic_date ON episodic_metadata(date)",
+    # Composite index: get_episodic_metadata filters by (user_id, date)
+    "CREATE INDEX IF NOT EXISTS idx_episodic_user_date ON episodic_metadata(user_id, date)",
     "CREATE INDEX IF NOT EXISTS idx_emotion_user ON emotion_records(user_id)",
+    # Composite index: emotion trend queries filter by (user_id, timestamp)
+    "CREATE INDEX IF NOT EXISTS idx_emotion_user_ts ON emotion_records(user_id, timestamp)",
     "CREATE INDEX IF NOT EXISTS idx_identity_yuanbot ON identity_mappings(yuanbot_user_id)",
 ]
 
@@ -233,6 +242,35 @@ class SQLiteStore:
                 "SELECT * FROM fact_memories WHERE user_id=? AND is_deleted=0",
                 (user_id,),
             )
+        rows = await cursor.fetchall()
+        return self._rows_to_dicts(rows, cursor)
+
+    async def find_facts_by_keys(
+        self,
+        user_id: str,
+        keys: list[str],
+        category: str | None = None,
+    ) -> list[dict[str, Any]]:
+        """通过 key 列匹配多个实体键，筛选事实记忆
+
+        用于冲突检测：先用 DB 级 LIKE 过滤，再在内存中做精确交集检查。
+        """
+        if not keys:
+            return []
+        # OR 条件：key 匹配任一实体
+        conditions = ["user_id=?", "is_deleted=0"]
+        params: list[Any] = [user_id]
+        if category:
+            conditions.append("category=?")
+            params.append(category)
+        # 对每个 key 做精确匹配（不使用 LIKE 以利用索引）
+        key_conds = ["key=?" for _ in keys]
+        conditions.append(f"({' OR '.join(key_conds)})")
+        params.extend(keys)
+        where = " AND ".join(conditions)
+        cursor = await self._db.execute(
+            f"SELECT * FROM fact_memories WHERE {where}", params,
+        )
         rows = await cursor.fetchall()
         return self._rows_to_dicts(rows, cursor)
 

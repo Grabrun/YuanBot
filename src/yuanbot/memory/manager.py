@@ -306,7 +306,13 @@ class MemoryManager:
         # 检查是否已存在相似的事实（冲突解决）
         # 快速跳过：无 key_entities 时不可能匹配，跳过全量扫描
         if key_entities:
-            existing_facts = await self.get_fact_memories(user_id)
+            if self.has_persistence:
+                # DB 级过滤：先用 key 列匹配第一个实体，减少加载量
+                existing_facts = await self._find_similar_facts_by_entities(
+                    user_id, key_entities, category,
+                )
+            else:
+                existing_facts = self._fact_memories.get(user_id, [])
             for existing in existing_facts:
                 if self._is_similar_fact(existing, node):
                     return await self._resolve_fact_conflict(
@@ -1173,6 +1179,10 @@ class MemoryManager:
 
     async def _persist_fact_memory(self, user_id: str, node: MemoryNode) -> None:
         """持久化事实记忆到 SQLite"""
+        # 将 key_entities 存入 metadata，确保加载时可恢复
+        meta = dict(node.metadata)
+        if node.key_entities:
+            meta["key_entities"] = node.key_entities
         await self._db.sqlite.save_fact_memory(
             id=node.id,
             user_id=user_id,
@@ -1182,7 +1192,7 @@ class MemoryManager:
             confidence=node.metadata.get("confidence", 1.0),
             source=node.metadata.get("source", "explicit_statement"),
             importance=node.importance_score,
-            metadata=node.metadata,
+            metadata=meta,
         )
 
     async def _persist_user_profile(self, profile: UserProfile) -> None:
@@ -1211,11 +1221,14 @@ class MemoryManager:
         metadata["confidence"] = row.get("confidence", 1.0)
         metadata["source"] = row.get("source", "explicit_statement")
 
+        # 从 metadata 恢复 key_entities（持久化时存入）
+        key_entities: list[str] = metadata.pop("key_entities", []) or []
+
         return MemoryNode(
             id=row["id"],
             memory_type=MemoryType.FACT,
             content=row["value"],
-            key_entities=[],  # fact_memories 表无 key_entities 字段，存于 metadata
+            key_entities=key_entities,
             importance_score=row.get("importance", 0.5),
             access_count=row.get("access_count", 0),
             metadata=metadata,
@@ -1378,6 +1391,35 @@ class MemoryManager:
         return list(set(itertools.chain.from_iterable(
             mem.topic_tags for mem in memories
         )))[:5]
+
+    async def _find_similar_facts_by_entities(
+        self,
+        user_id: str,
+        entities: list[str],
+        category: str | None = None,
+    ) -> list[MemoryNode]:
+        """在 DB 级别查找可能相似的事实记忆
+
+        用 key 列（第一个实体）和 category 做初筛，减少全量加载。
+        """
+        if not entities:
+            return []
+
+        # 用 key 列匹配任一实体
+        rows = await self._db.sqlite.find_facts_by_keys(
+            user_id, keys=entities, category=category,
+        )
+        nodes = [self._row_to_fact_memory_node(row) for row in rows]
+
+        # 补充 category 级别扫描（同 category 但 key 不匹配的也可能冲突）
+        if category:
+            cat_rows = await self._db.sqlite.get_fact_memories(user_id, category=category)
+            seen_ids = {n.id for n in nodes}
+            for row in cat_rows:
+                if row["id"] not in seen_ids:
+                    nodes.append(self._row_to_fact_memory_node(row))
+
+        return nodes
 
     def _is_similar_fact(self, existing: MemoryNode, new_node: MemoryNode) -> bool:
         """检查是否是相似的事实"""
