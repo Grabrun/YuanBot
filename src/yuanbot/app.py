@@ -104,7 +104,22 @@ def create_app(config: YuanBotConfig) -> FastAPI:
     # 用管理器中的活跃人设替换默认人设
     persona = persona_manager.active_persona
 
-    decision_engine = DialogueDecisionEngine()
+    # ── 4.5. 初始化决策引擎（支持 ML 模型） ──
+    intent_config = config.orchestrator.intent_engine if hasattr(config, 'orchestrator') else None
+    ml_model_dir = None
+    ml_confidence = 0.5
+    if intent_config and hasattr(intent_config, 'use_ml_model') and intent_config.use_ml_model:
+        if hasattr(intent_config, 'model_path'):
+            ml_model_dir = str(Path(intent_config.model_path).parent)
+        else:
+            ml_model_dir = "models"
+        if hasattr(intent_config, 'confidence_threshold'):
+            ml_confidence = intent_config.confidence_threshold
+
+    decision_engine = DialogueDecisionEngine(
+        ml_model_dir=ml_model_dir,
+        ml_confidence_threshold=ml_confidence,
+    )
     context_builder = ContextBuilder(persona)
 
     # ── 5. 初始化编排引擎 ─────────────────────

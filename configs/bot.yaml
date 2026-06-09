@@ -38,6 +38,10 @@ orchestrator:
   intent_engine:
     enabled: true
     confidence_threshold: 0.7
+    use_ml_model: false
+    model_path: "models/intent_model.onnx"
+    tokenizer_path: "models/tokenizer.json"
+    labels_path: "models/labels.json"
   emotion_engine:
     enabled: true
     decay_rate: 0.1

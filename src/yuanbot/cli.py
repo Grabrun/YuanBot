@@ -244,6 +244,26 @@ def main() -> None:
     migrate_run_parser.add_argument("--batch-size", type=int, default=1000, help="批量大小")
     migrate_run_parser.add_argument("--tables", nargs="+", help="指定迁移的表")
 
+    # yuanbot intent
+    intent_parser = subparsers.add_parser("intent", help="意图分类模型管理")
+    intent_sub = intent_parser.add_subparsers(dest="intent_action")
+    intent_sub.add_parser("status", help="查看模型状态")
+    intent_train_parser = intent_sub.add_parser("train", help="训练意图分类模型")
+    intent_train_parser.add_argument(
+        "--method", "-m",
+        choices=["sklearn", "transformers"],
+        default="sklearn",
+        help="训练方式: sklearn (轻量) 或 transformers (BERT 微调)",
+    )
+    intent_train_parser.add_argument(
+        "--output", "-o",
+        default="models",
+        help="模型输出目录 (默认: models/)",
+    )
+    intent_sub.add_parser("verify", help="验证模型是否可用")
+    intent_test_parser = intent_sub.add_parser("test", help="测试意图分类")
+    intent_test_parser.add_argument("text", help="测试文本")
+
     args = parser.parse_args()
 
     # 配置日志
@@ -330,6 +350,8 @@ def main() -> None:
         _run_marketplace(args)
     elif args.command == "migrate":
         _run_migrate(args)
+    elif args.command == "intent":
+        _run_intent(args)
     else:
         parser.print_help()
 
@@ -2033,6 +2055,186 @@ def _run_migrate(args: argparse.Namespace) -> None:
         print("    YUANBOT_MYSQL_PASSWORD    MySQL 密码")
         print("    YUANBOT_MYSQL_DATABASE    MySQL 数据库 (默认: yuanbot)")
         print()
+
+
+# --------------------------------------------------------------------------- #
+# yuanbot intent
+# --------------------------------------------------------------------------- #
+
+
+def _run_intent(args: argparse.Namespace) -> None:
+    """意图分类模型管理"""
+    if args.intent_action == "status":
+        _run_intent_status(args)
+    elif args.intent_action == "train":
+        _run_intent_train(args)
+    elif args.intent_action == "verify":
+        _run_intent_verify(args)
+    elif args.intent_action == "test":
+        _run_intent_test(args)
+    else:
+        print("用法: yuanbot intent {status|train|verify|test}")
+
+
+def _run_intent_status(args: argparse.Namespace) -> None:
+    """查看意图模型状态"""
+    import json
+    from pathlib import Path
+
+    _header("意图分类模型状态")
+
+    models_dir = Path("models")
+
+    # 检查 ONNX 模型
+    onnx_path = models_dir / "intent_model.onnx"
+    tokenizer_path = models_dir / "tokenizer.json"
+    labels_path = models_dir / "labels.json"
+    joblib_path = models_dir / "intent_model.joblib"
+    meta_path = models_dir / "model_meta.json"
+
+    print(f"\n  模型目录: {models_dir.absolute()}")
+    print()
+
+    # ONNX 模型
+    if onnx_path.exists():
+        size_mb = onnx_path.stat().st_size / 1024 / 1024
+        _ok(f"ONNX 模型: {onnx_path} ({size_mb:.1f} MB)")
+        if tokenizer_path.exists():
+            _ok(f"Tokenizer:  {tokenizer_path}")
+        else:
+            _fail(f"Tokenizer:  {tokenizer_path} (缺失)")
+    else:
+        _warn(f"ONNX 模型: {onnx_path} (未找到)")
+
+    # sklearn 模型
+    if joblib_path.exists():
+        size_kb = joblib_path.stat().st_size / 1024
+        _ok(f"sklearn 模型: {joblib_path} ({size_kb:.1f} KB)")
+    else:
+        _warn(f"sklearn 模型: {joblib_path} (未找到)")
+
+    # 标签文件
+    if labels_path.exists():
+        labels = json.loads(labels_path.read_text(encoding="utf-8"))
+        _ok(f"标签文件:  {labels_path} ({len(labels)} 个意图)")
+        print(f"    意图列表: {', '.join(labels)}")
+    else:
+        _warn(f"标签文件:  {labels_path} (未找到)")
+
+    # 元信息
+    if meta_path.exists():
+        meta = json.loads(meta_path.read_text(encoding="utf-8"))
+        _ok(f"元信息:    {meta_path}")
+        print(f"    模型类型: {meta.get('model_type', 'unknown')}")
+        print(f"    训练样本: {meta.get('training_samples', 'unknown')}")
+    else:
+        _warn(f"元信息:    {meta_path} (未找到)")
+
+    # 配置状态
+    print()
+    try:
+        from yuanbot.config import load_config
+        config = load_config()
+        intent_config = config.orchestrator.intent_engine
+        print(f"  配置状态:")
+        print(f"    use_ml_model:         {intent_config.use_ml_model}")
+        print(f"    model_path:           {intent_config.model_path}")
+        print(f"    tokenizer_path:       {intent_config.tokenizer_path}")
+        print(f"    confidence_threshold: {intent_config.confidence_threshold}")
+    except Exception as e:
+        _warn(f"  无法读取配置: {e}")
+
+    # 尝试加载模型
+    print()
+    try:
+        from yuanbot.persona.engines.intent_engine import create_intent_classifier
+        classifier = create_intent_classifier(model_dir="models")
+        engine_type = type(classifier).__name__
+        if hasattr(classifier, 'get_model_info'):
+            info = classifier.get_model_info()
+            _ok(f"当前引擎: {engine_type} (ready={info.get('ready', True)})")
+        else:
+            _ok(f"当前引擎: {engine_type} (规则引擎)")
+    except Exception as e:
+        _warn(f"引擎加载测试失败: {e}")
+
+
+def _run_intent_train(args: argparse.Namespace) -> None:
+    """训练意图分类模型"""
+    import subprocess
+
+    method = args.method
+    output = args.output
+
+    _header(f"训练意图分类模型 ({method})")
+
+    script_path = Path(__file__).parent.parent.parent / "scripts" / "download_intent_model.py"
+    if not script_path.exists():
+        _fail(f"训练脚本未找到: {script_path}")
+        print("  请手动运行: python scripts/download_intent_model.py")
+        return
+
+    cmd = [sys.executable, str(script_path), "--method", method, "--output", output]
+    _info(f"运行: {' '.join(cmd)}")
+    print()
+
+    result = subprocess.run(cmd)
+    if result.returncode == 0:
+        _ok("模型训练完成！")
+        print("\n  下一步:")
+        print("    1. yuanbot intent verify  # 验证模型")
+        print("    2. 编辑 bot.yaml 设置 intent_engine.use_ml_model: true")
+        print("    3. 重启服务")
+    else:
+        _fail(f"训练失败 (exit code: {result.returncode})")
+
+
+def _run_intent_verify(args: argparse.Namespace) -> None:
+    """验证意图模型"""
+    import subprocess
+
+    _header("验证意图分类模型")
+
+    script_path = Path(__file__).parent.parent.parent / "scripts" / "download_intent_model.py"
+    if not script_path.exists():
+        _fail(f"脚本未找到: {script_path}")
+        return
+
+    cmd = [sys.executable, str(script_path), "--verify"]
+    result = subprocess.run(cmd)
+    if result.returncode != 0:
+        _fail("验证失败")
+
+
+def _run_intent_test(args: argparse.Namespace) -> None:
+    """测试意图分类"""
+    text = args.text
+
+    _header(f"意图分类测试: '{text}'")
+
+    try:
+        from yuanbot.persona.engines.intent_engine import create_intent_classifier
+
+        classifier = create_intent_classifier(model_dir="models")
+        engine_type = type(classifier).__name__
+
+        if hasattr(classifier, 'classify'):
+            result = classifier.classify(text)
+        else:
+            result = classifier.recognize(text)
+
+        print(f"\n  引擎类型: {engine_type}")
+        print(f"  主要意图: {result.primary}")
+        print(f"  置信度:   {result.confidence:.2%}")
+        if result.secondary:
+            print(f"  次要意图: {', '.join(result.secondary)}")
+        if result.entities:
+            print(f"  实体信息: {result.entities}")
+
+    except Exception as e:
+        _fail(f"测试失败: {e}")
+        import traceback
+        traceback.print_exc()
 
 
 # --------------------------------------------------------------------------- #

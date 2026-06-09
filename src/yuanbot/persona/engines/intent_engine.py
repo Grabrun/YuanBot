@@ -28,6 +28,15 @@ try:
 except ImportError:
     _HAS_ONNX = False
 
+# 可选依赖：sklearn joblib 模型
+try:
+    import joblib as _joblib
+
+    _HAS_JOBLIB = True
+except ImportError:
+    _joblib = None  # type: ignore[assignment]
+    _HAS_JOBLIB = False
+
 
 @dataclass
 class IntentResult:
@@ -195,6 +204,149 @@ class IntentEngine:
         )
 
         return result
+
+
+class SklearnIntentClassifier:
+    """基于 sklearn joblib 模型的意图分类器
+
+    使用 joblib 加载 TF-IDF + LogisticRegression pipeline。
+    当模型不可用时自动 fallback 到规则引擎。
+
+    用法::
+
+        classifier = SklearnIntentClassifier(
+            model_path="models/intent_model.joblib",
+            labels_path="models/labels.json",
+        )
+        result = classifier.classify("你好呀")
+    """
+
+    def __init__(
+        self,
+        model_path: str | Path,
+        labels_path: str | Path | None = None,
+        fallback_engine: IntentEngine | None = None,
+        confidence_threshold: float = 0.5,
+    ):
+        self._model_path = Path(model_path)
+        self._labels_path = Path(labels_path) if labels_path else None
+        self._fallback = fallback_engine or IntentEngine()
+        self._confidence_threshold = confidence_threshold
+
+        self._pipeline: Any = None
+        self._labels: list[str] = []
+        self._ready = False
+
+        self._try_load()
+
+    def _try_load(self) -> None:
+        """尝试加载模型，失败则保持未就绪状态"""
+        if not _HAS_JOBLIB:
+            logger.warning(
+                "sklearn_intent_deps_missing",
+                msg="joblib not installed, using fallback",
+            )
+            return
+
+        try:
+            if not self._model_path.exists():
+                logger.warning(
+                    "sklearn_intent_model_not_found",
+                    path=str(self._model_path),
+                )
+                return
+
+            self._pipeline = _joblib.load(self._model_path)
+
+            # 加载标签
+            if self._labels_path and self._labels_path.exists():
+                import json
+
+                self._labels = json.loads(
+                    self._labels_path.read_text(encoding="utf-8")
+                )
+
+            self._ready = True
+            logger.info(
+                "sklearn_intent_model_loaded",
+                model=str(self._model_path),
+                num_labels=len(self._labels),
+            )
+
+        except Exception as e:
+            logger.error("sklearn_intent_load_failed", error=str(e))
+            self._ready = False
+
+    @property
+    def is_ready(self) -> bool:
+        """模型是否已加载就绪"""
+        return self._ready
+
+    def classify(self, text: str) -> IntentResult:
+        """对输入文本进行意图分类
+
+        当模型未就绪或置信度低于阈值时，自动 fallback 到规则引擎。
+        """
+        if not text or not text.strip():
+            return IntentResult(primary="empty", confidence=1.0)
+
+        if not self._ready:
+            logger.debug("sklearn_intent_not_ready_using_fallback")
+            return self._fallback.recognize(text)
+
+        try:
+            pred = self._pipeline.predict([text.strip()])[0]
+            proba = self._pipeline.predict_proba([text.strip()])[0]
+            confidence = float(proba[pred])
+
+            primary = self._labels[pred] if pred < len(self._labels) else "unknown"
+
+            # 次要意图（top-3）
+            sorted_indices = proba.argsort()[::-1]
+            secondary = [
+                self._labels[i]
+                for i in sorted_indices[1:3]
+                if i < len(self._labels) and proba[i] > 0.1
+            ]
+
+            result = IntentResult(
+                primary=primary,
+                secondary=secondary,
+                confidence=confidence,
+                entities={"source": "sklearn_model"},
+            )
+
+            # 低置信度时 fallback
+            if confidence < self._confidence_threshold:
+                logger.debug(
+                    "sklearn_intent_low_confidence",
+                    ml_primary=primary,
+                    ml_confidence=confidence,
+                    threshold=self._confidence_threshold,
+                )
+                fallback_result = self._fallback.recognize(text)
+                if fallback_result.confidence > confidence:
+                    fallback_result.entities["ml_primary"] = primary
+                    fallback_result.entities["ml_confidence"] = confidence
+                    return fallback_result
+
+            return result
+
+        except Exception as e:
+            logger.error("sklearn_intent_inference_error", error=str(e))
+            return self._fallback.recognize(text)
+
+    def get_model_info(self) -> dict[str, Any]:
+        """获取模型信息"""
+        return {
+            "ready": self._ready,
+            "model_type": "sklearn",
+            "model_path": str(self._model_path),
+            "num_labels": len(self._labels),
+            "confidence_threshold": self._confidence_threshold,
+            "has_joblib": _HAS_JOBLIB,
+            "labels": self._labels if self._ready else [],
+        }
 
 
 class MLIntentClassifier:
@@ -420,3 +572,61 @@ class MLIntentClassifier:
                 for inp in self._session.get_inputs()
             ]
         return info
+
+
+def create_intent_classifier(
+    model_dir: str | Path = "models",
+    confidence_threshold: float = 0.5,
+    fallback_engine: IntentEngine | None = None,
+) -> IntentEngine | MLIntentClassifier | SklearnIntentClassifier:
+    """工厂函数：自动检测并创建最佳可用的意图分类器
+
+    优先级：
+    1. ONNX 模型 (intent_model.onnx + tokenizer.json)
+    2. sklearn 模型 (intent_model.joblib)
+    3. 规则引擎 (fallback)
+
+    Args:
+        model_dir: 模型目录路径
+        confidence_threshold: ML 模型置信度阈值
+        fallback_engine: fallback 规则引擎
+
+    Returns:
+        最佳可用的意图分类器实例
+    """
+    model_dir = Path(model_dir)
+    fallback = fallback_engine or IntentEngine()
+
+    # 优先尝试 ONNX 模型
+    onnx_path = model_dir / "intent_model.onnx"
+    tokenizer_path = model_dir / "tokenizer.json"
+    labels_path = model_dir / "labels.json"
+
+    if onnx_path.exists() and tokenizer_path.exists():
+        classifier = MLIntentClassifier(
+            model_path=onnx_path,
+            tokenizer_path=tokenizer_path,
+            labels_path=labels_path,
+            fallback_engine=fallback,
+            confidence_threshold=confidence_threshold,
+        )
+        if classifier.is_ready:
+            logger.info("intent_classifier_type", type="onnx")
+            return classifier
+
+    # 回退到 sklearn 模型
+    joblib_path = model_dir / "intent_model.joblib"
+    if joblib_path.exists():
+        classifier = SklearnIntentClassifier(
+            model_path=joblib_path,
+            labels_path=labels_path,
+            fallback_engine=fallback,
+            confidence_threshold=confidence_threshold,
+        )
+        if classifier.is_ready:
+            logger.info("intent_classifier_type", type="sklearn")
+            return classifier
+
+    # 最终 fallback 到规则引擎
+    logger.info("intent_classifier_type", type="rule_based")
+    return fallback

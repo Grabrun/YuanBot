@@ -112,6 +112,10 @@ class IntentEngineConfig(BaseModel):
 
     enabled: bool = True
     confidence_threshold: float = 0.7
+    use_ml_model: bool = False
+    model_path: str = "models/intent_model.onnx"
+    tokenizer_path: str = "models/tokenizer.json"
+    labels_path: str = "models/labels.json"
 
 
 class EmotionEngineConfig(BaseModel):

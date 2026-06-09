@@ -16,7 +16,13 @@ from yuanbot.persona.engines.decision_plugin import (
     PluginDecisionResult,
 )
 from yuanbot.persona.engines.emotion_engine import EmotionEngine
-from yuanbot.persona.engines.intent_engine import IntentEngine, IntentResult
+from yuanbot.persona.engines.intent_engine import (
+    IntentEngine,
+    IntentResult,
+    MLIntentClassifier,
+    SklearnIntentClassifier,
+    create_intent_classifier,
+)
 from yuanbot.services.domain_matcher import DomainMatcher, DomainMatchResult
 
 logger = structlog.get_logger(__name__)
@@ -70,12 +76,22 @@ class DialogueDecisionEngine:
 
     def __init__(
         self,
-        intent_engine: IntentEngine | None = None,
+        intent_engine: IntentEngine | MLIntentClassifier | SklearnIntentClassifier | None = None,
         emotion_engine: EmotionEngine | None = None,
         domain_matcher: DomainMatcher | None = None,
         plugin_manager: DecisionPluginManager | None = None,
+        ml_model_dir: str | None = None,
+        ml_confidence_threshold: float = 0.5,
     ):
-        self._intent_engine = intent_engine or IntentEngine()
+        if intent_engine is not None:
+            self._intent_engine = intent_engine
+        elif ml_model_dir:
+            self._intent_engine = create_intent_classifier(
+                model_dir=ml_model_dir,
+                confidence_threshold=ml_confidence_threshold,
+            )
+        else:
+            self._intent_engine = IntentEngine()
         self._emotion_engine = emotion_engine or EmotionEngine()
         self._domain_matcher = domain_matcher or DomainMatcher()
         self._plugin_manager = plugin_manager
@@ -99,8 +115,11 @@ class DialogueDecisionEngine:
         Returns:
             DecisionResult: 综合决策结果
         """
-        # 1. 意图识别
-        intent = self._intent_engine.recognize(text)
+        # 1. 意图识别（支持 ML 分类器和规则引擎）
+        if hasattr(self._intent_engine, 'classify'):
+            intent = self._intent_engine.classify(text)
+        else:
+            intent = self._intent_engine.recognize(text)
 
         # 2. 情感分析
         emotion = await self._emotion_engine.analyze(
@@ -262,3 +281,15 @@ class DialogueDecisionEngine:
 
         # 低优先级
         return "normal", 0.9
+
+    def get_intent_engine_info(self) -> dict[str, Any]:
+        """获取意图引擎信息（用于诊断和状态查询）"""
+        if hasattr(self._intent_engine, 'get_model_info'):
+            info = self._intent_engine.get_model_info()
+            info["engine_type"] = type(self._intent_engine).__name__
+            return info
+        return {
+            "engine_type": type(self._intent_engine).__name__,
+            "ready": True,
+            "model_type": "rule_based",
+        }
