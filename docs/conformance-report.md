@@ -1,9 +1,9 @@
-# 🌸 YuanBot 设计文档符合度审查报告 v30
+# 🌸 YuanBot 设计文档符合度审查报告 v31
 
 **审查日期**: 2026-06-09
 **审查范围**: docs/ 目录下 17 份设计文档 vs src/ + configs/ + tests/ + webui/ 实际代码
 **项目版本**: v1.5.0
-**上次审查**: v29 (2026-06-08),总体 ~100%
+**上次审查**: v30 (2026-06-09),总体 ~100%
 
 ---
 
@@ -1745,6 +1745,43 @@
 | 系统 | v29 | v30 | 变化 |
 |------|------|------|------|
 | **总体** | **~100%** | **~100%** | — (性能优化，无功能变更) |
+
+### 剩余待完成项
+
+| 优先级 | 项目 | 预估工作量 | 类型 |
+|--------|------|----------|------|
+| P2 | 本地意图模型 (bert-base ONNX) | 2-3 天 | 外部 ML 依赖 |
+
+---
+
+## v31 更新摘要
+
+本次审查在总体符合度已达 ~100% 的情况下，聚焦记忆系统热路径的 DB I/O 优化和代码质量提升，消除了重要日期检测中的全量事实加载模式，并引入了多类别批量查询方法。
+
+### v31 性能优化
+
+1. **重要日期检测 DB 级别分类过滤** — `memory/manager.py` `detect_important_dates()` 在持久化模式下，使用新增的 `get_fact_memories_by_categories()` 方法直接查询 `important_date` 和 `personal_info` 两个类别，避免加载用户全部事实记忆后在 Python 中逐条过滤。在内存模式下，先按类别预过滤再做关键词匹配
+2. **实体/话题提取 itertools.chain** — `_extract_entities_from_memories()` 和 `_extract_topics_from_memories()` 将 `set.update()` 循环替换为 `itertools.chain.from_iterable()`，减少 Python 层循环开销
+3. **`add_fact_memory` 可选 profile 参数** — 新增 `profile: UserProfile | None = None` 参数，当调用方已加载用户画像时传入，避免 `add_fact_memory` → `_update_user_profile_from_fact` → `get_or_create_user_profile` 的冗余 DB 读取
+4. **`_update_user_profile_from_fact` 可选 profile 参数** — 同步新增 profile 参数，profile 为 None 时回退到原有行为
+5. **`get_fact_memories_by_categories` 批量查询** — `infrastructure/sqlite_store.py` 新增方法，使用 `IN (...)` 子句在单次 SQL 查询中获取多个类别的事实记忆，替代多次独立查询
+
+### 修改的源文件
+
+- `src/yuanbot/infrastructure/sqlite_store.py` — 新增 `get_fact_memories_by_categories()` 方法
+- `src/yuanbot/memory/manager.py` — `detect_important_dates` DB 级别过滤、`_extract_entities_from_memories`/`_extract_topics_from_memories` itertools.chain、`add_fact_memory`/`_update_user_profile_from_fact` 可选 profile 参数
+
+### 代码质量
+
+- Ruff lint (src/): All checks passed
+- PERF/SIM/C4 lint: 0 issues
+- 测试: 1379 passed, 14 warnings
+
+### 符合度变化
+
+| 系统 | v30 | v31 | 变化 |
+|------|------|------|------|
+| **总体** | **~100%** | **~100%** | — (性能优化 + 代码质量，无功能变更) |
 
 ### 剩余待完成项
 
