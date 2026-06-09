@@ -1,9 +1,9 @@
-# 🌸 YuanBot 设计文档符合度审查报告 v31
+# 🌸 YuanBot 设计文档符合度审查报告 v33
 
 **审查日期**: 2026-06-09
 **审查范围**: docs/ 目录下 17 份设计文档 vs src/ + configs/ + tests/ + webui/ 实际代码
 **项目版本**: v1.5.0
-**上次审查**: v30 (2026-06-09),总体 ~100%
+**上次审查**: v32 (2026-06-09),总体 ~100%
 
 ---
 
@@ -566,7 +566,7 @@
 
 ## 与上次检查对比
 
-| 指标 | v1 | v2 | v3 | v4 | v5 | v6 | v7 | v10 | v12 | v13 | v15 | v18 | v19 | v20 | v27 | v29 (本次) | 变化 |
+| 指标 | v1 | v2 | v3 | v4 | v5 | v6 | v7 | v10 | v12 | v13 | v15 | v18 | v19 | v20 | v27 | v33 (本次) | 变化 |
 |------|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----------|------|
 | 总体符合度 | ~77% | ~88% | ~91% | ~93% | ~95% | ~97% | ~98% | ~99.8% | ~100% | ~100% | ~100% | ~100% | ~100% | ~100% | ~100% | ~100% | — |
 | 接入与通信 | 85% | 90% | 95% | 95% | 95% | 95% | 95% | 97% | 97% | 97% | 97% | 97% | 97% | **97%** | — |
@@ -1823,6 +1823,46 @@
 | 系统 | v31 | v32 | 变化 |
 |------|------|------|------|
 | **总体** | **~100%** | **~100%** | — (性能优化，无功能变更) |
+
+### 剩余待完成项
+
+| 优先级 | 项目 | 预估工作量 | 类型 |
+|--------|------|----------|------|
+| P2 | 本地意图模型 (bert-base ONNX) | 2-3 天 | 外部 ML 依赖 |
+
+---
+
+## v33 更新摘要
+
+本次审查在总体符合度已达 ~100% 的情况下，修复了 1 个正确性 Bug（主动策略交互计数膨胀），并实现了多项热路径性能优化。
+
+### v33 Bug 修复
+
+1. **should_send 交互计数膨胀修复** — `proactive/strategy.py` `should_send()` 步骤 6 原先调用 `get_or_create_user_profile()`，该方法会原子递增 `total_interactions` 计数。在只读策略检查场景下（"是否应发送主动消息"），不应递增交互计数。改为调用 `_get_user_profile_readonly()`，避免每次 `should_send` 调用意外膨胀交互统计
+
+### v33 性能优化
+
+1. **负面反馈预编译正则** — `proactive/strategy.py` `handle_user_feedback()` 将 14 个字符串的元组 + `any(pattern in text for pattern in ...)` 替换为单个预编译 `re.Pattern` + `.search()`，将每条用户消息的 O(n·m) 子串检查减少为单次正则扫描
+2. **heapq.nlargest 记忆排序** — `memory/manager.py` `retrieve_relevant_memories()` 将 `results.sort()[:max_results]` 替换为 `heapq.nlargest(max_results, results, key=...)`，从 O(n log n) 全排序降为 O(n log k) 部分排序（k = max_results，通常为 5）
+3. **主动消息模板常量化** — `proactive/strategy.py` 将 `_task_type_label()` 每次调用时创建的 dict 和 `_fallback_message()` 每次调用时创建的 dict 提升为模块级常量 `_TASK_TYPE_LABELS` 和 `_FALLBACK_MESSAGES`
+4. **DedupLock 单次遍历清理** — `proactive/strategy.py` `cleanup_expired()` 将列表推导式 + for 循环删除改为单次 dict 推导式重建
+
+### 修改的源文件
+
+- `src/yuanbot/memory/manager.py` — 新增 `import heapq`，`retrieve_relevant_memories` 改用 `heapq.nlargest`
+- `src/yuanbot/proactive/strategy.py` — 新增 `import re`，预编译正则 `_negative_feedback_re`，`should_send` 改用 `_get_user_profile_readonly`，模块级常量 `_TASK_TYPE_LABELS` / `_FALLBACK_MESSAGES`，`cleanup_expired` 单次遍历
+
+### 代码质量
+
+- Ruff lint (src/): All checks passed
+- PERF/SIM/C4 lint: 0 issues
+- 测试: 1379 passed, 14 warnings
+
+### 符合度变化
+
+| 系统 | v32 | v33 | 变化 |
+|------|------|------|------|
+| **总体** | **~100%** | **~100%** | — (Bug 修复 + 性能优化，无功能变更) |
 
 ### 剩余待完成项
 

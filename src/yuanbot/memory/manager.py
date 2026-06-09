@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import heapq
 import itertools
 import json
 import math
@@ -794,8 +795,9 @@ class MemoryManager:
             with contextlib.suppress(Exception):
                 await self._db.sqlite.batch_update_episodic_access(ids_to_update)
 
-        results.sort(key=lambda r: r.score, reverse=True)
-        return results[:max_results], current_emotion
+        # Use heapq.nlargest for O(n log k) instead of O(n log n) full sort
+        top_results = heapq.nlargest(max_results, results, key=lambda r: r.score)
+        return top_results, current_emotion
 
     # ──────────────────────────────────────────
     # 记忆生命周期管理

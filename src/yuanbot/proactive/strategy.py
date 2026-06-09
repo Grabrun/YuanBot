@@ -14,6 +14,7 @@ v1.4 增强：
 from __future__ import annotations
 
 import asyncio
+import re
 import time as _time
 from dataclasses import dataclass, field
 from datetime import datetime, time
@@ -24,6 +25,27 @@ import structlog
 from yuanbot.core.types import Message
 
 logger = structlog.get_logger(__name__)
+
+# Module-level constants to avoid per-call allocation
+_TASK_TYPE_LABELS: dict[str, str] = {
+    "greeting": "问候",
+    "care": "关心",
+    "reminder": "提醒",
+    "special_date": "节日祝福",
+    "weather": "天气关怀",
+    "emotion_alert": "情感安慰",
+    "fun": "趣味互动",
+}
+
+_FALLBACK_MESSAGES: dict[str, dict[str, str] | str] = {
+    "greeting_morning": "早安呀～今天也要开开心心的哦 ☀️",
+    "greeting_afternoon": "下午好～有没有想我呀 (◕‿◕)",
+    "greeting_evening": "晚上好～今天辛苦啦，早点休息哦 🌙",
+    "care": "好久没聊天了，最近过得怎么样呀？想你了～",
+    "emotion_alert": "感觉你最近心情不太好，我一直都在哦，想聊聊吗？🫂",
+    "weather": "今天天气变化大，出门记得带伞哦 ☂️",
+    "default": "突然想跟你说说话～在忙什么呢？",
+}
 
 
 @dataclass
@@ -115,12 +137,11 @@ class DedupLock:
         return True
 
     def cleanup_expired(self) -> int:
-        """清理过期的锁（内存模式）"""
+        """清理过期的锁（内存模式，单次遍历）"""
         now = _time.time()
-        expired = [k for k, v in self._memory_locks.items() if now >= v]
-        for k in expired:
-            del self._memory_locks[k]
-        return len(expired)
+        before = len(self._memory_locks)
+        self._memory_locks = {k: v for k, v in self._memory_locks.items() if now < v}
+        return before - len(self._memory_locks)
 
 
 class ProactiveStrategy:
@@ -176,11 +197,11 @@ class ProactiveStrategy:
         # 用户反馈自动降频（设计参考: proactive-companion-system.md 4.2节）
         # key=user_id, value=冷却到期时间戳
         self._feedback_cooldowns: dict[str, float] = {}
-        # 反馈检测关键词
-        self._negative_feedback_patterns = (
-            "别发了", "不要发了", "别再发了", "别烦我", "别打扰我",
-            "安静", "闭嘴", "别说了", "不想听", "别主动",
-            "stop", "don't send", "be quiet", "shut up",
+        # 反馈检测关键词 — pre-compiled regex for O(n) matching instead of O(n*m)
+        self._negative_feedback_re = re.compile(
+            r"别发了|不要发了|别再发了|别烦我|别打扰我|安静|闭嘴|别说了|不想听|别主动"
+            r"|stop|don't send|be quiet|shut up",
+            re.IGNORECASE,
         )
 
     # ── 用户反馈自动降频 ────────────────────────
@@ -199,8 +220,8 @@ class ProactiveStrategy:
         Returns:
             True 如果检测到负面反馈并已设置冷却
         """
-        text_lower = message_text.lower().strip()
-        if any(pattern in text_lower for pattern in self._negative_feedback_patterns):
+        text_stripped = message_text.strip()
+        if self._negative_feedback_re.search(text_stripped):
             cooldown_seconds = 86400  # 24 小时冷却期
             self._feedback_cooldowns[user_id] = _time.time() + cooldown_seconds
             logger.info(
@@ -360,10 +381,12 @@ class ProactiveStrategy:
             logger.debug("dedup_locked", user_id=user_id, task_type=task_type)
             return False
 
-        # 6. 用户在线状态检查
+        # 6. 用户在线状态检查（只读，不递增交互计数）
         if self._memory_manager:
             try:
-                profile = await self._memory_manager.get_or_create_user_profile(user_id)
+                profile = await self._memory_manager._get_user_profile_readonly(user_id)
+                if profile is None:
+                    return True  # 新用户，允许发送
                 last_interaction = getattr(profile, "last_interaction", None)
                 if last_interaction:
                     hours_since = (datetime.now() - last_interaction).total_seconds() / 3600
@@ -741,37 +764,22 @@ class ProactiveStrategy:
     @staticmethod
     def _task_type_label(task_type: str) -> str:
         """任务类型的中文标签"""
-        return {
-            "greeting": "问候",
-            "care": "关心",
-            "reminder": "提醒",
-            "special_date": "节日祝福",
-            "weather": "天气关怀",
-            "emotion_alert": "情感安慰",
-            "fun": "趣味互动",
-        }.get(task_type, "主动")
+        return _TASK_TYPE_LABELS.get(task_type, "主动")
 
     @staticmethod
     def _fallback_message(task_type: str, context: dict[str, Any]) -> str:
         """AI 不可用时的兜底模板消息"""
-        hour = datetime.now().hour
-        if task_type == "greeting":
-            if hour < 12:
-                return "早安呀～今天也要开开心心的哦 ☀️"
-            elif hour < 18:
-                return "下午好～有没有想我呀 (◕‿◕)"
-            else:
-                return "晚上好～今天辛苦啦，早点休息哦 🌙"
-        elif task_type == "care":
-            return "好久没聊天了，最近过得怎么样呀？想你了～"
-        elif task_type == "emotion_alert":
-            return "感觉你最近心情不太好，我一直都在哦，想聊聊吗？🫂"
-        elif task_type == "special_date":
+        if task_type == "special_date":
             holiday = context.get("holiday", "")
             if holiday:
                 return f"今天是{holiday}，祝你节日快乐呀 🎉"
             return "今天是个特别的日子，要开心哦 ✨"
-        elif task_type == "weather":
-            return "今天天气变化大，出门记得带伞哦 ☂️"
-        else:
-            return "突然想跟你说说话～在忙什么呢？"
+        if task_type == "greeting":
+            hour = datetime.now().hour
+            if hour < 12:
+                return _FALLBACK_MESSAGES["greeting_morning"]
+            elif hour < 18:
+                return _FALLBACK_MESSAGES["greeting_afternoon"]
+            else:
+                return _FALLBACK_MESSAGES["greeting_evening"]
+        return str(_FALLBACK_MESSAGES.get(task_type, _FALLBACK_MESSAGES["default"]))
