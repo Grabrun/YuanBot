@@ -241,6 +241,23 @@ class SQLiteStore:
         await self._db.execute("UPDATE fact_memories SET is_deleted=1 WHERE id=?", (id,))
         await self._db.commit()
 
+    async def get_fact_memories_by_categories(
+        self,
+        user_id: str,
+        categories: list[str],
+    ) -> list[dict[str, Any]]:
+        """获取用户指定多个类别的事实记忆（单次查询）"""
+        if not categories:
+            return []
+        placeholders = ", ".join("?" for _ in categories)
+        cursor = await self._db.execute(
+            f"SELECT * FROM fact_memories WHERE user_id=? AND category IN ({placeholders}) "
+            f"AND is_deleted=0",
+            [user_id, *categories],
+        )
+        rows = await cursor.fetchall()
+        return self._rows_to_dicts(rows, cursor)
+
     async def get_memory_counts(self, user_id: str) -> dict[str, int]:
         """获取用户各类记忆数量（单次查询，避免多次 DB 往返）"""
         cursor = await self._db.execute(

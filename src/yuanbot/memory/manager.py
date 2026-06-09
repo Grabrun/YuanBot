@@ -278,6 +278,7 @@ class MemoryManager:
         metadata: dict[str, Any] | None = None,
         category: str = "general",
         confidence: float = 1.0,
+        profile: UserProfile | None = None,
     ) -> MemoryNode:
         """添加事实记忆（用户偏好、习惯、重要事实）
 
@@ -319,7 +320,7 @@ class MemoryManager:
             self._fact_memories[user_id].append(node)
 
         # 同步更新用户画像
-        await self._update_user_profile_from_fact(user_id, content, key_entities)
+        await self._update_user_profile_from_fact(user_id, content, key_entities, profile=profile)
 
         logger.info("fact_memory_added", user_id=user_id, node_id=node.id)
         return node
@@ -408,36 +409,36 @@ class MemoryManager:
         Returns:
             列表，每项包含 {"key", "value", "category", "days_until", "description"}
         """
-        facts = await self.get_fact_memories(user_id)
-        important_dates: list[dict[str, Any]] = []
+        if self.has_persistence:
+            # 持久化模式：key_entities 在加载时为空（存于 metadata），
+            # 直接用 DB 级别分类过滤，避免加载全部事实
+            date_categories = ["important_date", "personal_info"]
+            facts = await self._db.sqlite.get_fact_memories_by_categories(
+                user_id, date_categories
+            )
+            fact_nodes = [self._row_to_fact_memory_node(row) for row in facts]
+        else:
+            # 内存模式：key_entities 可用，加载全部并用分类+关键词过滤
+            facts = await self.get_fact_memories(user_id)
+            fact_nodes = [
+                f for f in facts
+                if f.metadata.get("category") in ("important_date", "personal_info")
+                or (
+                    f.key_entities
+                    and any(kw in " ".join(f.key_entities) for kw in _DATE_KEYWORDS)
+                )
+            ]
 
+        important_dates: list[dict[str, Any]] = []
         today = datetime.now().date()
 
-        for fact in facts:
-            is_date = False
-            category = fact.metadata.get("category", "")
-
-            # 1. category 为 important_date 或 personal_info
-            if category in ("important_date", "personal_info"):
-                is_date = True
-
-            # 2. key 包含日期相关关键词（使用模块级常量）
-            all_entities = " ".join(fact.key_entities) if fact.key_entities else ""
-            if any(kw in all_entities for kw in _DATE_KEYWORDS):
-                is_date = True
-
-            if not is_date:
-                continue
-
-            # 尝试解析日期值
+        for fact in fact_nodes:
             value = fact.content
             try:
-                # 尝试多种日期格式
                 parsed_date = self._parse_date_value(value)
                 if parsed_date is None:
                     continue
 
-                # 计算距今天数（忽略年份，只比较月-日）
                 this_year = parsed_date.replace(year=today.year)
                 if this_year < today:
                     this_year = this_year.replace(year=today.year + 1)
@@ -446,7 +447,7 @@ class MemoryManager:
                 important_dates.append({
                     "key": fact.key_entities[0] if fact.key_entities else "unknown",
                     "value": value,
-                    "category": category,
+                    "category": fact.metadata.get("category", ""),
                     "days_until": days_until,
                     "date": this_year.isoformat(),
                     "description": (
@@ -457,7 +458,6 @@ class MemoryManager:
             except Exception:
                 continue
 
-        # 按距今天数排序
         important_dates.sort(key=lambda x: x["days_until"])
         return important_dates
 
@@ -1331,9 +1331,15 @@ class MemoryManager:
         user_id: str,
         content: str,
         entities: list[str] | None,
+        profile: UserProfile | None = None,
     ) -> None:
-        """从事实记忆中更新用户画像"""
-        profile = await self.get_or_create_user_profile(user_id)
+        """从事实记忆中更新用户画像
+
+        Args:
+            profile: 可选的已加载用户画像，避免重复 DB 读取
+        """
+        if profile is None:
+            profile = await self.get_or_create_user_profile(user_id)
         if entities:
             for entity in entities:
                 if entity not in profile.preferences:
@@ -1361,17 +1367,15 @@ class MemoryManager:
 
     def _extract_entities_from_memories(self, memories: list[MemoryNode]) -> list[str]:
         """从记忆中提取关键实体"""
-        entities = set()
-        for mem in memories:
-            entities.update(mem.key_entities)
-        return list(entities)[:10]
+        return list(set(itertools.chain.from_iterable(
+            mem.key_entities for mem in memories
+        )))[:10]
 
     def _extract_topics_from_memories(self, memories: list[MemoryNode]) -> list[str]:
         """从记忆中提取话题标签"""
-        topics = set()
-        for mem in memories:
-            topics.update(mem.topic_tags)
-        return list(topics)[:5]
+        return list(set(itertools.chain.from_iterable(
+            mem.topic_tags for mem in memories
+        )))[:5]
 
     def _is_similar_fact(self, existing: MemoryNode, new_node: MemoryNode) -> bool:
         """检查是否是相似的事实"""
