@@ -1,7 +1,7 @@
 # YuanBot 文档站点配置
 # MkDocs + Material 主题
 
-site_name: "🌸 YuanBot 文档"
+site_name: "YuanBot"
 site_description: "有记忆、有情感、会主动想起你的 AI 虚拟伴侣"
 site_url: "https://grabrun.github.io/YuanBot"
 repo_url: "https://github.com/Grabrun/YuanBot"
@@ -40,6 +40,7 @@ theme:
   font:
     text: Noto Sans SC
     code: JetBrains Mono
+  custom_dir: docs/overrides
 
 # 插件
 plugins:
