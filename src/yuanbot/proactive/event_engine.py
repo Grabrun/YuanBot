@@ -414,7 +414,7 @@ class EventEngine:
             return_exceptions=True,
         )
 
-        for user_id, trend in zip(user_ids, trends):
+        for user_id, trend in zip(user_ids, trends, strict=False):
             if isinstance(trend, Exception):
                 logger.debug("emotion_check_skip", user_id=user_id)
                 continue
@@ -495,7 +495,7 @@ class EventEngine:
         )
 
         # Process results sequentially for state tracking and event emission
-        for (user_id, location, _), weather in zip(user_locations, weather_results):
+        for (user_id, location, _), weather in zip(user_locations, weather_results, strict=False):
             try:
                 if isinstance(weather, Exception) or weather is None:
                     continue
@@ -577,7 +577,7 @@ class EventEngine:
         else:
             settings_list = [{}] * len(user_ids)
 
-        for user_id, user_config in zip(user_ids, settings_list):
+        for user_id, user_config in zip(user_ids, settings_list, strict=False):
             try:
                 if isinstance(user_config, Exception):
                     continue

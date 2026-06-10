@@ -592,8 +592,9 @@ class ProactiveStrategy:
 
         if self._memory_manager:
             try:
-                profile = await self._memory_manager.get_or_create_user_profile(user_id)
-                stage = getattr(profile, "relationship_stage", "initial")
+                # Use readonly to avoid incrementing interaction count (read-only operation)
+                profile = await self._memory_manager._get_user_profile_readonly(user_id)
+                stage = getattr(profile, "relationship_stage", "initial") if profile else "initial"
                 stage_bonus = {
                     "deep": 2,
                     "intimate": 1,

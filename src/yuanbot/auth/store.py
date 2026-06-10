@@ -273,6 +273,10 @@ class ConversationStore:
         self._messages: dict[str, list[ConversationMessage]] = {}
         self._user_conversations: dict[str, list[str]] = {}  # user_id -> [conv_id]
         self._loaded = False
+        self._total_message_count: int = 0  # running counter
+        # user_id -> sorted conversation list
+        self._sorted_conversations_cache: dict[str, list[Conversation]] = {}
+        self._sort_cache_dirty: set[str] = set()  # user_ids with stale cache
 
     async def initialize(self) -> None:
         """初始化存储"""
@@ -299,6 +303,10 @@ class ConversationStore:
                 )
                 # 加载消息
                 self._load_messages(conv.conversation_id)
+            # Initialize running counter
+            self._total_message_count = sum(
+                len(msgs) for msgs in self._messages.values()
+            )
         except Exception as e:
             logger.error("conversation_store_load_error", error=str(e))
 
@@ -348,6 +356,7 @@ class ConversationStore:
         self._conversations[conv.conversation_id] = conv
         self._messages[conv.conversation_id] = []
         self._user_conversations.setdefault(user_id, []).append(conv.conversation_id)
+        self._sort_cache_dirty.add(user_id)
         self._save_conversations()
         return conv
 
@@ -374,9 +383,14 @@ class ConversationStore:
     def list_conversations(self, user_id: str) -> list[Conversation]:
         """列出用户的所有会话"""
         self._ensure_loaded()
+        if user_id not in self._sort_cache_dirty and user_id in self._sorted_conversations_cache:
+            return self._sorted_conversations_cache[user_id]
         conv_ids = self._user_conversations.get(user_id, [])
         convs = [self._conversations[cid] for cid in conv_ids if cid in self._conversations]
-        return sorted(convs, key=lambda c: c.updated_at, reverse=True)
+        convs.sort(key=lambda c: c.updated_at, reverse=True)
+        self._sorted_conversations_cache[user_id] = convs
+        self._sort_cache_dirty.discard(user_id)
+        return convs
 
     def delete_conversation(self, conversation_id: str, user_id: str) -> bool:
         """删除会话（校验归属）
@@ -390,11 +404,13 @@ class ConversationStore:
             return False
 
         del self._conversations[conversation_id]
-        self._messages.pop(conversation_id, None)
+        removed_count = len(self._messages.pop(conversation_id, []))
+        self._total_message_count = max(0, self._total_message_count - removed_count)
         conv_ids = self._user_conversations.get(user_id, [])
         if conversation_id in conv_ids:
             conv_ids.remove(conversation_id)
 
+        self._sort_cache_dirty.add(user_id)
         self._save_conversations()
         # 清理消息文件
         msg_file = self._data_dir / f"messages_{conversation_id}.json"
@@ -429,6 +445,7 @@ class ConversationStore:
             metadata=metadata or {},
         )
         self._messages.setdefault(conversation_id, []).append(msg)
+        self._total_message_count += 1
 
         # 更新会话
         conv.message_count += 1
@@ -438,6 +455,7 @@ class ConversationStore:
         if conv.title == "新会话" and role == "user":
             conv.title = content[:20] + ("..." if len(content) > 20 else "")
 
+        self._sort_cache_dirty.add(user_id)
         self._save_conversations()
         self._save_messages(conversation_id)
         return msg
@@ -609,4 +627,4 @@ class ConversationStore:
 
     @property
     def total_message_count(self) -> int:
-        return sum(len(msgs) for msgs in self._messages.values())
+        return self._total_message_count

@@ -288,7 +288,7 @@ class TestProactiveStrategyGetPriority:
         mock_memory = AsyncMock()
         mock_profile = AsyncMock()
         mock_profile.relationship_stage = "deep"
-        mock_memory.get_or_create_user_profile = AsyncMock(return_value=mock_profile)
+        mock_memory._get_user_profile_readonly = AsyncMock(return_value=mock_profile)
 
         strategy = ProactiveStrategy(memory_manager=mock_memory)
         p = await strategy.get_task_priority("greeting", "user1")
@@ -300,7 +300,7 @@ class TestProactiveStrategyGetPriority:
         mock_memory = AsyncMock()
         mock_profile = AsyncMock()
         mock_profile.relationship_stage = "initial"
-        mock_memory.get_or_create_user_profile = AsyncMock(return_value=mock_profile)
+        mock_memory._get_user_profile_readonly = AsyncMock(return_value=mock_profile)
 
         strategy = ProactiveStrategy(memory_manager=mock_memory)
         p = await strategy.get_task_priority("greeting", "user1")

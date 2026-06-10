@@ -369,7 +369,7 @@ class TTSManager:
             return_exceptions=True,
         )
         engine_status: dict[str, bool] = {}
-        for eid, result in zip(engine_ids, results):
+        for eid, result in zip(engine_ids, results, strict=False):
             engine_status[eid] = result if isinstance(result, bool) else False
 
         return {
