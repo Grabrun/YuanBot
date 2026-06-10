@@ -42,8 +42,8 @@
 /* ── 全局排版 ──────────────────────────────── */
 .md-typeset {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans SC", "PingFang SC", "Helvetica Neue", sans-serif;
-  font-size: 0.94rem;
-  line-height: 1.75;
+  font-size: 0.875rem;
+  line-height: 1.7;
   color: var(--text-primary);
 }
 
@@ -75,7 +75,7 @@
 }
 
 .md-sidebar--primary .md-nav__link {
-  color: var(--text-secondary);
+  color: #374151;
   font-size: 0.82rem;
   font-weight: 400;
   padding: 0.4rem 0.75rem;
@@ -97,7 +97,7 @@
 }
 
 .md-sidebar--primary .md-nav__item--nested > .md-nav__link {
-  color: var(--text-primary);
+  color: #111827;
   font-size: 0.82rem;
   font-weight: 600;
   text-transform: none;
@@ -141,10 +141,10 @@
   padding: 1.5rem 2.5rem 3rem;
 }
 
-/* ── 标题 — 黑色细体 ──────────────────────── */
+/* ── 标题 — 紧凑尺寸 ─────────────────────── */
 .md-typeset h1 {
   font-weight: 600;
-  font-size: 1.75rem;
+  font-size: 1.5rem;
   color: var(--text-primary);
   border-bottom: none;
   padding-bottom: 0;
@@ -154,18 +154,18 @@
 
 .md-typeset h2 {
   font-weight: 600;
-  font-size: 1.25rem;
+  font-size: 1.15rem;
   color: var(--text-primary);
-  margin-top: 2.5rem;
+  margin-top: 2rem;
   padding-bottom: 0;
   border-bottom: none;
 }
 
 .md-typeset h3 {
   font-weight: 600;
-  font-size: 1.05rem;
+  font-size: 0.95rem;
   color: var(--text-primary);
-  margin-top: 2rem;
+  margin-top: 1.5rem;
 }
 
 .md-typeset h4, .md-typeset h5, .md-typeset h6 {
