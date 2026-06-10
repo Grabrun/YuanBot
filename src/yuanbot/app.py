@@ -20,7 +20,7 @@ from starlette.websockets import WebSocket
 from yuanbot.adapters.channel.web_adapter import WebAdapter
 from yuanbot.auth.admin_routes import init_admin_stores
 from yuanbot.auth.admin_routes import router as admin_router
-from yuanbot.auth.conversation_routes import init_conversation_store
+from yuanbot.auth.conversation_routes import init_conversation_store, init_sqlite_store
 from yuanbot.auth.conversation_routes import router as conversation_router
 from yuanbot.auth.middleware import AuthManager, init_auth_manager
 from yuanbot.auth.routes import router as auth_router
@@ -225,6 +225,9 @@ def create_app(config: YuanBotConfig) -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         """应用生命周期管理"""
+        import structlog
+
+        _logger = structlog.get_logger("app")
 
         # 加载 Skills 和 Tools
         await skill_manager.load_skills()
@@ -236,6 +239,17 @@ def create_app(config: YuanBotConfig) -> FastAPI:
         # 初始化用户与会话存储
         await user_store.initialize()
         await conv_store.initialize()
+
+        # 初始化 SQLite 存储（FTS5 全文搜索）
+        try:
+            from yuanbot.infrastructure.sqlite_store import SQLiteStore
+
+            sqlite_store = SQLiteStore()
+            await sqlite_store.initialize()
+            init_sqlite_store(sqlite_store)
+            _logger.info("sqlite_fts_initialized")
+        except Exception as e:
+            _logger.warning("sqlite_fts_init_failed", error=str(e))
 
         # 首次启动自动创建管理员
         if user_store.user_count == 0:
@@ -448,6 +462,20 @@ def create_app(config: YuanBotConfig) -> FastAPI:
                     conv_store_inst = app.state.conv_store
                     if conv_id:
                         conv_store_inst.add_message(conv_id, user.user_id, "user", text)
+                        # 同步到 SQLite FTS 索引
+                        try:
+                            from yuanbot.auth.conversation_routes import _sqlite_store
+                            if _sqlite_store and _sqlite_store.is_initialized:
+                                import uuid as _uuid
+                                await _sqlite_store.save_message(
+                                    message_id=str(_uuid.uuid4())[:8],
+                                    conversation_id=conv_id,
+                                    user_id=user.user_id,
+                                    role="user",
+                                    content=text,
+                                )
+                        except Exception:
+                            pass
 
                     # 通知开始生成
                     await ws.send_text(json.dumps({
@@ -481,6 +509,20 @@ def create_app(config: YuanBotConfig) -> FastAPI:
                             conv_store_inst.add_message(
                                 conv_id, user.user_id, "assistant", reply_text
                             )
+                            # 同步到 SQLite FTS 索引
+                            try:
+                                from yuanbot.auth.conversation_routes import _sqlite_store
+                                if _sqlite_store and _sqlite_store.is_initialized:
+                                    import uuid as _uuid
+                                    await _sqlite_store.save_message(
+                                        message_id=str(_uuid.uuid4())[:8],
+                                        conversation_id=conv_id,
+                                        user_id=user.user_id,
+                                        role="assistant",
+                                        content=reply_text,
+                                    )
+                            except Exception:
+                                pass
 
                         await ws.send_text(json.dumps({
                             "type": "stream_end",

@@ -40,12 +40,12 @@ try:
 except ImportError:
     _HAS_GRPC = False
 
-# protobuf 生成的代码（可选）
+# protobuf 生成的代码（已编译）
 try:
-    # 当 protobuf 文件编译后可用
-    # from yuanbot.tools.proto import tool_sandbox_pb2 as pb2
-    # from yuanbot.tools.proto import tool_sandbox_pb2_grpc as pb2_grpc
-    _HAS_PROTO = False  # 设为 True 当 proto 编译后
+    from yuanbot.tools.proto import tool_sandbox_pb2 as pb2
+    from yuanbot.tools.proto import tool_sandbox_pb2_grpc as pb2_grpc
+
+    _HAS_PROTO = True
 except ImportError:
     _HAS_PROTO = False
 
@@ -249,14 +249,15 @@ class GrpcToolServer:
             return
 
         self._server = grpc_aio.server()
-        # 注册 servicer（当 proto 编译后启用）
-        # pb2_grpc.add_ToolExecutorServiceServicer_to_server(
-        #     self._servicer, self._server
-        # )
+        # 注册 servicer（proto 编译后已启用）
+        if _HAS_PROTO:
+            pb2_grpc.add_ToolExecutorServiceServicer_to_server(
+                self._servicer, self._server
+            )
         address = f"{self._host}:{self._port}"
         self._server.add_insecure_port(address)
         await self._server.start()
-        logger.info("grpc_server_started", address=address)
+        logger.info("grpc_server_started", address=address, proto_available=_HAS_PROTO)
 
     async def stop(self, grace: float = 5.0) -> None:
         """停止 gRPC server"""
@@ -401,18 +402,26 @@ class SandboxClient:
 
     async def _grpc_execute(self, request: ToolRequestData) -> ToolResponseData:
         """通过 gRPC 执行工具"""
-        # 当 proto 编译后，使用 stub 调用
-        # stub = pb2_grpc.ToolExecutorServiceStub(self._channel)
-        # grpc_request = pb2.ToolRequest(
-        #     tool_id=request.tool_id,
-        #     params_json=request.params_json,
-        #     timeout_seconds=request.timeout_seconds,
-        #     invocation_id=request.invocation_id,
-        #     auth_token=request.auth_token,
-        # )
-        # response = await stub.Execute(grpc_request, timeout=request.timeout_seconds)
-        # return ToolResponseData(...)
-        raise RuntimeError("gRPC stub not compiled yet")
+        if not _HAS_PROTO:
+            raise RuntimeError("gRPC proto stubs not available")
+
+        stub = pb2_grpc.ToolExecutorServiceStub(self._channel)
+        grpc_request = pb2.ToolRequest(
+            tool_id=request.tool_id,
+            params_json=request.params_json,
+            timeout_seconds=request.timeout_seconds,
+            invocation_id=request.invocation_id,
+            auth_token=request.auth_token,
+        )
+        response = await stub.Execute(grpc_request, timeout=request.timeout_seconds)
+        return ToolResponseData(
+            invocation_id=response.invocation_id,
+            success=response.success,
+            output_json=response.output_json,
+            error=response.error,
+            execution_time_ms=response.execution_time_ms,
+            status_code=response.status_code,
+        )
 
     async def _subprocess_execute(self, request: ToolRequestData) -> ToolResponseData:
         """通过 subprocess 执行工具（fallback）"""
@@ -500,13 +509,44 @@ class SandboxClient:
 
     async def list_tools(self) -> list[ToolInfoData]:
         """列出可用工具"""
-        # TODO: gRPC ListTools 实现
-        return []
+        if not (_HAS_GRPC and _HAS_PROTO and self._connected and self._channel):
+            return []
+        try:
+            stub = pb2_grpc.ToolExecutorServiceStub(self._channel)
+            response = await stub.ListTools(
+                pb2.ListToolsRequest(), timeout=self._timeout,
+            )
+            return [
+                ToolInfoData(
+                    tool_id=t.tool_id,
+                    name=t.name,
+                    description=t.description,
+                    params_schema_json=t.params_schema_json,
+                    sandbox_type=t.sandbox_type,
+                )
+                for t in response.tools
+            ]
+        except Exception as e:
+            logger.warning("grpc_list_tools_failed", error=str(e))
+            return []
 
     async def health_check(self) -> dict[str, Any]:
         """健康检查"""
-        # TODO: gRPC HealthCheck 实现
-        return {"healthy": False, "connected": self._connected}
+        if not (_HAS_GRPC and _HAS_PROTO and self._connected and self._channel):
+            return {"healthy": False, "connected": self._connected}
+        try:
+            stub = pb2_grpc.ToolExecutorServiceStub(self._channel)
+            response = await stub.HealthCheck(
+                pb2.HealthCheckRequest(), timeout=self._timeout,
+            )
+            return {
+                "healthy": response.healthy,
+                "version": response.version,
+                "active_executions": response.active_executions,
+            }
+        except Exception as e:
+            logger.warning("grpc_health_check_failed", error=str(e))
+            return {"healthy": False, "connected": self._connected}
 
     async def close(self) -> None:
         """关闭连接"""

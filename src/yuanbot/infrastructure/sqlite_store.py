@@ -18,6 +18,14 @@ logger = structlog.get_logger(__name__)
 
 # 建表 SQL
 _CREATE_TABLES = [
+    """CREATE TABLE IF NOT EXISTS messages (
+        id TEXT PRIMARY KEY,
+        conversation_id TEXT NOT NULL,
+        user_id TEXT NOT NULL,
+        role TEXT NOT NULL,
+        content TEXT NOT NULL,
+        timestamp REAL
+    )""",
     """CREATE TABLE IF NOT EXISTS fact_memories (
         id TEXT PRIMARY KEY,
         user_id TEXT NOT NULL,
@@ -104,6 +112,9 @@ _CREATE_TABLES = [
 ]
 
 _CREATE_INDEXES = [
+    "CREATE INDEX IF NOT EXISTS idx_messages_user ON messages(user_id)",
+    "CREATE INDEX IF NOT EXISTS idx_messages_conv ON messages(conversation_id)",
+    "CREATE INDEX IF NOT EXISTS idx_messages_user_conv ON messages(user_id, conversation_id)",
     "CREATE INDEX IF NOT EXISTS idx_fact_memories_user ON fact_memories(user_id)",
     "CREATE INDEX IF NOT EXISTS idx_fact_memories_category ON fact_memories(category)",
     # Composite index: most queries filter by (user_id, is_deleted)
@@ -119,6 +130,28 @@ _CREATE_INDEXES = [
     # Composite index: emotion trend queries filter by (user_id, timestamp)
     "CREATE INDEX IF NOT EXISTS idx_emotion_user_ts ON emotion_records(user_id, timestamp)",
     "CREATE INDEX IF NOT EXISTS idx_identity_yuanbot ON identity_mappings(yuanbot_user_id)",
+]
+
+# FTS5 全文搜索虚拟表 + 同步触发器
+_CREATE_FTS = [
+    """CREATE VIRTUAL TABLE IF NOT EXISTS messages_fts USING fts5(
+        content,
+        content=messages,
+        content_rowid=rowid
+    )""",
+    """CREATE TRIGGER IF NOT EXISTS messages_ai AFTER INSERT ON messages BEGIN
+        INSERT INTO messages_fts(rowid, content) VALUES (new.rowid, new.content);
+    END""",
+    """CREATE TRIGGER IF NOT EXISTS messages_ad AFTER DELETE ON messages BEGIN
+        INSERT INTO messages_fts(messages_fts, rowid, content)
+        VALUES ('delete', old.rowid, old.content);
+    END""",
+    """CREATE TRIGGER IF NOT EXISTS messages_au AFTER UPDATE ON messages BEGIN
+        INSERT INTO messages_fts(messages_fts, rowid, content)
+        VALUES ('delete', old.rowid, old.content);
+        INSERT INTO messages_fts(rowid, content)
+        VALUES (new.rowid, new.content);
+    END""",
 ]
 
 
@@ -165,6 +198,10 @@ class SQLiteStore:
 
         # 创建索引
         for sql in _CREATE_INDEXES:
+            await self._db.execute(sql)
+
+        # 创建 FTS5 全文搜索表
+        for sql in _CREATE_FTS:
             await self._db.execute(sql)
 
         await self._db.commit()
@@ -632,6 +669,113 @@ class SQLiteStore:
         )
         rows = await cursor.fetchall()
         return self._rows_to_dicts(rows, cursor)
+
+    # ──────────────────────────────────────────
+    # 消息存储与全文搜索
+    # ──────────────────────────────────────────
+
+    async def save_message(
+        self,
+        message_id: str,
+        conversation_id: str,
+        user_id: str,
+        role: str,
+        content: str,
+        timestamp: float | None = None,
+    ) -> None:
+        """保存消息到 SQLite（含 FTS5 索引自动同步）
+
+        Args:
+            message_id: 消息唯一 ID
+            conversation_id: 会话 ID
+            user_id: 用户 ID
+            role: 角色 (user/assistant/system)
+            content: 消息内容
+            timestamp: Unix 时间戳，默认当前时间
+        """
+        ts = timestamp or time.time()
+        await self._db.execute(
+            "INSERT OR REPLACE INTO messages"
+            " (id, conversation_id, user_id, role, content, timestamp)"
+            " VALUES (?, ?, ?, ?, ?, ?)",
+            (message_id, conversation_id, user_id, role, content, ts),
+        )
+        await self._db.commit()
+
+    async def search_messages_fts(
+        self,
+        user_id: str,
+        query: str,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> list[dict[str, Any]]:
+        """使用 FTS5 全文搜索用户消息
+
+        Args:
+            user_id: 用户 ID
+            query: 搜索关键词（支持 FTS5 语法）
+            limit: 最大返回数
+            offset: 偏移量
+
+        Returns:
+            匹配的消息列表，每条包含 conversation_id, message_id, role, content, timestamp, rank
+        """
+        # FTS5 搜索 + 用户过滤
+        # bm25() 返回相关性分数（越小越相关）
+        fts_query = query.replace('"', '""')  # 转义双引号
+        sql = """
+            SELECT m.conversation_id, m.id AS message_id, m.role, m.content,
+                   m.timestamp, bm25(messages_fts) AS rank
+            FROM messages_fts
+            JOIN messages m ON messages_fts.rowid = m.rowid
+            WHERE messages_fts MATCH ?
+              AND m.user_id = ?
+            ORDER BY rank
+            LIMIT ? OFFSET ?
+        """
+        try:
+            cursor = await self._db.execute(sql, (fts_query, user_id, limit, offset))
+            rows = await cursor.fetchall()
+            results = self._rows_to_dicts(rows, cursor)
+            # 将 timestamp 转为 ISO 格式
+            for r in results:
+                if r.get("timestamp"):
+                    from datetime import datetime
+                    r["timestamp"] = datetime.fromtimestamp(
+                        r["timestamp"], tz=datetime.UTC
+                    ).isoformat()
+            return results
+        except Exception as e:
+            logger.error("fts_search_error", query=query, error=str(e))
+            # Fallback: 普通 LIKE 搜索
+            sql_fallback = """
+                SELECT conversation_id, id AS message_id, role, content, timestamp,
+                       0 AS rank
+                FROM messages
+                WHERE user_id = ? AND content LIKE ?
+                ORDER BY timestamp DESC
+                LIMIT ? OFFSET ?
+            """
+            cursor = await self._db.execute(
+                sql_fallback, (user_id, f"%{query}%", limit, offset)
+            )
+            rows = await cursor.fetchall()
+            results = self._rows_to_dicts(rows, cursor)
+            for r in results:
+                if r.get("timestamp"):
+                    from datetime import datetime
+                    r["timestamp"] = datetime.fromtimestamp(
+                        r["timestamp"], tz=datetime.UTC
+                    ).isoformat()
+            return results
+
+    async def get_message_count(self, user_id: str) -> int:
+        """获取用户已索引的消息总数"""
+        cursor = await self._db.execute(
+            "SELECT COUNT(*) FROM messages WHERE user_id = ?", (user_id,)
+        )
+        row = await cursor.fetchone()
+        return row[0] if row else 0
 
     # ──────────────────────────────────────────
     # 主动交互配置操作

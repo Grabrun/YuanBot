@@ -47,12 +47,13 @@ cli = ["click>=8.0"]
 jwt = ["PyJWT>=2.8"]
 onnx = ["onnxruntime>=1.17", "tokenizers>=0.19"]
 grpc = ["grpcio>=1.60", "grpcio-tools>=1.60"]
+wasm = ["wasmtime>=20.0"]
 serverless = ["mangum>=0.17"]
 all-providers = [
     "yuanbot[openai,anthropic]",
 ]
 all = [
-    "yuanbot[openai,anthropic,milvus,graph,cli,mysql,jwt,onnx,grpc,serverless]",
+    "yuanbot[openai,anthropic,milvus,graph,cli,mysql,jwt,onnx,grpc,wasm,serverless]",
 ]
 
 [project.scripts]
@@ -64,6 +65,7 @@ packages = ["src/yuanbot"]
 [tool.ruff]
 target-version = "py312"
 line-length = 100
+exclude = ["src/yuanbot/tools/proto/*"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "N", "W", "UP"]
