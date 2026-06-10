@@ -1415,9 +1415,11 @@ class MemoryManager:
         if category:
             cat_rows = await self._db.sqlite.get_fact_memories(user_id, category=category)
             seen_ids = {n.id for n in nodes}
-            for row in cat_rows:
-                if row["id"] not in seen_ids:
-                    nodes.append(self._row_to_fact_memory_node(row))
+            nodes.extend(
+                self._row_to_fact_memory_node(row)
+                for row in cat_rows
+                if row["id"] not in seen_ids
+            )
 
         return nodes
 

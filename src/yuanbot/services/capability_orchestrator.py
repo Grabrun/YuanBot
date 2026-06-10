@@ -8,6 +8,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 from dataclasses import dataclass, field
 from typing import Any
@@ -202,7 +203,7 @@ class CapabilityOrchestrator:
                 )
                 return result
 
-            # 有工具调用，逐个执行
+            # 有工具调用，并行执行（多个工具调用互相独立）
             # 先将 assistant 的回复（含 tool_calls）加入历史
             current_messages.append(
                 Message(
@@ -212,24 +213,14 @@ class CapabilityOrchestrator:
                 )
             )
 
-            for tool_call in response.tool_calls:
-                tool_name = tool_call.function.name
-                tool_id = tool_id_map.get(tool_name, tool_name)
+            # 并行执行所有工具调用，保持顺序
+            tool_tasks = [
+                self._execute_single_tool(tc, tool_id_map, token_payload)
+                for tc in response.tool_calls
+            ]
+            tool_results = await asyncio.gather(*tool_tasks)
 
-                # 安全策略检查
-                if not self._check_permission(tool_id, token_payload):
-                    tool_result = ToolResult(
-                        tool_id=tool_id,
-                        success=False,
-                        error=f"Permission denied for tool '{tool_name}'",
-                    )
-                else:
-                    # 执行工具
-                    tool_result = await self._tools.execute_tool(
-                        tool_id=tool_id,
-                        params=self._parse_tool_arguments(tool_call),
-                    )
-
+            for tool_call, tool_result in zip(response.tool_calls, tool_results, strict=False):
                 result.tool_results.append(tool_result)
                 result.tool_calls_made += 1
 
@@ -244,7 +235,7 @@ class CapabilityOrchestrator:
 
                 logger.debug(
                     "tool_executed",
-                    tool_name=tool_name,
+                    tool_name=tool_call.function.name,
                     success=tool_result.success,
                 )
 
@@ -252,6 +243,32 @@ class CapabilityOrchestrator:
         logger.warning("tool_loop_max_rounds_reached", max_rounds=max_rounds)
         result.final_response = current_messages[-1].content or ""
         return result
+
+    async def _execute_single_tool(
+        self,
+        tool_call: ToolCall,
+        tool_id_map: dict[str, str],
+        token_payload: TokenPayload | None,
+    ) -> ToolResult:
+        """执行单个工具调用（权限检查 + 执行）
+
+        供 execute_tool_loop 中并行调度使用。
+        """
+        tool_name = tool_call.function.name
+        tool_id = tool_id_map.get(tool_name, tool_name)
+
+        # 安全策略检查
+        if not self._check_permission(tool_id, token_payload):
+            return ToolResult(
+                tool_id=tool_id,
+                success=False,
+                error=f"Permission denied for tool '{tool_name}'",
+            )
+
+        return await self._tools.execute_tool(
+            tool_id=tool_id,
+            params=self._parse_tool_arguments(tool_call),
+        )
 
     def _check_permission(
         self,

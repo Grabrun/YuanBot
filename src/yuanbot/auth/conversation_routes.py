@@ -13,6 +13,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
@@ -24,6 +26,15 @@ from yuanbot.auth.store import ConversationStore
 logger = structlog.get_logger(__name__)
 
 router = APIRouter(tags=["conversations"])
+
+# SQLite 存储（可选，用于 FTS5 全文搜索）
+_sqlite_store: Any = None
+
+
+def init_sqlite_store(store: Any) -> None:
+    """初始化 SQLite 存储（可选）"""
+    global _sqlite_store
+    _sqlite_store = store
 
 
 def _get_conv_store() -> ConversationStore:
@@ -171,7 +182,27 @@ async def search_messages(
     """跨会话全文搜索消息
 
     在当前用户所有会话的消息内容中搜索关键词。
+    优先使用 SQLite FTS5 全文搜索，不可用时回退到 JSON 存储。
     """
+    # 优先使用 SQLite FTS5 全文搜索
+    if _sqlite_store is not None and _sqlite_store.is_initialized:
+        try:
+            results = await _sqlite_store.search_messages_fts(
+                user_id=user.user_id,
+                query=q,
+                limit=limit,
+                offset=offset,
+            )
+            return {
+                "query": q,
+                "results": results,
+                "count": len(results),
+                "engine": "fts5",
+            }
+        except Exception as e:
+            logger.warning("fts_search_fallback", error=str(e))
+
+    # 回退到 JSON 存储搜索
     store = get_conv_store()
     results = store.search_messages(
         user_id=user.user_id,
@@ -183,6 +214,7 @@ async def search_messages(
         "query": q,
         "results": results,
         "count": len(results),
+        "engine": "json",
     }
 
 

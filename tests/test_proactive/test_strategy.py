@@ -466,3 +466,64 @@ class TestGreetingTimeWindow:
         """只有小时的时间格式"""
         result = ProactiveStrategy._is_in_greeting_window("7", "23")
         assert isinstance(result, bool)
+
+
+class TestUserFeedbackDownregulation:
+    """用户反馈自动降频测试
+
+    设计参考: proactive-companion-system.md 4.2节
+    """
+
+    @pytest.fixture
+    def strategy(self) -> ProactiveStrategy:
+        config = ProactiveConfig(enabled=True, max_per_day=5)
+        return ProactiveStrategy(config=config.__dict__)
+
+    def test_negative_feedback_detected_chinese(self, strategy: ProactiveStrategy) -> None:
+        """检测中文负面反馈关键词"""
+        keywords = ["别发了", "不要发了", "别再发了", "别烦我", "别打扰我", "安静", "闭嘴", "别说了", "不想听", "别主动"]
+        for kw in keywords:
+            assert strategy.handle_user_feedback("user1", kw) is True, f"Failed to detect: {kw}"
+
+    def test_negative_feedback_detected_english(self, strategy: ProactiveStrategy) -> None:
+        """检测英文负面反馈关键词"""
+        keywords = ["stop", "don't send", "be quiet", "shut up"]
+        for kw in keywords:
+            assert strategy.handle_user_feedback("user1", kw) is True, f"Failed to detect: {kw}"
+
+    def test_negative_feedback_with_context(self, strategy: ProactiveStrategy) -> None:
+        """带上下文的负面反馈也能检测"""
+        assert strategy.handle_user_feedback("user1", "求你了别发了好吗") is True
+        assert strategy.handle_user_feedback("user1", "请不要再发消息了") is False  # 不在关键词列表中
+
+    def test_normal_message_not_detected(self, strategy: ProactiveStrategy) -> None:
+        """普通消息不触发降频"""
+        assert strategy.handle_user_feedback("user1", "你好呀") is False
+        assert strategy.handle_user_feedback("user1", "今天天气不错") is False
+        assert strategy.handle_user_feedback("user1", "谢谢你") is False
+
+    def test_cooldown_blocks_proactive_messages(self, strategy: ProactiveStrategy) -> None:
+        """冷却期内阻止主动消息"""
+        import time as _time
+
+        # 触发冷却
+        assert strategy.handle_user_feedback("user1", "别发了") is True
+        # 冷却期内不应发送
+        assert strategy._check_feedback_cooldown("user1") is True
+
+    def test_cooldown_expires(self, strategy: ProactiveStrategy) -> None:
+        """冷却期过期后恢复发送"""
+        import time as _time
+
+        # 触发冷却
+        strategy.handle_user_feedback("user1", "别发了")
+        # 手动将冷却时间设为过去
+        strategy._feedback_cooldowns["user1"] = _time.time() - 1
+        # 冷却期已过
+        assert strategy._check_feedback_cooldown("user1") is False
+
+    def test_different_users_independent(self, strategy: ProactiveStrategy) -> None:
+        """不同用户的冷却独立"""
+        strategy.handle_user_feedback("user1", "别发了")
+        # user2 不受影响
+        assert strategy._check_feedback_cooldown("user2") is False
