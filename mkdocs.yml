@@ -14,14 +14,14 @@ theme:
   language: zh
   palette:
     - scheme: default
-      primary: pink
-      accent: pink
+      primary: custom
+      accent: custom
       toggle:
         icon: material/brightness-7
         name: 切换到暗色模式
     - scheme: slate
-      primary: pink
-      accent: pink
+      primary: custom
+      accent: custom
       toggle:
         icon: material/brightness-4
         name: 切换到亮色模式
@@ -30,11 +30,14 @@ theme:
     - navigation.sections
     - navigation.expand
     - navigation.top
+    - navigation.instant
+    - navigation.tracking
     - search.suggest
     - search.highlight
     - content.code.copy
     - content.action.edit
     - toc.follow
+    - content.tabs.link
   icon:
     repo: fontawesome/brands/github
   font:
@@ -107,11 +110,22 @@ nav:
 extra_css:
   - stylesheets/extra.css
 
-# 页脚
+# 自定义颜色
 extra:
   social:
     - icon: fontawesome/brands/github
       link: https://github.com/Grabrun/YuanBot
+    - icon: fontawesome/brands/discord
+      link: https://discord.gg/yuanbot
   generator: false
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: custom
+      accent: custom
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: custom
+      accent: custom
 
 copyright: "Copyright &copy; 2026 YuanBot Team"
