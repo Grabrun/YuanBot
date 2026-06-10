@@ -1,3 +1,8 @@
+---
+title: 消息通道适配器规范
+description: YuanBot 消息通道适配器标准化接口规范
+---
+
 # 消息通道适配器规范 v1.0
 
 ## 1. 概述
@@ -22,7 +27,7 @@ class ChannelAdapter(ABC):
 
 ## 3. 通道文件结构
 
-```
+```text
 adapters/channel/
 ├── base.py              # 基类（用户ID映射、会话管理）
 ├── telegram_adapter.py  # Telegram 适配器
@@ -39,7 +44,7 @@ adapters/channel/
 
 ### 4.2 连接流程
 
-```
+```text
 客户端                     YuanBot Server
   │                             │
   │─── WS Connect ────────────→│

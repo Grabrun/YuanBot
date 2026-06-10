@@ -1,3 +1,8 @@
+---
+title: AI 提供商适配器规范
+description: YuanBot AI 提供商适配器标准化接口规范
+---
+
 # AI 提供商适配器规范 v1.0
 
 ## 1. 概述
@@ -40,7 +45,7 @@ YUAN_AI_{PROVIDER_ID}_{PARAM}
 
 ## 4. 适配器文件结构
 
-```
+```text
 adapters/ai/
 ├── base.py              # 基类（通用配置加载）
 ├── openai_adapter.py    # OpenAI 适配器

@@ -1,3 +1,8 @@
+---
+title: 开发指南
+description: YuanBot 项目开发环境搭建、工作流、核心概念和扩展开发指南
+---
+
 # 开发指南
 
 ## 环境准备
@@ -28,7 +33,7 @@ cp .env.example .env
 
 ### 项目结构
 
-```
+```text
 yuanbot/
 ├── src/yuanbot/            # 源代码
 │   ├── adapters/           # 适配器层

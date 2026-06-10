@@ -1,3 +1,8 @@
+---
+title: 部署指南
+description: YuanBot Docker、Kubernetes、Serverless 等多种部署方案
+---
+
 # 部署指南
 
 本指南介绍 YuanBot 的多种部署方式，从本地开发到生产环境。

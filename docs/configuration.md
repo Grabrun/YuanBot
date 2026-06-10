@@ -1,3 +1,8 @@
+---
+title: 配置参考
+description: YuanBot YAML 配置文件参考手册，涵盖所有配置项详解
+---
+
 # 配置参考
 
 YuanBot 使用 YAML 配置文件管理系统行为。所有配置文件位于 `configs/` 目录。

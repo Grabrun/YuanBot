@@ -1,10 +1,15 @@
+---
+title: 架构详解
+description: YuanBot 系统架构、核心模块、数据流与配置体系详解
+---
+
 # 架构详解
 
 ## 系统总览
 
 YuanBot 采用分层架构设计，从下到上分为：
 
-```
+```text
 ┌─────────────────────────────────────────────────┐
 │                   接入层 (Gateway)                │
 │  统一网关 │ 认证鉴权 │ 限流 │ 身份映射 │ 事件队列  │
@@ -62,7 +67,7 @@ YuanBot 采用分层架构设计，从下到上分为：
 
 **OrchestratorEngine** 是消息处理核心，流程：
 
-```
+```text
 用户消息
   ↓
 意图识别 (IntentEngine)
@@ -134,7 +139,7 @@ AI 服务调用 (AIService)
 
 ### 入站消息流
 
-```
+```text
 外部请求 → Gateway
   → 认证验证
   → 限流检查
@@ -150,7 +155,7 @@ AI 服务调用 (AIService)
 
 ### 出站消息流
 
-```
+```text
 主动任务触发 → PushDispatcher
   → 目标平台路由
   → 通道适配器.send_message()
@@ -159,7 +164,7 @@ AI 服务调用 (AIService)
 
 ## 配置体系
 
-```
+```text
 configs/
 ├── default.yaml           # 全局默认
 ├── bot.yaml               # 机器人基础
@@ -218,7 +223,7 @@ configs/
 ### Docker 部署
 
 ```yaml
-# docker-compose.yaml
+docker-compose.yaml
 services:
   yuanbot:
     build: .

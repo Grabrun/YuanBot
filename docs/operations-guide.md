@@ -1,3 +1,8 @@
+---
+title: 运维指南 — 日志聚合系统
+description: YuanBot 日志聚合系统架构、部署、配置和日常运维操作
+---
+
 # YuanBot 运维指南 — 日志聚合系统
 
 > 本文档说明 YuanBot 日志聚合系统的架构、部署、配置和日常运维操作。
@@ -20,7 +25,7 @@
 
 ## 1. 系统架构
 
-```
+```text
 ┌──────────────┐    JSON Logs     ┌──────────────┐    Push (HTTP)    ┌──────────┐
 │   YuanBot    │ ──────────────>  │   Promtail   │ ──────────────>  │   Loki   │
 │   应用服务    │    logs/*.log    │   日志采集    │   /loki/api/v1   │  日志存储  │
@@ -141,7 +146,7 @@ limits_config:
 
 **Pipeline 处理流程：**
 
-```
+```text
 原始日志行 → JSON 解析 → 标签提取 → 时间戳覆盖 → 消息提取 → DEBUG 丢弃
 ```
 
@@ -388,7 +393,7 @@ services:
 
 ## 附录：文件清单
 
-```
+```text
 yuanbot/
 ├── configs/
 │   └── loki/

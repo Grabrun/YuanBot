@@ -1,3 +1,8 @@
+---
+title: YuanBot 设计文档详细检查报告
+description: YuanBot v1.4 设计文档与代码实现的第一轮详细检查
+---
+
 # 🌸 YuanBot 设计文档 vs 代码实现 — 详细检查报告
 
 **检查日期:** 2026-05-22  
@@ -33,7 +38,7 @@
 - ⚠️ **图数据库**: 设计提到 Kuzu (嵌入式) / Neo4j，实际实现了 `GraphStore` 接口但仅有内存模式，未集成真正的 Kuzu 或 Neo4j
 
 ### ✅ 配置目录结构完全匹配
-```
+```text
 configs/
 ├── bot.yaml                ✅
 ├── database.yaml           ✅

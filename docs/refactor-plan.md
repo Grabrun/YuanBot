@@ -1,3 +1,8 @@
+---
+title: 目录重构计划
+description: YuanBot 项目目录结构重构映射，对齐 conformance-report-v2 目标结构
+---
+
 # 目录重构计划
 
 > 分支: `refactor/project-structure`

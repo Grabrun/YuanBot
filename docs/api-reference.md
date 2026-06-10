@@ -1,3 +1,8 @@
+---
+title: API 参考手册
+description: YuanBot RESTful API 和 WebSocket 接口完整文档
+---
+
 # API 参考手册
 
 YuanBot 提供完整的 RESTful API 和 WebSocket 接口，涵盖认证、会话管理、系统管理、人格控制、AI Provider 管理、记忆系统、主动陪伴、语音合成、扩展市场、GDPR 合规等功能。

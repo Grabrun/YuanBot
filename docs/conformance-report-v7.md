@@ -1,3 +1,8 @@
+---
+title: YuanBot 设计文档符合度检查报告 V7
+description: YuanBot v1.2.0+ 第七轮全面复检，清理 ruff lint 错误 + 完善 gRPC 客户端实现
+---
+
 # 🌸 YuanBot 设计文档 vs 代码实现 — 第七轮符合度检查报告 (V7)
 
 **检查日期:** 2026-06-10  
