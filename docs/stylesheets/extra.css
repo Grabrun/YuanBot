@@ -72,6 +72,19 @@
   color: #1a1a2e !important;
 }
 
+/* 顶栏所有按钮/图标/logo */
+.md-header__button,
+.md-header__button.md-icon,
+.md-header .md-logo,
+.md-header .md-source__icon {
+  color: #374151 !important;
+}
+
+.md-header__button:hover,
+.md-header .md-logo:hover {
+  color: #1a1a2e !important;
+}
+
 /* 导航标签栏 */
 .md-tabs {
   background: #ffffff !important;
@@ -567,6 +580,12 @@
 }
 [data-md-color-scheme="slate"] .md-header__source {
   color: #9ca3af !important;
+}
+[data-md-color-scheme="slate"] .md-header__button,
+[data-md-color-scheme="slate"] .md-header__button.md-icon,
+[data-md-color-scheme="slate"] .md-header .md-logo,
+[data-md-color-scheme="slate"] .md-header .md-source__icon {
+  color: #d1d5db !important;
 }
 [data-md-color-scheme="slate"] .md-sidebar--primary .md-sidebar__scrollwrap {
   background: #16161e !important;
