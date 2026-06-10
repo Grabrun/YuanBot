@@ -72,6 +72,26 @@
   color: #1a1a2e !important;
 }
 
+/* 导航标签栏 */
+.md-tabs {
+  background: #ffffff !important;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.md-tabs__link {
+  color: #4b5563 !important;
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+
+.md-tabs__link:hover {
+  color: #1a1a2e !important;
+}
+
+.md-tabs__link--active {
+  color: #3b82f6 !important;
+}
+
 /* ── 左侧边栏 — 白底干净 ──────────────────── */
 .md-sidebar--primary .md-sidebar__scrollwrap {
   background: #ffffff !important;
@@ -562,4 +582,16 @@
 }
 [data-md-color-scheme="slate"] .md-sidebar--primary .md-nav__item--nested > .md-nav__link {
   color: #e5e7eb !important;
+}
+[data-md-color-scheme="slate"] .md-tabs {
+  background: #16161e !important;
+}
+[data-md-color-scheme="slate"] .md-tabs__link {
+  color: #9ca3af !important;
+}
+[data-md-color-scheme="slate"] .md-tabs__link:hover {
+  color: #ffffff !important;
+}
+[data-md-color-scheme="slate"] .md-tabs__link--active {
+  color: #60a5fa !important;
 }
