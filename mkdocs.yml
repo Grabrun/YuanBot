@@ -96,11 +96,12 @@ nav:
       - AI 适配器: adapter-ai-spec.md
       - 通道适配器: adapter-channel-spec.md
   - 运维:
+    - 部署指南: deployment.md
     - 运维指南: operations-guide.md
     - 基础设施: infrastructure-deployment-system.md
   - 项目:
     - 设计审查: design-review-report-v4.md
-    - 符合度报告: conformance-report.md
+    - 符合度报告: conformance-report-v7.md
 
 # 自定义 CSS
 extra_css:
