@@ -500,3 +500,66 @@
 [data-md-color-scheme="slate"] .md-sidebar--primary .md-nav__link:hover { color: #ffffff !important; }
 [data-md-color-scheme="slate"] .md-sidebar--primary .md-nav__link--active { color: #60a5fa !important; }
 [data-md-color-scheme="slate"] .md-sidebar--primary .md-nav__item--nested > .md-nav__link { color: #e5e7eb !important; }
+
+/* ══════════════════════════════════════════════
+   移动端优化
+   ══════════════════════════════════════════════ */
+@media screen and (max-width: 76.1875em) {
+  /* 标题缩小 */
+  .md-typeset h1 { font-size: 1.25rem; }
+  .md-typeset h2 { font-size: 1.05rem; margin-top: 1.5rem; }
+  .md-typeset h3 { font-size: 0.9rem; }
+
+  /* 内容区域紧凑 */
+  .md-content__inner {
+    padding: 1rem 1rem 2rem;
+    max-width: 100%;
+  }
+
+  /* 侧边栏字体 */
+  .md-sidebar--primary .md-nav__link { font-size: 0.78rem; padding: 0.35rem 0.6rem; }
+  .md-sidebar--primary .md-nav__item--nested > .md-nav__link { font-size: 0.78rem; padding: 0.5rem 0.6rem 0.2rem; }
+
+  /* 导航标签紧凑 */
+  .md-tabs__link { font-size: 0.78rem; padding: 0.4rem 0.6rem; }
+
+  /* 表格字体缩小 */
+  .md-typeset table { font-size: 0.82rem; }
+  .md-typeset table thead th { font-size: 0.78rem; padding: 0.5rem 0.6rem; }
+  .md-typeset table tbody td { padding: 0.45rem 0.6rem; font-size: 0.82rem; }
+
+  /* Grid Cards 单列 */
+  .grid.cards > ul { grid-template-columns: 1fr; gap: 0.5rem; }
+  .grid.cards > ul > li { padding: 0.8rem 1rem; }
+
+  /* 按钮缩小 */
+  .md-typeset .md-button { font-size: 0.82rem; padding: 0.4rem 0.9rem; }
+
+  /* 徽章换行整齐 */
+  .md-typeset img[alt*="badge"],
+  .md-typeset img[alt*="Shield"] {
+    height: 20px;
+    margin: 0.1rem;
+  }
+
+  /* Admonition 紧凑 */
+  .md-typeset .admonition { margin: 1rem 0; padding: 0; }
+  .md-typeset .admonition-title { font-size: 0.82rem; padding: 0.5rem 0.7rem; }
+
+  /* 代码块 */
+  .highlight > pre { padding: 0.7rem 0.8rem; font-size: 0.78rem; }
+
+  /* 行内代码 */
+  .md-typeset code { font-size: 0.8em; }
+}
+
+@media screen and (max-width: 480px) {
+  .md-typeset h1 { font-size: 1.15rem; }
+  .md-typeset h2 { font-size: 1rem; }
+  .md-content__inner { padding: 0.8rem 0.75rem 1.5rem; }
+  .md-tabs__link { font-size: 0.72rem; padding: 0.35rem 0.45rem; }
+  .grid.cards > ul > li { padding: 0.65rem 0.8rem; }
+  .md-typeset .md-button { font-size: 0.78rem; padding: 0.35rem 0.7rem; }
+  .md-typeset img[alt*="badge"],
+  .md-typeset img[alt*="Shield"] { height: 18px; }
+}
