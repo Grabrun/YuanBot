@@ -115,10 +115,13 @@ class EdgeTTSAdapter(TTSAdapter):
         if self._available is not None:
             return self._available
         try:
-            import edge_tts  # noqa: F401
-
-            self._available = True
-        except ImportError:
-            logger.warning("edge-tts 未安装，请运行: pip install edge-tts")
+            import importlib.util
+            if importlib.util.find_spec("edge_tts"):
+                self._available = True
+            else:
+                logger.warning("edge-tts 未安装，请运行: pip install edge-tts")
+                self._available = False
+        except Exception:
+            logger.warning("edge-tts 检查失败")
             self._available = False
         return self._available

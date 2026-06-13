@@ -91,7 +91,7 @@ class DefaultPersona(PersonaProfile):
         return RELATIONSHIP_STAGES.get(self._relationship_stage, RELATIONSHIP_STAGES["initial"])
 
     def get_system_prompt(self) -> str:
-        stage_config = self.get_stage_config()  # noqa: F841
+        stage_config = self.get_stage_config()
         intimacy = stage_config["intimacy_level"]
         tone = stage_config["tone_modifier"]
         share_depth = stage_config["share_depth"]
@@ -163,7 +163,6 @@ class DefaultPersona(PersonaProfile):
         return base_prompt
 
     def get_behavior_rules(self) -> list[str]:
-        stage_config = self.get_stage_config()  # noqa: F841
         base_rules = [
             "优先使用共情和理解，而非说教和建议",
             "记住用户提到的重要日期和事件，在合适时机主动提起",
@@ -201,7 +200,7 @@ class DefaultPersona(PersonaProfile):
         return base_rules
 
     def get_voice_style(self) -> dict[str, Any]:
-        stage_config = self.get_stage_config()  # noqa: F841
+        stage_config = self.get_stage_config()
         return {
             "tone": "温柔",
             "formality": "口语化",

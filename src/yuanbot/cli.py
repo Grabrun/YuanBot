@@ -13,6 +13,7 @@
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import os
 import sys
 from pathlib import Path
@@ -419,13 +420,15 @@ def _run_doctor(args: argparse.Namespace) -> None:
         # 尝试简单连通性检查
         try:
             if provider_id == "openai":
-                import openai  # noqa: F401
-
-                _ok("openai 库已安装")
+                if importlib.util.find_spec("openai"):
+                    _ok("openai 库已安装")
+                else:
+                    _warn("openai 库未安装 (pip install yuanbot[openai])")
             elif provider_id == "anthropic":
-                import anthropic  # noqa: F401
-
-                _ok("anthropic 库已安装")
+                if importlib.util.find_spec("anthropic"):
+                    _ok("anthropic 库已安装")
+                else:
+                    _warn("anthropic 库未安装 (pip install yuanbot[anthropic])")
         except ImportError:
             _warn(f"{provider_id} Python 库未安装 (pip install yuanbot[{provider_id}])")
     else:
@@ -452,9 +455,10 @@ def _run_doctor(args: argparse.Namespace) -> None:
         _ok(f"SQLite 数据库 ({db_url})")
     elif "postgresql" in db_url or "mysql" in db_url:
         try:
-            import asyncpg  # noqa: F401
-
-            _ok("asyncpg 库已安装")
+            if importlib.util.find_spec("asyncpg"):
+                _ok("asyncpg 库已安装")
+            else:
+                _warn("asyncpg 库未安装 (仅 SQLite 无需额外依赖)")
         except ImportError:
             _warn("asyncpg 库未安装 (仅 SQLite 无需额外依赖)")
 

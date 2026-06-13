@@ -103,10 +103,13 @@ class OpenAITTSAdapter(TTSAdapter):
             self._available = False
             return False
         try:
-            from openai import AsyncOpenAI  # noqa: F401
-
-            self._available = True
-        except ImportError:
-            logger.warning("openai 未安装，请运行: pip install openai")
+            import importlib.util
+            if importlib.util.find_spec("openai"):
+                self._available = True
+            else:
+                logger.warning("openai 未安装，请运行: pip install openai")
+                self._available = False
+        except Exception:
+            logger.warning("openai 检查失败")
             self._available = False
         return self._available
