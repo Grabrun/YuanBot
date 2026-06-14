@@ -25,7 +25,7 @@ git clone https://github.com/Grabrun/YuanBot.git
 cd YuanBot
 
 # 2. 创建虚拟环境（Python 3.12+）
-python3 -m venv .venv
+python3 -m venv .venv     # 没反应? sudo apt install python3-venv python3-full -y
 source .venv/bin/activate
 
 # 3. 安装依赖（推荐 uv）

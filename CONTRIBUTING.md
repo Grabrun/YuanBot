@@ -35,7 +35,7 @@
 ```bash
 git clone https://github.com/your-org/yuanbot.git
 cd yuanbot
-python -m venv .venv
+python -m venv .venv     # 没反应? sudo apt install python3-venv python3-full -y
 source .venv/bin/activate
 pip install -e ".[dev]"
 ```

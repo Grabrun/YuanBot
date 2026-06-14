@@ -48,7 +48,7 @@ features:
 ```bash
 git clone https://github.com/Grabrun/YuanBot.git
 cd YuanBot
-python3 -m venv .venv
+python3 -m venv .venv     # 没反应? sudo apt install python3-venv python3-full -y
 source .venv/bin/activate
 pip install -e ".[dev]"
 yuanbot start

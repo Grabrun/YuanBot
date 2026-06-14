@@ -35,6 +35,7 @@ description: 5 分钟完成 YuanBot 安装、配置和首次运行
     cd YuanBot
 
     # 2. 创建虚拟环境（Python 3.12+）
+    #    如果 python3 -m venv 没反应，先装 sudo apt install python3-venv python3-full -y
     python3 -m venv .venv
     source .venv/bin/activate
 
