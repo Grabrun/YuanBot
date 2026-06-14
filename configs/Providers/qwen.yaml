@@ -1,5 +1,6 @@
-# 通义千问 Provider 配置 (v2.0)
+# 通义千问 Provider 配置 (v3.0)
 # 使用 openai-adapter（DashScope 兼容模式 API）
+# 最新旗舰：Qwen3.7-Max (2026年发布) / Qwen3.5-Plus (1M上下文)
 
 provider_id: qwen
 name: "通义千问"
@@ -10,18 +11,21 @@ config:
   api_key: "${DASHSCOPE_API_KEY}"
   base_url: "https://dashscope.aliyuncs.com/compatible-mode/v1"
   models:
-    - id: qwen-max
+    - id: qwen3-max
       type: chat
-      max_tokens: 32768
-    - id: qwen-plus
+      max_tokens: 262144
+    - id: qwen3.5-plus
       type: chat
-      max_tokens: 131072
-    - id: qwen-turbo
+      max_tokens: 1000000
+    - id: qwen3.5-flash
       type: chat
-      max_tokens: 131072
+      max_tokens: 1000000
+    - id: qwen3-max-thinking
+      type: chat
+      max_tokens: 262144
     - id: text-embedding-v3
       type: embedding
       max_tokens: 8192
       dimension: 1024
-  default: qwen-max
+  default: qwen3-max
   embedding_model: text-embedding-v3

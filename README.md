@@ -75,14 +75,15 @@ yuanbot tui
 
 | 提供商 | 配置文件 | 默认模型 | 特点 |
 |--------|----------|----------|------|
-| OpenAI | `openai.yaml` | gpt-4o | 通用最强 |
-| DeepSeek | `deepseek.yaml` | deepseek-chat | 国产高性价比 |
-| 智谱 GLM | `glm.yaml` | glm-4 | 中文优秀 |
-| 通义千问 | `qwen.yaml` | qwen-max | 阿里云 |
-| 混元 | `hunyuan.yaml` | hunyuan-pro | 腾讯 |
-| Mimo | `mimo.yaml` | mimo-chat | 小米 |
+| OpenAI | `openai.yaml` | **gpt-5.4** 🔥 | 最新 GPT-5 系列，256K 上下文 |
+| DeepSeek | `deepseek.yaml` | **deepseek-v4-flash** 🔥 | V4 系列，1M 上下文 |
+| Anthropic | `anthropic.yaml` | **claude-sonnet-4-6** 🔥 | Claude 4.6 最新 Sonnet |
+| 智谱 GLM | `glm.yaml` | **glm-5** 🔥 | 开源 SOTA，744B 参数 |
+| 通义千问 | `qwen.yaml` | **qwen3-max** 🔥 | Qwen3 旗舰，262K 上下文 |
+| 腾讯混元 | `hunyuan.yaml` | **hunyuan-turbos-latest** | 混元 2.0 TurboS |
+| 小米 MiMo | `mimo.yaml` | **mimo-v2.5-pro** | Agent 能力突出 |
+| Moonshot Kimi | `kimi.yaml` | **kimi-k2.6** 🆕 | 长程代码 + Agent Swarm |
 | Ollama | `ollama.yaml` | 本地模型 | 无需 API Key |
-| Anthropic | `anthropic.yaml` | claude-sonnet-4 | 长上下文 |
 
 所有兼容 OpenAI 接口的提供商共用同一个适配器，新增提供商只需一个 YAML 文件。
 

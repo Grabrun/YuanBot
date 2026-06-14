@@ -1,5 +1,7 @@
-# DeepSeek Provider 配置 (v2.0)
+# DeepSeek Provider 配置 (v3.0)
 # 使用 openai-adapter（DeepSeek API 兼容 OpenAI 格式）
+# 最新模型：V4 系列 (2026-04-24)，1M 上下文窗口
+# ⚠️ deepseek-chat / deepseek-reasoner 将于 2026-07-24 停止服务
 
 provider_id: deepseek
 name: "DeepSeek"
@@ -10,10 +12,17 @@ config:
   api_key: "${DEEPSEEK_API_KEY}"
   base_url: "https://api.deepseek.com/v1"
   models:
+    - id: deepseek-v4-pro
+      type: chat
+      max_tokens: 1000000
+    - id: deepseek-v4-flash
+      type: chat
+      max_tokens: 1000000
+    # 以下兼容旧版模型名（2026-07-24 前可用）
     - id: deepseek-chat
       type: chat
       max_tokens: 128000
     - id: deepseek-reasoner
       type: chat
       max_tokens: 128000
-  default: deepseek-chat
+  default: deepseek-v4-flash

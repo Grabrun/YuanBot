@@ -1,16 +1,26 @@
-# 米莫 AI Provider 配置 (v2.0)
-# 使用 openai-adapter（Mimo API 兼容 OpenAI 格式）
+# 小米 MiMo Provider 配置 (v3.0)
+# 使用 openai-adapter（MiMo API 兼容 OpenAI 格式）
+# 最新：MiMo-V2.5-Pro (Agent 能力大幅提升)
 
 provider_id: mimo
-name: "米莫 AI"
+name: "小米 MiMo"
 adapter: openai-adapter
 enabled: false
 
 config:
   api_key: "${MIMO_API_KEY}"
-  base_url: "https://api.mimo.ai/v1"
+  base_url: "https://dashscope.aliyuncs.com/compatible-mode/v1"
   models:
-    - id: mimo-chat
+    - id: mimo-v2.5-pro
       type: chat
-      max_tokens: 128000
-  default: mimo-chat
+      max_tokens: 131072
+    - id: mimo-v2.5
+      type: chat
+      max_tokens: 131072
+    - id: mimo-v2-pro
+      type: chat
+      max_tokens: 131072
+    - id: mimo-v2-flash
+      type: chat
+      max_tokens: 131072
+  default: mimo-v2.5-pro

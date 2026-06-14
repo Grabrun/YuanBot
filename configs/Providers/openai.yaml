@@ -1,5 +1,6 @@
-# OpenAI Provider 配置 (v2.0)
+# OpenAI Provider 配置 (v3.0)
 # 使用 openai-adapter，所有 OpenAI 兼容 API 的提供商均可复用此适配器
+# ⚠️ GPT-4o / GPT-4.1 系列已于 2026-02-13 从 API 退役
 
 provider_id: openai
 name: "OpenAI"
@@ -10,15 +11,21 @@ config:
   api_key: "${OPENAI_API_KEY}"
   base_url: "https://api.openai.com/v1"
   models:
-    - id: gpt-4o
+    - id: gpt-5.5
       type: chat
-      max_tokens: 128000
-    - id: gpt-4o-mini
+      max_tokens: 256000
+    - id: gpt-5.4
       type: chat
-      max_tokens: 128000
+      max_tokens: 256000
+    - id: gpt-5.4-mini
+      type: chat
+      max_tokens: 256000
+    - id: o4-mini
+      type: chat
+      max_tokens: 200000
     - id: text-embedding-3-small
       type: embedding
       max_tokens: 8191
       dimension: 1536
-  default: gpt-4o
+  default: gpt-5.4
   embedding_model: text-embedding-3-small

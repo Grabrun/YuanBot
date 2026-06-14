@@ -1,5 +1,7 @@
-# Anthropic Claude Provider 配置 (v2.0)
+# Anthropic Claude Provider 配置 (v3.0)
 # 使用 anthropic-adapter（Anthropic Messages API，非 OpenAI 兼容）
+# ⚠️ Claude Sonnet 4 / Opus 4 将于 2026-06-15 退役
+# 最新：Claude Fable 5 / Mythos 5 (2026-06-09)
 
 provider_id: anthropic
 name: "Anthropic Claude"
@@ -10,10 +12,13 @@ config:
   api_key: "${ANTHROPIC_API_KEY}"
   base_url: "https://api.anthropic.com"
   models:
-    - id: claude-sonnet-4-20250514
+    - id: claude-sonnet-4-6-20260517
       type: chat
       max_tokens: 200000
-    - id: claude-haiku-4-20250514
+    - id: claude-haiku-4-5-20260506
       type: chat
       max_tokens: 200000
-  default: claude-sonnet-4-20250514
+    - id: claude-opus-4-8-20260528
+      type: chat
+      max_tokens: 200000
+  default: claude-sonnet-4-6-20260517

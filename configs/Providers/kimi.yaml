@@ -1,0 +1,23 @@
+# Moonshot Kimi Provider 配置 (v1.0)
+# 使用 openai-adapter（Kimi API 兼容 OpenAI 格式）
+# 最新：Kimi K2.6 (长程代码增强) / K2.5 (多模态+Agent Swarm)
+
+provider_id: kimi
+name: "Moonshot Kimi"
+adapter: openai-adapter
+enabled: false
+
+config:
+  api_key: "${KIMI_API_KEY}"
+  base_url: "https://api.moonshot.cn/v1"
+  models:
+    - id: kimi-k2.6
+      type: chat
+      max_tokens: 262144
+    - id: kimi-k2.5
+      type: chat
+      max_tokens: 262144
+    - id: kimi-k2-thinking
+      type: chat
+      max_tokens: 262144
+  default: kimi-k2.6
