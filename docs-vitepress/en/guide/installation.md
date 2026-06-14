@@ -5,13 +5,19 @@
 ## Requirements
 
 - Python 3.12+
+- git
 - pip / uv
 - Docker (optional)
 
-## via pip
+## via source (recommended)
 
 ```bash
-pip install "yuanbot[all]"
+git clone https://github.com/Grabrun/YuanBot.git
+cd YuanBot
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -e ".[dev]"
+yuanbot version
 ```
 
 ## via Docker

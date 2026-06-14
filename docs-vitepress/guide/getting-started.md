@@ -17,22 +17,25 @@
 
 ## 安装
 
-### pip 安装（最快上手）
+### 源码安装（推荐）
 
 ```bash
-# 核心功能
-pip install yuanbot
-
-# 安装全部可选依赖
-pip install "yuanbot[all]"
-```
-
-### 源码安装（推荐开发）
-
-```bash
+# 1. 克隆仓库
 git clone https://github.com/Grabrun/YuanBot.git
 cd YuanBot
-uv sync --all-extras
+
+# 2. 创建虚拟环境（Python 3.12+）
+python3 -m venv .venv
+source .venv/bin/activate
+
+# 3. 安装依赖（推荐 uv）
+pip install -e ".[dev]"
+
+# 或用 uv（更快）
+# pip install uv
+# uv sync --all-extras
+
+# 4. 验证
 yuanbot version
 ```
 

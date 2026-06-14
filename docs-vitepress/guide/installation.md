@@ -5,39 +5,40 @@ YuanBot 提供多种安装方式，满足不同场景需求。
 ## 环境要求
 
 - **Python 3.12+** — 核心运行时
+- **git** — 克隆源码
 - **pip** 或 **uv** — 包管理器（推荐 uv）
 - **AI Provider API Key** — 至少配置一个 AI 提供商
 
-## pip 安装
+## 源码安装（推荐）
 
 ```bash
-# 核心功能
-pip install yuanbot
+# 1. 克隆仓库
+git clone https://github.com/Grabrun/YuanBot.git
+cd YuanBot
 
-# 全部可选依赖
-pip install "yuanbot[all]"
+# 2. 创建虚拟环境（Python 3.12+）
+python3 -m venv .venv
+source .venv/bin/activate
+
+# 3. 安装依赖（推荐使用 uv）
+pip install -e ".[dev]"
+
+# 或使用 uv（更快）
+# pip install uv
+# uv sync --all-extras
+
+# 4. 验证
+yuanbot version
+yuanbot doctor
 ```
 
 按需安装特定扩展：
 
 ```bash
-pip install "yuanbot[openai]"       # OpenAI 支持
-pip install "yuanbot[anthropic]"    # Claude 支持
-pip install "yuanbot[cli]"          # 完整 CLI
-pip install "yuanbot[mysql]"        # MySQL 数据库
-```
-
-## 源码安装
-
-```bash
-git clone https://github.com/Grabrun/YuanBot.git
-cd YuanBot
-
-# 使用 uv 安装（推荐）
-uv sync --all-extras
-
-# 验证
-yuanbot version
+pip install -e ".[openai]"       # OpenAI 支持
+pip install -e ".[anthropic]"    # Claude 支持
+pip install -e ".[cli]"          # 完整 CLI
+pip install -e ".[mysql]"        # MySQL 数据库
 ```
 
 ## Docker 部署

@@ -8,10 +8,15 @@
 - pip / uv
 - Docker（オプション）
 
-## pip インストール
+## ソースコードインストール（推奨）
 
 ```bash
-pip install "yuanbot[all]"
+git clone https://github.com/Grabrun/YuanBot.git
+cd YuanBot
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -e ".[dev]"
+yuanbot version
 ```
 
 ## Docker デプロイ

@@ -415,7 +415,12 @@ manifest.json 追加字段：
 安装：
 
 ```bash
-pip install yuanbot-cli
+# 通过源码安装（yuanbot-cli 随 yuanbot 一起安装）
+git clone https://github.com/Grabrun/YuanBot.git
+cd YuanBot
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -e ".[cli]"
 ```
 
 核心命令：

@@ -467,7 +467,7 @@ CORS 配置 可配置允许的源，防止跨站请求伪造
 
 11. 部署与集成
 
-· TUI：随 yuanbot-cli 发布，通过 pip install yuanbot-cli 获得。
+· TUI：随 yuanbot 一起安装，通过源码安装后即可使用
 · WebUI：前端资源编译后作为 Python 包数据文件内嵌在 yuanbot-core 中，核心启动时自动提供静态文件服务，无需单独部署。
 · 独立部署：也可以将 WebUI 静态文件提取，由 Nginx 代理，核心仅提供 API。
 

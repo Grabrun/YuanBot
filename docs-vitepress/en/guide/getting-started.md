@@ -11,10 +11,12 @@
 ## Installation
 
 ```bash
-pip install yuanbot
-
-# or with all extras
-pip install "yuanbot[all]"
+git clone https://github.com/Grabrun/YuanBot.git
+cd YuanBot
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -e ".[dev]"
+yuanbot version
 ```
 
 ## Quick Start

@@ -43,10 +43,14 @@ features:
 
 ## 🚀 快速安装
 
-### Python 安装
+### 源码安装
 
 ```bash
-pip install "yuanbot[all]"
+git clone https://github.com/Grabrun/YuanBot.git
+cd YuanBot
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -e ".[dev]"
 yuanbot start
 ```
 
