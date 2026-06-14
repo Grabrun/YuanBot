@@ -2,6 +2,29 @@
 
 本项目遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.2.1] - 2026-06-14
+
+### 🐛 修复
+
+- **CI/CD**: 修复 GitHub Actions workflow 分支名 main→master（此前从未触发）
+- **Ruff lint**: 修复 tests/ 和 scripts/ 中 84 处 lint 错误（未使用导入、行过长等）
+- **默认模型**: config.py AiConfig 和 AIProviderConfig 默认模型 gpt-4o → gpt-5.4
+- **测试断言**: test_config.py 更新为最新模型名和数量
+- **安装文档**: 全部 md 文件 pip install yuanbot → git clone + venv 源码安装
+- **VitePress 文档站**: 修复语言切换开关（禁用旧 MkDocs 防覆盖）
+
+### 📖 文档
+
+- **所有安装文档重写**: docs/ + docs-vitepress/（中/英/日）统一使用源码安装
+- **供应商配置**: 9 家 AI 提供商模型更新至最新版（含退役警告）
+- **README**: 全面重构，更新测试数据、供应商表等
+
+### 🎨 样式
+
+- **ruff format**: 51 个源文件统一格式化
+
+---
+
 ## [1.2.0] - 2026-06-14
 
 ### ✨ 新增功能
