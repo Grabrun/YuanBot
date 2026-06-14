@@ -16,18 +16,13 @@
 from __future__ import annotations
 
 import asyncio
-import json
-import os
-import struct
-import tempfile
 from pathlib import Path
 from typing import Any
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
 from yuanbot.tools.sandbox import WasmSandboxExecutor
-
 
 # ──────────────────────────────────────────────
 # 测试辅助：生成简单 WASM 模块

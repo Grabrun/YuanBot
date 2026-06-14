@@ -6,8 +6,10 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from yuanbot.auth.admin_routes import init_admin_stores, router as admin_router
-from yuanbot.auth.conversation_routes import init_conversation_store, router as conv_router
+from yuanbot.auth.admin_routes import init_admin_stores
+from yuanbot.auth.admin_routes import router as admin_router
+from yuanbot.auth.conversation_routes import init_conversation_store
+from yuanbot.auth.conversation_routes import router as conv_router
 from yuanbot.auth.middleware import AuthManager, init_auth_manager
 from yuanbot.auth.routes import router as auth_router
 from yuanbot.auth.store import ConversationStore, UserStore
@@ -560,7 +562,7 @@ class TestAdminEndpoints:
     def test_admin_delete_user(self, init_client):
         """管理员删除用户"""
         store = init_client.app.state.user_store
-        admin = self._create_admin(store)
+        self._create_admin(store)
         alice = store.create_user("alice", "pass")
         token = self._login_admin(init_client)
 

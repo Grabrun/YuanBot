@@ -646,7 +646,7 @@ class TestDeepSeekAdapterDeprecation:
             warnings.simplefilter("always")
             from yuanbot.adapters.ai.deepseek_adapter import DeepSeekAdapter
 
-            adapter = DeepSeekAdapter({"api_key": "test"})
+            DeepSeekAdapter({"api_key": "test"})
             assert len(w) == 1
             assert issubclass(w[0].category, DeprecationWarning)
             assert "deprecated" in str(w[0].message).lower()

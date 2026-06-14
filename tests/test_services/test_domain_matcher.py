@@ -2,12 +2,9 @@
 
 from __future__ import annotations
 
-import pytest
-
 from yuanbot.services.domain_matcher import (
     CapabilityDomain,
     DomainMatcher,
-    DomainMatchResult,
 )
 
 

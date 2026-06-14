@@ -504,7 +504,6 @@ class TestUserFeedbackDownregulation:
 
     def test_cooldown_blocks_proactive_messages(self, strategy: ProactiveStrategy) -> None:
         """冷却期内阻止主动消息"""
-        import time as _time
 
         # 触发冷却
         assert strategy.handle_user_feedback("user1", "别发了") is True

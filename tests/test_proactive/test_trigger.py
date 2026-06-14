@@ -17,7 +17,6 @@ from yuanbot.proactive.trigger import (
     TriggerResult,
 )
 
-
 # ── 测试用触发器 ──────────────────────────────
 
 class AlwaysTrigger(ProactiveTrigger):

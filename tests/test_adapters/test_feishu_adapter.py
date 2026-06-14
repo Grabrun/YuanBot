@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -13,7 +12,6 @@ from yuanbot.adapters.channel.feishu_adapter import (
     FeishuMsgType,
 )
 from yuanbot.core.types import BotResponse, ChannelConfig, ContentType, MessageContent
-
 
 # ═══════════════════════════════════════════════
 # 单元测试

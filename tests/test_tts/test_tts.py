@@ -2,15 +2,12 @@
 
 from __future__ import annotations
 
-import asyncio
 from collections.abc import AsyncIterator
-from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from yuanbot.tts.base import TTSAdapter, VoiceInfo
 from yuanbot.tts.manager import TTSCache, TTSCacheConfig, TTSConfig, TTSManager
-
 
 # ──────────────────────────────────────────────
 # Mock 适配器

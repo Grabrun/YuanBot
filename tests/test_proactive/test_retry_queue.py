@@ -6,8 +6,6 @@
 from __future__ import annotations
 
 import asyncio
-import os
-import tempfile
 import time
 
 import pytest
@@ -141,7 +139,7 @@ class TestPersistentRetryQueue:
         await queue.mark_failed(task.task_id, "connection error")
 
         # 检查重试次数增加
-        due = await queue.get_due_tasks()
+        await queue.get_due_tasks()
         # 任务应该还在队列中（未超过最大重试次数），但下次重试时间在未来
         stats = await queue.get_queue_stats()
         assert stats["pending"] + stats["completed"] + stats["failed"] >= 1

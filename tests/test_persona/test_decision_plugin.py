@@ -5,25 +5,16 @@
 
 from __future__ import annotations
 
-import asyncio
-import textwrap
-from pathlib import Path
-from typing import Any
-from unittest.mock import AsyncMock
-
 import pytest
 import yaml
 
-from yuanbot.core.types import EmotionState
 from yuanbot.persona.engines.decision_plugin import (
     DecisionPlugin,
-    DecisionPluginConfig,
     DecisionPluginManager,
     PluginDecisionResult,
 )
 from yuanbot.persona.engines.dialogue_decision import DialogueDecisionEngine
 from yuanbot.persona.engines.intent_engine import IntentResult
-
 
 # ── 测试用插件 ──────────────────────────────
 

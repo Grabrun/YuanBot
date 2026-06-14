@@ -78,7 +78,7 @@ class AiConfig(BaseModel):
     """AI 子系统配置 (bot.yaml 的 ai 段)"""
 
     default_provider: str = "openai"
-    default_model: str = "gpt-4o"
+    default_model: str = "gpt-5.4"
     embedding_provider: str | None = None
 
 
@@ -533,7 +533,7 @@ class AIProviderConfig(BaseModel):
     provider_id: str = "openai"
     api_key: str | None = None
     base_url: str | None = None
-    default_model: str = "gpt-4o"
+    default_model: str = "gpt-5.4"
 
 
 class ChannelProviderConfig(BaseModel):

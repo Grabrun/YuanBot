@@ -190,7 +190,7 @@ def create_model_with_sklearn(
     print(f"\n✅ 模型已保存到: {model_path}")
     print(f"   标签文件: {labels_path}")
     print(f"   元信息: {meta_path}")
-    print(f"\n💡 使用方式: 在 bot.yaml 中设置 intent_engine.use_ml_model: true")
+    print("\n💡 使用方式: 在 bot.yaml 中设置 intent_engine.use_ml_model: true")
 
 
 def create_model_with_transformers(
@@ -360,8 +360,8 @@ def verify_model(output_dir: Path) -> bool:
             probs = np.exp(outputs[0][0]) / np.exp(outputs[0][0]).sum()
             best_idx = int(np.argmax(probs))
 
-            print(f"✅ ONNX 模型验证通过")
-            print(f"   测试输入: '你好'")
+            print("✅ ONNX 模型验证通过")
+            print("   测试输入: '你好'")
             print(f"   预测意图: {labels[best_idx]} (置信度: {probs[best_idx]:.2%})")
             return True
 
@@ -377,8 +377,8 @@ def verify_model(output_dir: Path) -> bool:
             pred = pipeline.predict(["你好"])[0]
             labels = json.loads(labels_path.read_text(encoding="utf-8"))
 
-            print(f"✅ sklearn 模型验证通过")
-            print(f"   测试输入: '你好'")
+            print("✅ sklearn 模型验证通过")
+            print("   测试输入: '你好'")
             print(f"   预测意图: {labels[pred]}")
             return True
 

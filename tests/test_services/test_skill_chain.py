@@ -7,9 +7,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 from yuanbot.services.skill_chain import (
-    ChainExecutionResult,
     ChainStep,
-    ChainStepStatus,
     ChainTrigger,
     SkillChain,
     SkillChainManager,
@@ -200,7 +198,8 @@ class TestExecuteChain:
             ],
         )
 
-        prompt_getter = lambda sid: f"Prompt for {sid}"
+        def prompt_getter(sid):
+            return f"Prompt for {sid}"
         llm_caller = AsyncMock(side_effect=lambda p, u: f"Output from {p}")
 
         result = await SkillChainManager.execute_chain(chain, prompt_getter, llm_caller)
@@ -216,7 +215,8 @@ class TestExecuteChain:
             steps=[ChainStep(skill_id="missing")],
         )
 
-        prompt_getter = lambda sid: None  # No skills available
+        def prompt_getter(sid):
+            return None  # No skills available
         llm_caller = AsyncMock()
 
         result = await SkillChainManager.execute_chain(chain, prompt_getter, llm_caller)
@@ -233,7 +233,8 @@ class TestExecuteChain:
             ],
         )
 
-        prompt_getter = lambda sid: f"Prompt for {sid}" if sid == "fallback" else None
+        def prompt_getter(sid):
+            return f"Prompt for {sid}" if sid == "fallback" else None
         llm_caller = AsyncMock(return_value="Fallback output")
 
         result = await SkillChainManager.execute_chain(chain, prompt_getter, llm_caller)
@@ -248,7 +249,8 @@ class TestExecuteChain:
             max_total_tokens=1,  # Very small budget
         )
 
-        prompt_getter = lambda sid: "A" * 1000
+        def prompt_getter(sid):
+            return "A" * 1000
         llm_caller = AsyncMock(return_value="B" * 1000)
 
         result = await SkillChainManager.execute_chain(chain, prompt_getter, llm_caller)
@@ -263,7 +265,8 @@ class TestExecuteChain:
             max_duration_seconds=0,  # Immediate timeout
         )
 
-        prompt_getter = lambda sid: "prompt"
+        def prompt_getter(sid):
+            return "prompt"
         llm_caller = AsyncMock(return_value="output")
 
         result = await SkillChainManager.execute_chain(chain, prompt_getter, llm_caller)
@@ -277,7 +280,8 @@ class TestExecuteChain:
             steps=[ChainStep(skill_id="s1")],
         )
 
-        prompt_getter = lambda sid: "prompt"
+        def prompt_getter(sid):
+            return "prompt"
         llm_caller = AsyncMock(side_effect=RuntimeError("LLM error"))
 
         result = await SkillChainManager.execute_chain(chain, prompt_getter, llm_caller)

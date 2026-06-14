@@ -7,8 +7,8 @@ from pathlib import Path
 import pytest
 import yaml
 
-from yuanbot.services.domain_matcher import CapabilityDomain, DomainMatcher
-from yuanbot.services.progressive_loader import LRUCache, ProgressiveLoader, MetadataIndex
+from yuanbot.services.domain_matcher import CapabilityDomain
+from yuanbot.services.progressive_loader import LRUCache, ProgressiveLoader
 from yuanbot.skills.manager import SkillManager
 from yuanbot.tools.manager import ToolManager
 
@@ -61,7 +61,7 @@ async def loader(tmp_path: Path):
     skills_dir.mkdir()
     tools_dir.mkdir()
 
-    _write_skill(skills_dir, "emotional_comfort", category="emotional_care", 
+    _write_skill(skills_dir, "emotional_comfort", category="emotional_care",
                  capability_tags=["comfort", "sadness"], token_cost_estimate=250)
     _write_skill(skills_dir, "daily_chat", category="daily_chat",
                  capability_tags=["chat", "casual"], token_cost_estimate=150)

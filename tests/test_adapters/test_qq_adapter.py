@@ -2,15 +2,11 @@
 
 from __future__ import annotations
 
-import asyncio
-import json
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
 from yuanbot.adapters.channel.qq_adapter import (
-    FileType,
-    MsgType,
     QQAdapter,
 )
 from yuanbot.core.types import ChannelConfig, ContentType, MessageContent
@@ -130,7 +126,7 @@ class TestQQAdapterIntegration:
     @pytest.mark.asyncio
     async def test_handle_c2c_message(self, adapter):
         callback = AsyncMock()
-        from yuanbot.core.types import BotResponse, MessageContent
+        from yuanbot.core.types import BotResponse
 
         callback.return_value = BotResponse(
             content=MessageContent(content_type=ContentType.TEXT, text="Hi!")
@@ -156,7 +152,7 @@ class TestQQAdapterIntegration:
     @pytest.mark.asyncio
     async def test_handle_group_at_message(self, adapter):
         callback = AsyncMock()
-        from yuanbot.core.types import BotResponse, MessageContent
+        from yuanbot.core.types import BotResponse
 
         callback.return_value = BotResponse(
             content=MessageContent(content_type=ContentType.TEXT, text="Hi!")

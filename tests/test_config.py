@@ -39,7 +39,7 @@ class TestYuanBotConfig:
         config = YuanBotConfig()
         assert config.ai_provider.provider_id == "openai"
         assert config.ai_provider.api_key is None
-        assert config.ai_provider.default_model == "gpt-4o"
+        assert config.ai_provider.default_model == "gpt-5.4"
 
     def test_memory_config_defaults(self):
         config = YuanBotConfig()
@@ -128,9 +128,9 @@ class TestLoadConfig:
         assert overrides["ai_provider"]["base_url"] == "https://custom.api.com/v1"
 
     def test_env_override_model(self, monkeypatch):
-        monkeypatch.setenv("YUAN_AI_MODEL", "gpt-4o-mini")
+        monkeypatch.setenv("YUAN_AI_MODEL", "gpt-5.4-mini")
         overrides = _load_env_overrides()
-        assert overrides["ai_provider"]["default_model"] == "gpt-4o-mini"
+        assert overrides["ai_provider"]["default_model"] == "gpt-5.4-mini"
 
     def test_env_override_log_level(self, monkeypatch):
         monkeypatch.setenv("YUAN_LOG_LEVEL", "debug")
@@ -147,7 +147,7 @@ class TestLoadConfig:
             "app_name": "DirBot",
             "version": "2.0.0",
             "debug": True,
-            "ai": {"default_provider": "openai", "default_model": "gpt-4o"},
+            "ai": {"default_provider": "openai", "default_model": "gpt-5.4"},
             "persona": {"id": "custom"},
             "proactive": {"enabled": False},
         }
@@ -203,7 +203,7 @@ class TestBotConfig:
         assert config.debug is False
         assert config.log_level == "INFO"
         assert config.ai.default_provider == "openai"
-        assert config.ai.default_model == "gpt-4o"
+        assert config.ai.default_model == "gpt-5.4"
         assert config.persona.id == "default"
 
     def test_proactive_defaults(self):
@@ -284,21 +284,21 @@ class TestProviderConfigEntry:
             provider_id="openai",
             adapter="openai-adapter",
             config={
-                "default": "gpt-4o",
+                "default": "gpt-5.4",
                 "models": [
-                    {"id": "gpt-4o", "type": "chat", "max_tokens": 128000},
-                    {"id": "gpt-4o-mini", "type": "chat", "max_tokens": 128000},
+                    {"id": "gpt-5.4", "type": "chat", "max_tokens": 128000},
+                    {"id": "gpt-5.4-mini", "type": "chat", "max_tokens": 128000},
                 ],
             },
             models=[
-                ModelEntry(id="gpt-4o", type="chat", max_tokens=128000),
-                ModelEntry(id="gpt-4o-mini", type="chat", max_tokens=128000),
+                ModelEntry(id="gpt-5.4", type="chat", max_tokens=128000),
+                ModelEntry(id="gpt-5.4-mini", type="chat", max_tokens=128000),
             ],
-            default_model="gpt-4o",
+            default_model="gpt-5.4",
         )
         assert len(entry.models) == 2
-        assert entry.models[0].id == "gpt-4o"
-        assert entry.default_model == "gpt-4o"
+        assert entry.models[0].id == "gpt-5.4"
+        assert entry.default_model == "gpt-5.4"
 
     def test_embedding_model(self):
         entry = ProviderConfigEntry(
@@ -318,17 +318,17 @@ class TestProviderConfigEntry:
                 "api_key": "test-key",
                 "base_url": "https://api.openai.com/v1",
                 "models": [
-                    {"id": "gpt-4o", "type": "chat", "max_tokens": 128000},
+                    {"id": "gpt-5.4", "type": "chat", "max_tokens": 128000},
                 ],
-                "default": "gpt-4o",
+                "default": "gpt-5.4",
             },
         }
         entry = ProviderConfigEntry.from_yaml(raw)
         assert entry.provider_id == "openai"
         assert entry.adapter == "openai-adapter"
-        assert entry.default_model == "gpt-4o"
+        assert entry.default_model == "gpt-5.4"
         assert len(entry.models) == 1
-        assert entry.models[0].id == "gpt-4o"
+        assert entry.models[0].id == "gpt-5.4"
 
 
 class TestChannelConfigEntry:
@@ -427,8 +427,8 @@ class TestNewConfigLoader:
         assert "glm" in providers
         assert "qwen" in providers
         assert isinstance(providers["openai"], ProviderConfigEntry)
-        assert providers["openai"].default_model == "gpt-4o"
-        assert len(providers["openai"].models) == 3
+        assert providers["openai"].default_model == "gpt-5.4"
+        assert len(providers["openai"].models) == 5
 
     def test_load_channel_configs(self):
         loader = ConfigLoader(Path(__file__).parent.parent / "configs")
@@ -484,8 +484,8 @@ class TestNewConfigLoader:
                     "config": {
                         "api_key": "${TEST_API_KEY}",
                         "base_url": "https://api.openai.com/v1",
-                        "models": [{"id": "gpt-4o", "type": "chat"}],
-                        "default": "gpt-4o",
+                        "models": [{"id": "gpt-5.4", "type": "chat"}],
+                        "default": "gpt-5.4",
                     },
                 }
             )

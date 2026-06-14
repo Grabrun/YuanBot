@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from yuanbot.services.marketplace import ExtensionReview, ExtensionReviewStore, ReviewStats
+from yuanbot.services.marketplace import ExtensionReview, ExtensionReviewStore
 
 
 class TestExtensionReview:

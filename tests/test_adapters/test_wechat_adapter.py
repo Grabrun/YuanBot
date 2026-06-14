@@ -2,19 +2,16 @@
 
 from __future__ import annotations
 
-import asyncio
 import base64
-import json
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
 from yuanbot.adapters.channel.wechat_adapter import (
-    TypingStatus,
-    WeixinAdapter,
     MessageItemType,
-    MessageType,
     MessageState,
+    MessageType,
+    WeixinAdapter,
 )
 from yuanbot.adapters.channel.weixin_cdn import (
     UploadMediaType,
@@ -27,7 +24,6 @@ from yuanbot.adapters.channel.weixin_cdn import (
     parse_aes_key_from_item,
 )
 from yuanbot.core.types import ChannelConfig, ContentType, MessageContent
-
 
 # ── AES 加密测试 ──────────────────────────────
 
@@ -93,7 +89,6 @@ class TestAesEcb:
 
 
 import os
-
 
 # ── 适配器单元测试 ────────────────────────────
 
@@ -218,7 +213,7 @@ class TestWeixinAdapterIntegration:
     async def test_process_text_message(self, adapter):
         """测试入站文本消息处理"""
         callback = AsyncMock()
-        from yuanbot.core.types import BotResponse, MessageContent
+        from yuanbot.core.types import BotResponse
 
         callback.return_value = BotResponse(
             content=MessageContent(content_type=ContentType.TEXT, text="Hi!")

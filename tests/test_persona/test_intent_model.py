@@ -6,11 +6,8 @@
 from __future__ import annotations
 
 import json
-import tempfile
 from pathlib import Path
 from unittest.mock import MagicMock, patch
-
-import pytest
 
 from yuanbot.persona.engines.intent_engine import (
     IntentEngine,
@@ -19,7 +16,6 @@ from yuanbot.persona.engines.intent_engine import (
     SklearnIntentClassifier,
     create_intent_classifier,
 )
-
 
 # --------------------------------------------------------------------------- #
 # IntentEngine 基础测试
