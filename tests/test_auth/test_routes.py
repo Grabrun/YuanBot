@@ -52,12 +52,10 @@ def client(app):
 
 
 @pytest.fixture
-def initialized_app(app):
+async def initialized_app(app):
     """已初始化存储的 app"""
-    import asyncio
-
-    asyncio.get_event_loop().run_until_complete(app.state.user_store.initialize())
-    asyncio.get_event_loop().run_until_complete(app.state.conv_store.initialize())
+    await app.state.user_store.initialize()
+    await app.state.conv_store.initialize()
     return app
 
 

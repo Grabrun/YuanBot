@@ -36,9 +36,9 @@ def client(app):
 
 
 @pytest.fixture
-def init_client(app):
+async def init_client(app):
     """已初始化存储的客户端"""
-    asyncio.get_event_loop().run_until_complete(app.state.user_store.initialize())
+    await app.state.user_store.initialize()
     return TestClient(app, raise_server_exceptions=False)
 
 

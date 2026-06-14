@@ -291,7 +291,8 @@ class DeepEmotionAnalyzer:
                 "```json",
                 "{",
                 '  "thinking": "你的分析思考过程（2-3句话）",',
-                '  "emotion": "joy|sadness|anger|fear|surprise|disgust|trust|anticipation|neutral",',
+                '  "emotion": "joy|sadness|anger|fear|surprise|disgust|trust|'
+                'anticipation|neutral",',
                 '  "intensity": 0.0到1.0之间的浮点数,',
                 '  "confidence": 0.0到1.0之间的浮点数,',
                 '  "valence": "positive|negative|neutral",',
