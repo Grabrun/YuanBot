@@ -222,41 +222,51 @@ class AlertManager:
 
     def _register_default_rules(self) -> None:
         """注册默认告警规则"""
-        self.add_rule(AlertRule(
-            name="ai_consecutive_failures",
-            category=AlertCategory.AI_PROVIDER,
-            severity=AlertSeverity.CRITICAL,
-            threshold=3,
-            cooldown_seconds=600,  # 10 分钟
-        ))
-        self.add_rule(AlertRule(
-            name="ai_high_failure_rate",
-            category=AlertCategory.AI_PROVIDER,
-            severity=AlertSeverity.WARNING,
-            threshold=10,  # 10 分钟内累计失败次数
-            cooldown_seconds=900,  # 15 分钟
-        ))
-        self.add_rule(AlertRule(
-            name="disk_space_low",
-            category=AlertCategory.DISK_SPACE,
-            severity=AlertSeverity.CRITICAL,
-            threshold=90,  # 使用率百分比
-            cooldown_seconds=3600,  # 1 小时
-        ))
-        self.add_rule(AlertRule(
-            name="disk_space_warning",
-            category=AlertCategory.DISK_SPACE,
-            severity=AlertSeverity.WARNING,
-            threshold=80,
-            cooldown_seconds=3600,
-        ))
-        self.add_rule(AlertRule(
-            name="database_connection_lost",
-            category=AlertCategory.DATABASE,
-            severity=AlertSeverity.CRITICAL,
-            threshold=1,  # 1 次失败即告警
-            cooldown_seconds=300,  # 5 分钟
-        ))
+        self.add_rule(
+            AlertRule(
+                name="ai_consecutive_failures",
+                category=AlertCategory.AI_PROVIDER,
+                severity=AlertSeverity.CRITICAL,
+                threshold=3,
+                cooldown_seconds=600,  # 10 分钟
+            )
+        )
+        self.add_rule(
+            AlertRule(
+                name="ai_high_failure_rate",
+                category=AlertCategory.AI_PROVIDER,
+                severity=AlertSeverity.WARNING,
+                threshold=10,  # 10 分钟内累计失败次数
+                cooldown_seconds=900,  # 15 分钟
+            )
+        )
+        self.add_rule(
+            AlertRule(
+                name="disk_space_low",
+                category=AlertCategory.DISK_SPACE,
+                severity=AlertSeverity.CRITICAL,
+                threshold=90,  # 使用率百分比
+                cooldown_seconds=3600,  # 1 小时
+            )
+        )
+        self.add_rule(
+            AlertRule(
+                name="disk_space_warning",
+                category=AlertCategory.DISK_SPACE,
+                severity=AlertSeverity.WARNING,
+                threshold=80,
+                cooldown_seconds=3600,
+            )
+        )
+        self.add_rule(
+            AlertRule(
+                name="database_connection_lost",
+                category=AlertCategory.DATABASE,
+                severity=AlertSeverity.CRITICAL,
+                threshold=1,  # 1 次失败即告警
+                cooldown_seconds=300,  # 5 分钟
+            )
+        )
 
     # ── 规则管理 ──────────────────────────────
 
@@ -308,10 +318,7 @@ class AlertManager:
         if rule and rule.enabled and state.consecutive_failures >= rule.threshold:
             return self._fire_alert(
                 rule_name="ai_consecutive_failures",
-                message=(
-                    f"AI 提供商 '{provider_id}' 连续调用失败 "
-                    f"{state.consecutive_failures} 次"
-                ),
+                message=(f"AI 提供商 '{provider_id}' 连续调用失败 {state.consecutive_failures} 次"),
                 details={
                     "provider_id": provider_id,
                     "consecutive_failures": state.consecutive_failures,
@@ -333,8 +340,7 @@ class AlertManager:
             return self._fire_alert(
                 rule_name="ai_high_failure_rate",
                 message=(
-                    f"AI 提供商调用累计失败 "
-                    f"{high_rate_state.total_failures} 次（10 分钟窗口）"
+                    f"AI 提供商调用累计失败 {high_rate_state.total_failures} 次（10 分钟窗口）"
                 ),
                 details={
                     "provider_id": provider_id,
@@ -558,7 +564,7 @@ class AlertManager:
         # 记录到历史
         self._alert_history.append(alert)
         if len(self._alert_history) > self._history_max_size:
-            self._alert_history = self._alert_history[-self._history_max_size:]
+            self._alert_history = self._alert_history[-self._history_max_size :]
 
         # 日志投递
         log_method = {

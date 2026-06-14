@@ -57,9 +57,7 @@ class MemoryEventQueue:
     """
 
     def __init__(self) -> None:
-        self._queues: dict[str, asyncio.Queue[QueueMessage]] = defaultdict(
-            asyncio.Queue
-        )
+        self._queues: dict[str, asyncio.Queue[QueueMessage]] = defaultdict(asyncio.Queue)
         self._handlers: dict[str, list[EventHandler]] = defaultdict(list)
         self._running = False
         self._consumer_tasks: dict[str, asyncio.Task[None]] = {}
@@ -296,9 +294,7 @@ class RedisEventQueue:
                                 )
 
                         # 确认消息
-                        await self._redis.xack(
-                            topic, self._consumer_group, message_id
-                        )
+                        await self._redis.xack(topic, self._consumer_group, message_id)
 
             except asyncio.CancelledError:
                 break

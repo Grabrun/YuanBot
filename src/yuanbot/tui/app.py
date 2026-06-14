@@ -370,11 +370,13 @@ class YuanBotTUI(App):
 
     def _refresh_info_panel(self) -> None:
         panel = self.query_one("#info-panel", InfoPanel)
-        panel.refresh_content({
-            "user": self._user or {},
-            "conv_count": len(self._conversations),
-            "msg_count": sum(c.get("message_count", 0) for c in self._conversations),
-        })
+        panel.refresh_content(
+            {
+                "user": self._user or {},
+                "conv_count": len(self._conversations),
+                "msg_count": sum(c.get("message_count", 0) for c in self._conversations),
+            }
+        )
 
     async def _load_conversations(self) -> None:
         try:
@@ -475,7 +477,7 @@ class YuanBotTUI(App):
             for i, conv in enumerate(self._conversations):
                 marker = "→" if conv["conversation_id"] == self._current_conv_id else " "
                 self._chat_log(
-                    f" {marker} [{i+1}] {conv['title']} ({conv.get('message_count', 0)}条)"
+                    f" {marker} [{i + 1}] {conv['title']} ({conv.get('message_count', 0)}条)"
                 )
 
         elif command == "/switch":
@@ -532,8 +534,7 @@ class YuanBotTUI(App):
                     status = "✅" if p.get("enabled") else "❌"
                     default = " (默认)" if p.get("is_default") else ""
                     self._chat_log(
-                        f"  {status} {p.get('provider_id', '?')} — "
-                        f"{p.get('adapter', '?')}{default}"
+                        f"  {status} {p.get('provider_id', '?')} — {p.get('adapter', '?')}{default}"
                     )
             except TUIClientError:
                 self._chat_log("[dim]无法获取提供商信息[/dim]")

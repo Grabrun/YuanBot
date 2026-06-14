@@ -51,8 +51,12 @@ _DATE_FORMATS: list[str] = [
     "%m月%d日",
 ]
 _DATE_KEYWORDS: tuple[str, ...] = (
-    "birthday", "anniversary", "interview_date",
-    "生日", "纪念日", "面试",
+    "birthday",
+    "anniversary",
+    "interview_date",
+    "生日",
+    "纪念日",
+    "面试",
 )
 
 
@@ -309,14 +313,21 @@ class MemoryManager:
             if self.has_persistence:
                 # DB 级过滤：先用 key 列匹配第一个实体，减少加载量
                 existing_facts = await self._find_similar_facts_by_entities(
-                    user_id, key_entities, category,
+                    user_id,
+                    key_entities,
+                    category,
                 )
             else:
                 existing_facts = self._fact_memories.get(user_id, [])
             for existing in existing_facts:
                 if self._is_similar_fact(existing, node):
                     return await self._resolve_fact_conflict(
-                        user_id, existing, node, content, importance, confidence,
+                        user_id,
+                        existing,
+                        node,
+                        content,
+                        importance,
+                        confidence,
                     )
 
         if self.has_persistence:
@@ -420,20 +431,16 @@ class MemoryManager:
             # 持久化模式：key_entities 在加载时为空（存于 metadata），
             # 直接用 DB 级别分类过滤，避免加载全部事实
             date_categories = ["important_date", "personal_info"]
-            facts = await self._db.sqlite.get_fact_memories_by_categories(
-                user_id, date_categories
-            )
+            facts = await self._db.sqlite.get_fact_memories_by_categories(user_id, date_categories)
             fact_nodes = [self._row_to_fact_memory_node(row) for row in facts]
         else:
             # 内存模式：key_entities 可用，加载全部并用分类+关键词过滤
             facts = await self.get_fact_memories(user_id)
             fact_nodes = [
-                f for f in facts
+                f
+                for f in facts
                 if f.metadata.get("category") in ("important_date", "personal_info")
-                or (
-                    f.key_entities
-                    and any(kw in " ".join(f.key_entities) for kw in _DATE_KEYWORDS)
-                )
+                or (f.key_entities and any(kw in " ".join(f.key_entities) for kw in _DATE_KEYWORDS))
             ]
 
         important_dates: list[dict[str, Any]] = []
@@ -451,17 +458,18 @@ class MemoryManager:
                     this_year = this_year.replace(year=today.year + 1)
                 days_until = (this_year - today).days
 
-                important_dates.append({
-                    "key": fact.key_entities[0] if fact.key_entities else "unknown",
-                    "value": value,
-                    "category": fact.metadata.get("category", ""),
-                    "days_until": days_until,
-                    "date": this_year.isoformat(),
-                    "description": (
-                        f"{fact.key_entities[0] if fact.key_entities else '重要日期'}:"
-                        f" {value}"
-                    ),
-                })
+                important_dates.append(
+                    {
+                        "key": fact.key_entities[0] if fact.key_entities else "unknown",
+                        "value": value,
+                        "category": fact.metadata.get("category", ""),
+                        "days_until": days_until,
+                        "date": this_year.isoformat(),
+                        "description": (
+                            f"{fact.key_entities[0] if fact.key_entities else '重要日期'}: {value}"
+                        ),
+                    }
+                )
             except Exception:
                 continue
 
@@ -1369,9 +1377,7 @@ class MemoryManager:
             return "空会话"
 
         key_contents = [
-            mem.content[:100]
-            for mem in memories
-            if mem.content and len(mem.content) > 10
+            mem.content[:100] for mem in memories if mem.content and len(mem.content) > 10
         ]
 
         if not key_contents:
@@ -1382,15 +1388,11 @@ class MemoryManager:
 
     def _extract_entities_from_memories(self, memories: list[MemoryNode]) -> list[str]:
         """从记忆中提取关键实体"""
-        return list(set(itertools.chain.from_iterable(
-            mem.key_entities for mem in memories
-        )))[:10]
+        return list(set(itertools.chain.from_iterable(mem.key_entities for mem in memories)))[:10]
 
     def _extract_topics_from_memories(self, memories: list[MemoryNode]) -> list[str]:
         """从记忆中提取话题标签"""
-        return list(set(itertools.chain.from_iterable(
-            mem.topic_tags for mem in memories
-        )))[:5]
+        return list(set(itertools.chain.from_iterable(mem.topic_tags for mem in memories)))[:5]
 
     async def _find_similar_facts_by_entities(
         self,
@@ -1407,7 +1409,9 @@ class MemoryManager:
 
         # 用 key 列匹配任一实体
         rows = await self._db.sqlite.find_facts_by_keys(
-            user_id, keys=entities, category=category,
+            user_id,
+            keys=entities,
+            category=category,
         )
         nodes = [self._row_to_fact_memory_node(row) for row in rows]
 
@@ -1416,9 +1420,7 @@ class MemoryManager:
             cat_rows = await self._db.sqlite.get_fact_memories(user_id, category=category)
             seen_ids = {n.id for n in nodes}
             nodes.extend(
-                self._row_to_fact_memory_node(row)
-                for row in cat_rows
-                if row["id"] not in seen_ids
+                self._row_to_fact_memory_node(row) for row in cat_rows if row["id"] not in seen_ids
             )
 
         return nodes

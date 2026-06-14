@@ -150,8 +150,7 @@ class MySQLStore:
             import aiomysql
         except ImportError:
             raise ImportError(
-                "aiomysql is required for MySQLStore. "
-                "Install it with: pip install aiomysql"
+                "aiomysql is required for MySQLStore. Install it with: pip install aiomysql"
             ) from None
 
         self._pool = await aiomysql.create_pool(
@@ -254,8 +253,7 @@ class MySQLStore:
         async with self._pool.acquire() as conn, conn.cursor() as cursor:
             if category:
                 await cursor.execute(
-                    "SELECT * FROM fact_memories"
-                    " WHERE user_id=%s AND category=%s AND is_deleted=0",
+                    "SELECT * FROM fact_memories WHERE user_id=%s AND category=%s AND is_deleted=0",
                     (user_id, category),
                 )
             else:
@@ -270,9 +268,7 @@ class MySQLStore:
         """软删除事实记忆"""
         async with self._pool.acquire() as conn:
             async with conn.cursor() as cursor:
-                await cursor.execute(
-                    "UPDATE fact_memories SET is_deleted=1 WHERE id=%s", (id,)
-                )
+                await cursor.execute("UPDATE fact_memories SET is_deleted=1 WHERE id=%s", (id,))
             await conn.commit()
 
     # ──────────────────────────────────────────
@@ -373,9 +369,7 @@ class MySQLStore:
         """删除情景记忆元数据"""
         async with self._pool.acquire() as conn:
             async with conn.cursor() as cursor:
-                await cursor.execute(
-                    "DELETE FROM episodic_metadata WHERE id=%s", (id,)
-                )
+                await cursor.execute("DELETE FROM episodic_metadata WHERE id=%s", (id,))
             await conn.commit()
 
     # ──────────────────────────────────────────
@@ -435,9 +429,7 @@ class MySQLStore:
     async def get_user_profile(self, user_id: str) -> dict[str, Any] | None:
         """获取用户画像"""
         async with self._pool.acquire() as conn, conn.cursor() as cursor:
-            await cursor.execute(
-                "SELECT * FROM user_profiles WHERE user_id=%s", (user_id,)
-            )
+            await cursor.execute("SELECT * FROM user_profiles WHERE user_id=%s", (user_id,))
             row = await cursor.fetchone()
             if row is None:
                 return None
@@ -504,8 +496,7 @@ class MySQLStore:
         """获取情感记录"""
         async with self._pool.acquire() as conn, conn.cursor() as cursor:
             await cursor.execute(
-                "SELECT * FROM emotion_records"
-                " WHERE user_id=%s ORDER BY timestamp DESC LIMIT %s",
+                "SELECT * FROM emotion_records WHERE user_id=%s ORDER BY timestamp DESC LIMIT %s",
                 (user_id, limit),
             )
             rows = await cursor.fetchall()

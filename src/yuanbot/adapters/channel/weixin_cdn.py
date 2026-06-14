@@ -26,6 +26,7 @@ CDN_TIMEOUT_S = 30
 MAX_FILE_SIZE = 100 * 1024 * 1024  # 100MB
 MAX_RETRIES = 3
 
+
 # 媒体类型枚举
 class UploadMediaType:
     IMAGE = 1
@@ -37,6 +38,7 @@ class UploadMediaType:
 @dataclass
 class UploadResult:
     """CDN 上传结果"""
+
     file_key: str
     download_encrypted_param: str
     aes_key_hex: str
@@ -47,6 +49,7 @@ class UploadResult:
 @dataclass
 class MediaRef:
     """媒体引用（用于构造 MessageItem）"""
+
     encrypt_query_param: str
     aes_key_b64: str
     encrypt_type: int = 1
@@ -421,10 +424,7 @@ async def download_media_file(
     if full_url:
         url = full_url
     else:
-        url = (
-            f"{cdn_base_url}/download"
-            f"?encrypted_query_param={quote(encrypt_query_param)}"
-        )
+        url = f"{cdn_base_url}/download?encrypted_query_param={quote(encrypt_query_param)}"
 
     # 2. 下载
     try:

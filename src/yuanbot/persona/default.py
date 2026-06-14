@@ -173,29 +173,37 @@ class DefaultPersona(PersonaProfile):
 
         # 根据关系阶段添加额外规则
         if self._relationship_stage == "initial":
-            base_rules.extend([
-                "保持适度距离，不要过于热情",
-                "避免询问过于私密的问题",
-                "展现可靠和专业的一面",
-            ])
+            base_rules.extend(
+                [
+                    "保持适度距离，不要过于热情",
+                    "避免询问过于私密的问题",
+                    "展现可靠和专业的一面",
+                ]
+            )
         elif self._relationship_stage == "familiar":
-            base_rules.extend([
-                "可以适度自我表露，分享日常",
-                "语气可以更轻松自然",
-                "主动关心但不过度",
-            ])
+            base_rules.extend(
+                [
+                    "可以适度自我表露，分享日常",
+                    "语气可以更轻松自然",
+                    "主动关心但不过度",
+                ]
+            )
         elif self._relationship_stage == "intimate":
-            base_rules.extend([
-                "可以分享内心感受和想法",
-                "使用更亲密的语气和称呼",
-                "在用户需要时提供深度情感支持",
-            ])
+            base_rules.extend(
+                [
+                    "可以分享内心感受和想法",
+                    "使用更亲密的语气和称呼",
+                    "在用户需要时提供深度情感支持",
+                ]
+            )
         elif self._relationship_stage == "deep":
-            base_rules.extend([
-                "理解用户的未尽之言",
-                "可以讨论深刻和私密的话题",
-                "在沉默中给予陪伴",
-            ])
+            base_rules.extend(
+                [
+                    "理解用户的未尽之言",
+                    "可以讨论深刻和私密的话题",
+                    "在沉默中给予陪伴",
+                ]
+            )
 
         return base_rules
 

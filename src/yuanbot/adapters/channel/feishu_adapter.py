@@ -36,12 +36,14 @@ TOKEN_URL = f"{FEISHU_API_BASE}/auth/v3/tenant_access_token/internal/"
 SEND_MSG_URL = f"{FEISHU_API_BASE}/im/v1/messages"
 REPLY_MSG_URL_TPL = f"{FEISHU_API_BASE}/im/v1/messages/{{message_id}}/reply"
 
+
 # 飞书消息类型
 class FeishuMsgType:
     TEXT = "text"
     POST = "post"
     IMAGE = "image"
     INTERACTIVE = "interactive"
+
 
 # 超时
 TOKEN_TIMEOUT_S = 10
@@ -461,11 +463,7 @@ class FeishuAdapter(BaseChannelAdapter):
 
             # 返回 200 OK
             writer.write(
-                b"HTTP/1.1 200 OK\r\n"
-                b"Content-Type: application/json\r\n"
-                b'Content-Length: 2\r\n'
-                b"\r\n"
-                b"{}"
+                b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 2\r\n\r\n{}"
             )
             await writer.drain()
             writer.close()

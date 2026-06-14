@@ -592,8 +592,7 @@ class ExtensionReviewStore:
                     (id, ext_id, user_id, rating,
                      title, content, created_at, updated_at)
                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-                (review_id, ext_id, user_id, rating,
-                 title, content, now, now),
+                (review_id, ext_id, user_id, rating, title, content, now, now),
             )
             conn.commit()
         except sqlite3.IntegrityError:
@@ -610,17 +609,13 @@ class ExtensionReviewStore:
             ).fetchone()
             return ExtensionReview.from_row(row)
 
-        row = conn.execute(
-            "SELECT * FROM extension_reviews WHERE id = ?", (review_id,)
-        ).fetchone()
+        row = conn.execute("SELECT * FROM extension_reviews WHERE id = ?", (review_id,)).fetchone()
         return ExtensionReview.from_row(row)
 
     def get_review(self, review_id: str) -> ExtensionReview | None:
         """获取单条评论"""
         conn = self._get_conn()
-        row = conn.execute(
-            "SELECT * FROM extension_reviews WHERE id = ?", (review_id,)
-        ).fetchone()
+        row = conn.execute("SELECT * FROM extension_reviews WHERE id = ?", (review_id,)).fetchone()
         return ExtensionReview.from_row(row) if row else None
 
     def list_reviews(
@@ -704,7 +699,7 @@ class ExtensionReviewStore:
             "SELECT COUNT(*) as cnt,"
             " COALESCE(AVG(rating), 0) as avg_r"
             " FROM extension_reviews WHERE ext_id = ?",
-            (ext_id,)
+            (ext_id,),
         ).fetchone()
 
         dist_rows = conn.execute(

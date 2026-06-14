@@ -329,9 +329,10 @@ class ProactiveStrategy:
             logger.debug("user_greeting_disabled", user_id=user_id)
             return False
 
-        if (
-            not user_config.get("event_trigger_enabled", True)
-            and task_type in ("weather", "special_date", "emotion_alert")
+        if not user_config.get("event_trigger_enabled", True) and task_type in (
+            "weather",
+            "special_date",
+            "emotion_alert",
         ):
             logger.debug("user_event_triggers_disabled", user_id=user_id)
             return False
@@ -358,13 +359,13 @@ class ProactiveStrategy:
             wake_time = user_config.get("custom_wake_up_time")
             sleep_time = user_config.get("custom_sleep_time")
             if wake_time and sleep_time and not self._is_in_greeting_window(wake_time, sleep_time):
-                    logger.debug(
-                        "greeting_time_window_miss",
-                        user_id=user_id,
-                        wake_time=wake_time,
-                        sleep_time=sleep_time,
-                    )
-                    return False
+                logger.debug(
+                    "greeting_time_window_miss",
+                    user_id=user_id,
+                    wake_time=wake_time,
+                    sleep_time=sleep_time,
+                )
+                return False
 
         # 4. 每日次数限制（取全局和用户配置的较小值）
         user_max = user_config.get("max_proactive_per_day", self._config.max_per_day)

@@ -189,9 +189,9 @@ class DomainMatcher:
                         if keyword == intent.strip():
                             score += 0.5
                         scores[domain_val] = scores.get(domain_val, 0) + score
-                        result.intent_scores[domain_val] = result.intent_scores.get(
-                            domain_val, 0
-                        ) + score
+                        result.intent_scores[domain_val] = (
+                            result.intent_scores.get(domain_val, 0) + score
+                        )
                         if domain not in result.matched_domains:
                             result.matched_domains.append(domain)
 
@@ -202,9 +202,9 @@ class DomainMatcher:
             for domain in domains:
                 domain_val = domain.value
                 scores[domain_val] = scores.get(domain_val, 0) + self.WEIGHT_EMOTION
-                result.emotion_scores[domain_val] = result.emotion_scores.get(
-                    domain_val, 0
-                ) + self.WEIGHT_EMOTION
+                result.emotion_scores[domain_val] = (
+                    result.emotion_scores.get(domain_val, 0) + self.WEIGHT_EMOTION
+                )
                 if domain not in result.matched_domains:
                     result.matched_domains.append(domain)
 
@@ -221,9 +221,7 @@ class DomainMatcher:
             intent=intent[:50] if intent else "",
             emotion=emotion,
             matched_domains=[d.value for d in result.matched_domains],
-            top_scores=dict(
-                sorted(scores.items(), key=lambda x: -x[1])[:5]
-            ),
+            top_scores=dict(sorted(scores.items(), key=lambda x: -x[1])[:5]),
         )
 
         return result
@@ -232,9 +230,7 @@ class DomainMatcher:
         """获取能力域的默认 token 预算"""
         return DOMAIN_TOKEN_BUDGETS.get(domain, 300)
 
-    def register_intent_keyword(
-        self, keyword: str, domains: list[CapabilityDomain]
-    ) -> None:
+    def register_intent_keyword(self, keyword: str, domains: list[CapabilityDomain]) -> None:
         """动态注册意图关键词映射"""
         self._intent_map[keyword] = domains
         logger.debug(
@@ -243,9 +239,7 @@ class DomainMatcher:
             domains=[d.value for d in domains],
         )
 
-    def register_emotion_mapping(
-        self, emotion: str, domains: list[CapabilityDomain]
-    ) -> None:
+    def register_emotion_mapping(self, emotion: str, domains: list[CapabilityDomain]) -> None:
         """动态注册情感映射"""
         self._emotion_map[emotion.lower()] = domains
         logger.debug(

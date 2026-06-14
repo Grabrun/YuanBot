@@ -108,9 +108,7 @@ class UserStore:
         if isinstance(role, str):
             role = UserRole(role)
 
-        password_hash = bcrypt.hashpw(
-            password.encode("utf-8"), bcrypt.gensalt()
-        ).decode("utf-8")
+        password_hash = bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
 
         user = User(
             username=username,
@@ -298,15 +296,11 @@ class ConversationStore:
             for item in data:
                 conv = Conversation(**item)
                 self._conversations[conv.conversation_id] = conv
-                self._user_conversations.setdefault(conv.user_id, []).append(
-                    conv.conversation_id
-                )
+                self._user_conversations.setdefault(conv.user_id, []).append(conv.conversation_id)
                 # 加载消息
                 self._load_messages(conv.conversation_id)
             # Initialize running counter
-            self._total_message_count = sum(
-                len(msgs) for msgs in self._messages.values()
-            )
+            self._total_message_count = sum(len(msgs) for msgs in self._messages.values())
         except Exception as e:
             logger.error("conversation_store_load_error", error=str(e))
 
@@ -484,7 +478,7 @@ class ConversationStore:
             return []
 
         messages = self._messages.get(conversation_id, [])
-        return messages[offset: offset + limit]
+        return messages[offset : offset + limit]
 
     def get_recent_messages(
         self,
@@ -541,7 +535,7 @@ class ConversationStore:
 
         # 按时间倒序排列
         results.sort(key=lambda r: r["timestamp"], reverse=True)
-        return results[offset: offset + limit]
+        return results[offset : offset + limit]
 
     def export_conversation_markdown(
         self,
@@ -574,7 +568,7 @@ class ConversationStore:
 
         for msg in messages:
             role_label = "👤 用户" if msg.role == "user" else "🤖 助手"
-            ts = msg.timestamp.strftime('%Y-%m-%d %H:%M:%S')
+            ts = msg.timestamp.strftime("%Y-%m-%d %H:%M:%S")
             lines.append(f"**{role_label}** ({ts})")
             lines.append("")
             lines.append(msg.content)

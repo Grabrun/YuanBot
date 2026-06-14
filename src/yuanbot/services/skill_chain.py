@@ -316,8 +316,8 @@ class SkillChainManager:
             step.started_at = time.monotonic()
 
             try:
-                user_input = accumulated_output if i > 0 else (context or {}).get(
-                    "user_message", ""
+                user_input = (
+                    accumulated_output if i > 0 else (context or {}).get("user_message", "")
                 )
                 step_output = await llm_caller(prompt, user_input)
                 step.result = step_output

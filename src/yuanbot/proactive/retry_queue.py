@@ -346,9 +346,7 @@ class PersistentRetryQueue:
         """从队列中移除任务"""
         if not self._conn:
             return False
-        cursor = self._conn.execute(
-            "DELETE FROM retry_queue WHERE task_id = ?", (task_id,)
-        )
+        cursor = self._conn.execute("DELETE FROM retry_queue WHERE task_id = ?", (task_id,))
         self._conn.commit()
         return cursor.rowcount > 0
 
@@ -427,9 +425,7 @@ class PersistentRetryQueue:
             return
 
         self._running = True
-        self._consumer_task = asyncio.create_task(
-            self._consumer_loop(send_func)
-        )
+        self._consumer_task = asyncio.create_task(self._consumer_loop(send_func))
         logger.info("retry_consumer_started", interval=self._consumer_interval)
 
     async def stop_consumer(self) -> None:

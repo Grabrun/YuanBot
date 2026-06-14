@@ -251,13 +251,15 @@ def main() -> None:
     intent_sub.add_parser("status", help="查看模型状态")
     intent_train_parser = intent_sub.add_parser("train", help="训练意图分类模型")
     intent_train_parser.add_argument(
-        "--method", "-m",
+        "--method",
+        "-m",
         choices=["sklearn", "transformers"],
         default="sklearn",
         help="训练方式: sklearn (轻量) 或 transformers (BERT 微调)",
     )
     intent_train_parser.add_argument(
-        "--output", "-o",
+        "--output",
+        "-o",
         default="models",
         help="模型输出目录 (默认: models/)",
     )
@@ -972,11 +974,13 @@ def _run_provider_create(args: argparse.Namespace) -> None:
 
     if default_model:
         config["config"]["default"] = default_model
-        config["config"]["models"].append({
-            "id": default_model,
-            "type": "chat",
-            "max_tokens": 128000,
-        })
+        config["config"]["models"].append(
+            {
+                "id": default_model,
+                "type": "chat",
+                "max_tokens": 128000,
+            }
+        )
 
     # 写入文件
     provider_file.parent.mkdir(parents=True, exist_ok=True)
@@ -1012,27 +1016,27 @@ _TYPE_PREFIXES = {
 
 _TYPE_TEMPLATES: dict[str, dict[str, str]] = {
     "ai_provider": {
-        "src/adapter.py": '    pass\n',
-        "tests/test_adapter.py": 'import pytest\n\n\ndef test_placeholder():\n    assert True\n',
+        "src/adapter.py": "    pass\n",
+        "tests/test_adapter.py": "import pytest\n\n\ndef test_placeholder():\n    assert True\n",
     },
     "channel": {
-        "src/adapter.py": '    pass\n',
-        "tests/test_adapter.py": 'import pytest\n\n\ndef test_placeholder():\n    assert True\n',
+        "src/adapter.py": "    pass\n",
+        "tests/test_adapter.py": "import pytest\n\n\ndef test_placeholder():\n    assert True\n",
     },
     "skill": {
-        "src/definition.yaml": '',
-        "tests/test_skill.py": 'import pytest\n\n\ndef test_placeholder():\n    assert True\n',
+        "src/definition.yaml": "",
+        "tests/test_skill.py": "import pytest\n\n\ndef test_placeholder():\n    assert True\n",
     },
     "tool": {
-        "src/executor.py": '    pass\n',
-        "tests/test_tool.py": 'import pytest\n\n\ndef test_placeholder():\n    assert True\n',
+        "src/executor.py": "    pass\n",
+        "tests/test_tool.py": "import pytest\n\n\ndef test_placeholder():\n    assert True\n",
     },
     "persona": {
-        "src/persona.yaml": '',
+        "src/persona.yaml": "",
     },
     "trigger": {
-        "src/trigger.py": '    pass\n',
-        "tests/test_trigger.py": 'import pytest\n\n\ndef test_placeholder():\n    assert True\n',
+        "src/trigger.py": "    pass\n",
+        "tests/test_trigger.py": "import pytest\n\n\ndef test_placeholder():\n    assert True\n",
     },
 }
 
@@ -1367,7 +1371,7 @@ def _run_logs(args: argparse.Namespace) -> None:
         if args.level:
             level = args.level.upper()
             lines = [line for line in lines if level in line]
-        for line in lines[-args.lines:]:
+        for line in lines[-args.lines :]:
             print(f"  {line}")
 
 
@@ -1474,7 +1478,6 @@ def _run_list_plugins(args: argparse.Namespace) -> None:
         _info("无 Tools 配置")
 
     print()
-
 
 
 # --------------------------------------------------------------------------- #
@@ -1695,10 +1698,7 @@ def _run_persona_list(args: argparse.Namespace) -> None:
         stage = p.get("relationship_stage", "initial")
         desc = p.get("has_custom_prompt", False)
         desc_str = "自定义 prompt" if desc else "使用默认 prompt"
-        print(
-            f"  {active_mark}  {pid:15s} {name:10s}{default_mark:8s}  "
-            f"{stage:10s}  {desc_str}"
-        )
+        print(f"  {active_mark}  {pid:15s} {name:10s}{default_mark:8s}  {stage:10s}  {desc_str}")
 
     print(f"\n  共 {len(personas)} 个人设")
     print()
@@ -1850,10 +1850,7 @@ def _run_search(args: argparse.Namespace) -> None:
             version = ext.get("version", "?")
             name = ext.get("name", "?")[:15]
             desc = ext.get("description", "")[:30]
-            print(
-                f"  {ext_id:18s} {ext_type_str:12s} "
-                f"{version:8s} {name:15s}  {desc}"
-            )
+            print(f"  {ext_id:18s} {ext_type_str:12s} {version:8s} {name:15s}  {desc}")
 
         print(f"\n  共 {total} 个结果，显示前 {len(extensions)} 个")
 
@@ -2138,6 +2135,7 @@ def _run_intent_status(args: argparse.Namespace) -> None:
     print()
     try:
         from yuanbot.config import load_config
+
         config = load_config()
         intent_config = config.orchestrator.intent_engine
         print("  配置状态:")
@@ -2152,9 +2150,10 @@ def _run_intent_status(args: argparse.Namespace) -> None:
     print()
     try:
         from yuanbot.persona.engines.intent_engine import create_intent_classifier
+
         classifier = create_intent_classifier(model_dir="models")
         engine_type = type(classifier).__name__
-        if hasattr(classifier, 'get_model_info'):
+        if hasattr(classifier, "get_model_info"):
             info = classifier.get_model_info()
             _ok(f"当前引擎: {engine_type} (ready={info.get('ready', True)})")
         else:
@@ -2222,7 +2221,7 @@ def _run_intent_test(args: argparse.Namespace) -> None:
         classifier = create_intent_classifier(model_dir="models")
         engine_type = type(classifier).__name__
 
-        if hasattr(classifier, 'classify'):
+        if hasattr(classifier, "classify"):
             result = classifier.classify(text)
         else:
             result = classifier.recognize(text)
@@ -2238,6 +2237,7 @@ def _run_intent_test(args: argparse.Namespace) -> None:
     except Exception as e:
         _fail(f"测试失败: {e}")
         import traceback
+
         traceback.print_exc()
 
 

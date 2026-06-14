@@ -169,9 +169,7 @@ class TestAdapter:
         Returns:
             SendResult: 发送结果
         """
-        self._sent_messages.append(
-            SentMessage(target_id=target_id, content=content)
-        )
+        self._sent_messages.append(SentMessage(target_id=target_id, content=content))
         return SendResult(success=True, message_id=f"mock_msg_{len(self._sent_messages)}")
 
     # ── 模拟接收 ──────────────────────────────

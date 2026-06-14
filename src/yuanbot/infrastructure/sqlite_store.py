@@ -118,10 +118,7 @@ _CREATE_INDEXES = [
     "CREATE INDEX IF NOT EXISTS idx_fact_memories_user ON fact_memories(user_id)",
     "CREATE INDEX IF NOT EXISTS idx_fact_memories_category ON fact_memories(category)",
     # Composite index: most queries filter by (user_id, is_deleted)
-    (
-        "CREATE INDEX IF NOT EXISTS idx_fact_user_deleted"
-        " ON fact_memories(user_id, is_deleted)"
-    ),
+    ("CREATE INDEX IF NOT EXISTS idx_fact_user_deleted ON fact_memories(user_id, is_deleted)"),
     "CREATE INDEX IF NOT EXISTS idx_episodic_user ON episodic_metadata(user_id)",
     "CREATE INDEX IF NOT EXISTS idx_episodic_date ON episodic_metadata(date)",
     # Composite index: get_episodic_metadata filters by (user_id, date)
@@ -306,7 +303,8 @@ class SQLiteStore:
         params.extend(keys)
         where = " AND ".join(conditions)
         cursor = await self._db.execute(
-            f"SELECT * FROM fact_memories WHERE {where}", params,
+            f"SELECT * FROM fact_memories WHERE {where}",
+            params,
         )
         rows = await cursor.fetchall()
         return self._rows_to_dicts(rows, cursor)
@@ -741,6 +739,7 @@ class SQLiteStore:
             for r in results:
                 if r.get("timestamp"):
                     from datetime import datetime
+
                     r["timestamp"] = datetime.fromtimestamp(
                         r["timestamp"], tz=datetime.UTC
                     ).isoformat()
@@ -756,14 +755,13 @@ class SQLiteStore:
                 ORDER BY timestamp DESC
                 LIMIT ? OFFSET ?
             """
-            cursor = await self._db.execute(
-                sql_fallback, (user_id, f"%{query}%", limit, offset)
-            )
+            cursor = await self._db.execute(sql_fallback, (user_id, f"%{query}%", limit, offset))
             rows = await cursor.fetchall()
             results = self._rows_to_dicts(rows, cursor)
             for r in results:
                 if r.get("timestamp"):
                     from datetime import datetime
+
                     r["timestamp"] = datetime.fromtimestamp(
                         r["timestamp"], tz=datetime.UTC
                     ).isoformat()

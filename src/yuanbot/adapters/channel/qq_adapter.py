@@ -36,6 +36,7 @@ OAUTH_URL = "https://bots.qq.com/app/getAppAccessToken"
 API_BASE_URL = "https://api.sgroup.qq.com"
 WS_API_BASE = "https://api.sgroup.qq.com"
 
+
 # 消息类型
 class MsgType:
     TEXT = 0
@@ -44,12 +45,14 @@ class MsgType:
     EMBED = 4
     MEDIA = 7
 
+
 # 媒体类型
 class FileType:
     IMAGE = 1
     VIDEO = 2
     VOICE = 3
     FILE = 4
+
 
 # 超时
 OAUTH_TIMEOUT_S = 10
@@ -97,8 +100,11 @@ class QQAdapter(BaseChannelAdapter):
     @property
     def supported_content_types(self) -> list[ContentType]:
         return [
-            ContentType.TEXT, ContentType.IMAGE,
-            ContentType.VOICE, ContentType.VIDEO, ContentType.FILE,
+            ContentType.TEXT,
+            ContentType.IMAGE,
+            ContentType.VOICE,
+            ContentType.VIDEO,
+            ContentType.FILE,
         ]
 
     async def initialize(self, config: ChannelConfig) -> None:
@@ -155,7 +161,10 @@ class QQAdapter(BaseChannelAdapter):
         if content.content_type == ContentType.TEXT:
             return await self._send_text(scene, openid, content.text or "")
         elif content.content_type in (
-            ContentType.IMAGE, ContentType.VOICE, ContentType.VIDEO, ContentType.FILE
+            ContentType.IMAGE,
+            ContentType.VOICE,
+            ContentType.VIDEO,
+            ContentType.FILE,
         ):
             return await self._send_media(scene, openid, content)
         else:
@@ -322,7 +331,11 @@ class QQAdapter(BaseChannelAdapter):
             return SendResult(success=False, error=str(exc))
 
     async def _deliver_response(
-        self, scene: str, openid: str, msg_id: str, response: BotResponse,
+        self,
+        scene: str,
+        openid: str,
+        msg_id: str,
+        response: BotResponse,
     ) -> None:
         """投递 AI 回复"""
         if response.content.content_type == ContentType.TEXT:
@@ -668,7 +681,10 @@ class QQAdapter(BaseChannelAdapter):
 
         try:
             resp = await self._client.post(
-                url, json=body, headers=self._build_auth_headers(), timeout=API_TIMEOUT_S,
+                url,
+                json=body,
+                headers=self._build_auth_headers(),
+                timeout=API_TIMEOUT_S,
             )
             resp.raise_for_status()
             return SendResult(success=True)
@@ -690,7 +706,10 @@ class QQAdapter(BaseChannelAdapter):
 
         try:
             resp = await self._client.post(
-                url, json=body, headers=self._build_auth_headers(), timeout=API_TIMEOUT_S,
+                url,
+                json=body,
+                headers=self._build_auth_headers(),
+                timeout=API_TIMEOUT_S,
             )
             resp.raise_for_status()
             return SendResult(success=True)
@@ -733,6 +752,7 @@ class QQAdapter(BaseChannelAdapter):
         QQ 的 @标记格式: <@!user_id> 或 <@user_id>
         """
         import re
+
         return re.sub(r"<@!?[^>]+>", "", content).strip()
 
     # ── 清理 ──────────────────────────────────

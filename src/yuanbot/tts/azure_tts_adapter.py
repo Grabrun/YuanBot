@@ -73,9 +73,7 @@ class AzureTTSAdapter(TTSAdapter):
         region: str = "eastus",
         default_voice: str = "zh-CN-XiaoxiaoNeural",
     ) -> None:
-        self._subscription_key = subscription_key or os.environ.get(
-            "AZURE_SPEECH_KEY", ""
-        )
+        self._subscription_key = subscription_key or os.environ.get("AZURE_SPEECH_KEY", "")
         self._region = region or os.environ.get("AZURE_SPEECH_REGION", "eastus")
         self._default_voice = default_voice
         self._available: bool | None = None
@@ -138,10 +136,7 @@ class AzureTTSAdapter(TTSAdapter):
             token = await self._get_access_token()
             ssml = self._build_ssml(text, voice, rate, pitch)
 
-            url = (
-                f"https://{self._region}.tts.speech.microsoft.com/"
-                "cognitiveservices/v1"
-            )
+            url = f"https://{self._region}.tts.speech.microsoft.com/cognitiveservices/v1"
             headers = {
                 "Authorization": f"Bearer {token}",
                 "Content-Type": "application/ssml+xml",
@@ -186,9 +181,7 @@ class AzureTTSAdapter(TTSAdapter):
             if not sentence.strip():
                 continue
             try:
-                chunk = await self.synthesize(
-                    sentence, voice, rate, pitch, output_format
-                )
+                chunk = await self.synthesize(sentence, voice, rate, pitch, output_format)
                 yield chunk
             except Exception as e:
                 logger.warning(

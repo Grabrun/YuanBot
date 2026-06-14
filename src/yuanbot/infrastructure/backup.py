@@ -117,10 +117,7 @@ class BackupManager:
 
                     # 跳过 __pycache__、.pytest_cache 等
                     parts = file_path.parts
-                    if any(
-                        p.startswith(".") or p == "__pycache__" or p == ".venv"
-                        for p in parts
-                    ):
+                    if any(p.startswith(".") or p == "__pycache__" or p == ".venv" for p in parts):
                         continue
 
                     arcname = str(file_path.relative_to(self._base_dir))
@@ -173,9 +170,7 @@ class BackupManager:
         backups: list[dict[str, Any]] = []
 
         # 方式 1: 读取 meta.json 文件
-        for meta_file in sorted(
-            self._backup_dir.glob("*_meta.json"), reverse=True
-        ):
+        for meta_file in sorted(self._backup_dir.glob("*_meta.json"), reverse=True):
             try:
                 with open(meta_file, encoding="utf-8") as f:
                     meta = json.load(f)
@@ -184,28 +179,24 @@ class BackupManager:
                 meta["exists"] = archive_path.exists()
                 if archive_path.exists():
                     meta["size_bytes"] = archive_path.stat().st_size
-                    meta["size_mb"] = round(
-                        archive_path.stat().st_size / (1024 * 1024), 2
-                    )
+                    meta["size_mb"] = round(archive_path.stat().st_size / (1024 * 1024), 2)
                 backups.append(meta)
             except Exception:
                 continue
 
         # 方式 2: 如果没有 meta 文件，扫描 tar.gz 文件
         if not backups:
-            for archive_file in sorted(
-                self._backup_dir.glob("backup_*.tar.gz"), reverse=True
-            ):
+            for archive_file in sorted(self._backup_dir.glob("backup_*.tar.gz"), reverse=True):
                 name = archive_file.stem.replace(".tar.gz", "")
-                backups.append({
-                    "name": name,
-                    "path": str(archive_file),
-                    "size_bytes": archive_file.stat().st_size,
-                    "size_mb": round(
-                        archive_file.stat().st_size / (1024 * 1024), 2
-                    ),
-                    "exists": True,
-                })
+                backups.append(
+                    {
+                        "name": name,
+                        "path": str(archive_file),
+                        "size_bytes": archive_file.stat().st_size,
+                        "size_mb": round(archive_file.stat().st_size / (1024 * 1024), 2),
+                        "exists": True,
+                    }
+                )
 
         return backups
 
@@ -258,9 +249,7 @@ class BackupManager:
             # 尝试在 backup_dir 中查找
             alt_path = self._backup_dir / backup_name
             if alt_path.exists() and alt_path.is_dir():
-                return self._restore_from_dir(
-                    alt_path, restore_data, restore_configs, dry_run
-                )
+                return self._restore_from_dir(alt_path, restore_data, restore_configs, dry_run)
             return {"error": f"备份 '{backup_name}' 不存在", "success": False}
 
         restored_files: list[str] = []
@@ -273,8 +262,9 @@ class BackupManager:
                     name = member.name
                     if name == "backup_meta.json":
                         continue
-                    if ((restore_data and name.startswith("data/"))
-                            or (restore_configs and name.startswith("configs/"))):
+                    if (restore_data and name.startswith("data/")) or (
+                        restore_configs and name.startswith("configs/")
+                    ):
                         restored_files.append(name)
             return {
                 "success": True,
@@ -291,9 +281,8 @@ class BackupManager:
                     continue
 
                 # 过滤要恢复的目录
-                should_restore = (
-                    (restore_data and name.startswith("data/"))
-                    or (restore_configs and name.startswith("configs/"))
+                should_restore = (restore_data and name.startswith("data/")) or (
+                    restore_configs and name.startswith("configs/")
                 )
 
                 if not should_restore:
@@ -407,9 +396,7 @@ class BackupManager:
             target_dir = self._base_dir / source_dir_name
             if dry_run:
                 restored_files.extend(
-                    str(f.relative_to(dir_path))
-                    for f in source_dir.rglob("*")
-                    if f.is_file()
+                    str(f.relative_to(dir_path)) for f in source_dir.rglob("*") if f.is_file()
                 )
                 continue
 
@@ -419,9 +406,7 @@ class BackupManager:
             shutil.copytree(str(source_dir), str(target_dir))
 
             restored_files.extend(
-                str(f.relative_to(dir_path))
-                for f in source_dir.rglob("*")
-                if f.is_file()
+                str(f.relative_to(dir_path)) for f in source_dir.rglob("*") if f.is_file()
             )
 
         return {

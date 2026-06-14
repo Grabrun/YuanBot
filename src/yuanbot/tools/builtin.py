@@ -20,6 +20,7 @@ _SEARCH_BACKENDS = {
     "serpapi": "https://serpapi.com/search",
 }
 
+
 async def search_executor(params: dict[str, Any]) -> dict[str, Any]:
     """联网搜索工具执行器
 
@@ -115,11 +116,13 @@ async def _search_duckduckgo(query: str, max_results: int) -> dict[str, Any]:
     abstract = data.get("AbstractText", "")
     abstract_url = data.get("AbstractURL", "")
     if abstract:
-        results.append({
-            "title": data.get("Heading", query),
-            "url": abstract_url,
-            "snippet": abstract,
-        })
+        results.append(
+            {
+                "title": data.get("Heading", query),
+                "url": abstract_url,
+                "snippet": abstract,
+            }
+        )
 
     # Related topics
     results.extend(
@@ -133,16 +136,19 @@ async def _search_duckduckgo(query: str, max_results: int) -> dict[str, Any]:
     )
 
     if not results:
-        results.append({
-            "title": query,
-            "url": f"https://duckduckgo.com/?q={query}",
-            "snippet": f"未找到关于「{query}」的直接结果，建议在浏览器中查看搜索结果。",
-        })
+        results.append(
+            {
+                "title": query,
+                "url": f"https://duckduckgo.com/?q={query}",
+                "snippet": f"未找到关于「{query}」的直接结果，建议在浏览器中查看搜索结果。",
+            }
+        )
 
     return {"success": True, "query": query, "results": results[:max_results]}
 
 
 # ---------- Weather ----------
+
 
 async def weather_executor(params: dict[str, Any]) -> dict[str, Any]:
     """天气查询工具执行器

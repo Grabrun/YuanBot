@@ -161,11 +161,13 @@ class ToolManager:
             try:
                 module_path, func_name = handler_path.rsplit(".", 1)
                 import importlib
+
                 module = importlib.import_module(module_path)
                 handler_func = getattr(module, func_name)
 
                 # handler 可能是同步或异步函数
                 import asyncio
+
                 if asyncio.iscoroutinefunction(handler_func):
                     loop = asyncio.new_event_loop()
                     try:

@@ -167,7 +167,8 @@ class DingTalkAdapter(BaseChannelAdapter):
         if content.content_type == ContentType.TEXT:
             if content.metadata.get("markdown"):
                 return await self._send_markdown(
-                    target_type, target_value,
+                    target_type,
+                    target_value,
                     content.metadata.get("title", ""),
                     content.text or "",
                 )
@@ -478,7 +479,10 @@ class DingTalkAdapter(BaseChannelAdapter):
 
         if target_type == "webhook":
             return await self._send_webhook(
-                target_value, "markdown", title=title, text=text,
+                target_value,
+                "markdown",
+                title=title,
+                text=text,
             )
 
         url = self._get_send_url(target_type)

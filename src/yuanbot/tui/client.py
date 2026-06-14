@@ -123,9 +123,7 @@ class TUIClient:
         )
         return resp.status_code == 200
 
-    async def get_messages(
-        self, conversation_id: str, limit: int = 50
-    ) -> list[dict[str, Any]]:
+    async def get_messages(self, conversation_id: str, limit: int = 50) -> list[dict[str, Any]]:
         """获取会话消息"""
         client = await self._ensure_client()
         resp = await client.get(

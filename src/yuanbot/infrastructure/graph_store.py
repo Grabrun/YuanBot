@@ -189,14 +189,10 @@ class GraphStore:
 
         # 构建 CREATE 子句: CREATE (n:Type {id: '...', col1: '...', col2: '...'})
         all_props = {"id": node_id, **prop_map}
-        props_str = ", ".join(
-            f"{k}: '{self._escape(str(v))}'" for k, v in all_props.items()
-        )
+        props_str = ", ".join(f"{k}: '{self._escape(str(v))}'" for k, v in all_props.items())
 
         try:
-            self._conn.execute(
-                f"CREATE (n:{node_type} {{{props_str}}})"
-            )
+            self._conn.execute(f"CREATE (n:{node_type} {{{props_str}}})")
         except RuntimeError:
             # 主键冲突 -> 使用 MATCH + SET 更新
             set_parts = []
@@ -205,8 +201,7 @@ class GraphStore:
             set_clause = ", ".join(set_parts)
             try:
                 self._conn.execute(
-                    f"MATCH (n:{node_type}) WHERE n.id = '{self._escape(node_id)}' "
-                    f"SET {set_clause}"
+                    f"MATCH (n:{node_type}) WHERE n.id = '{self._escape(node_id)}' SET {set_clause}"
                 )
             except Exception as e:
                 logger.warning("kuzu_add_node_update_failed", node_id=node_id, error=str(e))
@@ -757,14 +752,16 @@ class GraphStore:
                     # 收集实体结果（排除 User 和 Trait 节点本身）
                     n_type = neighbor.get("node_type", "unknown")
                     if n_type not in ("User", "Trait"):
-                        results.append({
-                            "entity_id": nid,
-                            "entity_type": n_type,
-                            "properties": neighbor.get("properties", {}),
-                            "path": path + [nid],
-                            "relation_chain": rel_chain + [rel_type],
-                            "depth": new_depth,
-                        })
+                        results.append(
+                            {
+                                "entity_id": nid,
+                                "entity_type": n_type,
+                                "properties": neighbor.get("properties", {}),
+                                "path": path + [nid],
+                                "relation_chain": rel_chain + [rel_type],
+                                "depth": new_depth,
+                            }
+                        )
 
                     # 继续遍历（避免循环）
                     if nid not in visited or visited[nid] > new_depth:

@@ -38,9 +38,10 @@ class YamlPersona(PersonaProfile):
         self._system_prompt = config.get("system_prompt", "")
         self._behavior_rules = config.get("behavior_rules", [])
         self._voice_style = config.get("voice_style", {})
-        self._capability_domains = config.get("capability_domains", [
-            "emotional_care", "daily_chat", "creative_storytelling", "life_companion"
-        ])
+        self._capability_domains = config.get(
+            "capability_domains",
+            ["emotional_care", "daily_chat", "creative_storytelling", "life_companion"],
+        )
         self._stage_overrides = config.get("stage_overrides", {})
 
     @property
@@ -165,12 +166,14 @@ class PersonaManager:
         self._personas.clear()
 
         # 默认人设始终可用
-        self._personas["default"] = YamlPersona({
-            "id": "default",
-            "name": "小缘",
-            "system_prompt": "",  # 空 = 使用 DefaultPersona 的 prompt
-            "relationship_stage": "initial",
-        })
+        self._personas["default"] = YamlPersona(
+            {
+                "id": "default",
+                "name": "小缘",
+                "system_prompt": "",  # 空 = 使用 DefaultPersona 的 prompt
+                "relationship_stage": "initial",
+            }
+        )
 
         if not self._personas_dir.exists():
             logger.info("personas_dir_not_found", path=str(self._personas_dir))
@@ -223,9 +226,7 @@ class PersonaManager:
         """
         if persona_id not in self._personas:
             available = ", ".join(self._personas.keys())
-            raise ValueError(
-                f"人设 '{persona_id}' 不存在。可用人设: {available}"
-            )
+            raise ValueError(f"人设 '{persona_id}' 不存在。可用人设: {available}")
 
         old_id = self._active_id
         new_persona = self._personas[persona_id]

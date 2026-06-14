@@ -262,9 +262,7 @@ class SklearnIntentClassifier:
             if self._labels_path and self._labels_path.exists():
                 import json
 
-                self._labels = json.loads(
-                    self._labels_path.read_text(encoding="utf-8")
-                )
+                self._labels = json.loads(self._labels_path.read_text(encoding="utf-8"))
 
             self._ready = True
             logger.info(

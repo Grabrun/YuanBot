@@ -56,7 +56,11 @@ class TTSCache:
         return hashlib.sha256(content.encode()).hexdigest()
 
     def get(
-        self, engine: str, voice: str, text: str, user_id: str | None = None,
+        self,
+        engine: str,
+        voice: str,
+        text: str,
+        user_id: str | None = None,
     ) -> bytes | None:
         """查询缓存，优先 L1 内存
 
@@ -84,7 +88,11 @@ class TTSCache:
         return None
 
     def put(
-        self, engine: str, voice: str, text: str, audio: bytes,
+        self,
+        engine: str,
+        voice: str,
+        text: str,
+        audio: bytes,
         user_id: str | None = None,
     ) -> None:
         """写入缓存 (L1 + L2)
@@ -287,8 +295,9 @@ class TTSManager:
         if not self._config.enabled:
             raise RuntimeError("TTS 系统未启用")
 
-        adapter, resolved_voice, resolved_rate, resolved_pitch = \
-            self._resolve_engine(engine, persona_id)
+        adapter, resolved_voice, resolved_rate, resolved_pitch = self._resolve_engine(
+            engine, persona_id
+        )
         final_voice = voice or resolved_voice
         final_rate = rate if rate is not None else resolved_rate
         final_pitch = pitch if pitch is not None else resolved_pitch
@@ -299,13 +308,18 @@ class TTSManager:
             if cached is not None:
                 logger.debug(
                     "TTS 缓存命中: engine=%s voice=%s",
-                    adapter.engine_id, final_voice,
+                    adapter.engine_id,
+                    final_voice,
                 )
                 return cached
 
         # 合成
         audio = await adapter.synthesize(
-            text, final_voice, final_rate, final_pitch, output_format,
+            text,
+            final_voice,
+            final_rate,
+            final_pitch,
+            output_format,
         )
 
         # 写缓存
@@ -331,14 +345,19 @@ class TTSManager:
         if not self._config.enabled:
             raise RuntimeError("TTS 系统未启用")
 
-        adapter, resolved_voice, resolved_rate, resolved_pitch = \
-            self._resolve_engine(engine, persona_id)
+        adapter, resolved_voice, resolved_rate, resolved_pitch = self._resolve_engine(
+            engine, persona_id
+        )
         final_voice = voice or resolved_voice
         final_rate = rate if rate is not None else resolved_rate
         final_pitch = pitch if pitch is not None else resolved_pitch
 
         async for chunk in adapter.synthesize_stream(
-            text, final_voice, final_rate, final_pitch, output_format,
+            text,
+            final_voice,
+            final_rate,
+            final_pitch,
+            output_format,
         ):
             yield chunk
 
@@ -426,8 +445,9 @@ class TTSManager:
         if not self._config.enabled:
             raise RuntimeError("TTS 系统未启用")
 
-        adapter, resolved_voice, resolved_rate, resolved_pitch = \
-            self._resolve_engine(engine, persona_id)
+        adapter, resolved_voice, resolved_rate, resolved_pitch = self._resolve_engine(
+            engine, persona_id
+        )
         final_voice = voice or resolved_voice
         final_rate = rate if rate is not None else resolved_rate
         final_pitch = pitch if pitch is not None else resolved_pitch
@@ -471,7 +491,9 @@ class TTSManager:
                     if complete.strip():
                         # 查缓存
                         cached = self._cache.get(
-                            adapter.engine_id, final_voice, complete,
+                            adapter.engine_id,
+                            final_voice,
+                            complete,
                             user_id=user_id,
                         )
                         if cached is not None:
@@ -479,12 +501,18 @@ class TTSManager:
                         else:
                             try:
                                 audio = await adapter.synthesize(
-                                    complete, final_voice, final_rate, final_pitch,
+                                    complete,
+                                    final_voice,
+                                    final_rate,
+                                    final_pitch,
                                     output_format,
                                 )
                                 if audio:
                                     self._cache.put(
-                                        adapter.engine_id, final_voice, complete, audio,
+                                        adapter.engine_id,
+                                        final_voice,
+                                        complete,
+                                        audio,
                                         user_id=user_id,
                                     )
                                     yield audio
@@ -503,7 +531,10 @@ class TTSManager:
             if final_text:
                 try:
                     audio = await adapter.synthesize(
-                        final_text, final_voice, final_rate, final_pitch,
+                        final_text,
+                        final_voice,
+                        final_rate,
+                        final_pitch,
                         output_format,
                     )
                     if audio:

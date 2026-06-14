@@ -103,8 +103,11 @@ class WeixinAdapter(BaseChannelAdapter):
     @property
     def supported_content_types(self) -> list[ContentType]:
         return [
-            ContentType.TEXT, ContentType.IMAGE,
-            ContentType.VOICE, ContentType.VIDEO, ContentType.FILE,
+            ContentType.TEXT,
+            ContentType.IMAGE,
+            ContentType.VOICE,
+            ContentType.VIDEO,
+            ContentType.FILE,
         ]
 
     async def initialize(self, config: ChannelConfig) -> None:
@@ -160,7 +163,10 @@ class WeixinAdapter(BaseChannelAdapter):
         if content.content_type == ContentType.TEXT:
             return await self._send_text(target_id, content.text or "", context_token)
         elif content.content_type in (
-            ContentType.IMAGE, ContentType.VOICE, ContentType.VIDEO, ContentType.FILE
+            ContentType.IMAGE,
+            ContentType.VOICE,
+            ContentType.VIDEO,
+            ContentType.FILE,
         ):
             return await self._send_media(target_id, content, context_token)
         else:
@@ -249,7 +255,8 @@ class WeixinAdapter(BaseChannelAdapter):
             except Exception as exc:
                 self._consecutive_failures += 1
                 logger.error(
-                    "wechat_poll_error", error=str(exc),
+                    "wechat_poll_error",
+                    error=str(exc),
                     failures=self._consecutive_failures,
                 )
 
@@ -410,6 +417,7 @@ class WeixinAdapter(BaseChannelAdapter):
             if plaintext:
                 # 保存到临时文件
                 import tempfile
+
                 suffix = {
                     ContentType.IMAGE: ".jpg",
                     ContentType.VOICE: ".wav",
@@ -538,9 +546,7 @@ class WeixinAdapter(BaseChannelAdapter):
         if content.media_data:
             file_data = content.media_data
         elif content.media_url:
-            file_data, file_name, mime_type = await self._load_media_data(
-                content.media_url
-            )
+            file_data, file_name, mime_type = await self._load_media_data(content.media_url)
         elif content.text:
             # text 字段可能是本地路径
             path = Path(content.text)
@@ -548,6 +554,7 @@ class WeixinAdapter(BaseChannelAdapter):
                 file_data = path.read_bytes()
                 file_name = path.name
                 from yuanbot.adapters.channel.weixin_cdn import extension_to_mime
+
                 mime_type = extension_to_mime(path.suffix)
 
         if not file_data:
@@ -580,14 +587,15 @@ class WeixinAdapter(BaseChannelAdapter):
         # 4. 构造 MessageItem 并发送
         media_ref = get_media_ref_from_upload(upload_result)
         return await self._send_media_message(
-            target_id, media_type, media_ref, context_token,
+            target_id,
+            media_type,
+            media_ref,
+            context_token,
             file_name=file_name,
             file_size=upload_result.file_size_plain,
         )
 
-    async def _load_media_data(
-        self, media_url: str
-    ) -> tuple[bytes, str, str]:
+    async def _load_media_data(self, media_url: str) -> tuple[bytes, str, str]:
         """加载媒体数据（本地文件或远程 URL）
 
         Returns:
@@ -604,6 +612,7 @@ class WeixinAdapter(BaseChannelAdapter):
                     file_data = resp.content
                     # 从 URL 推断文件名和 MIME
                     from urllib.parse import urlparse
+
                     parsed = urlparse(media_url)
                     file_name = Path(parsed.path).name or "media"
                     ext = Path(file_name).suffix
@@ -800,6 +809,7 @@ class WeixinAdapter(BaseChannelAdapter):
             if ticket:
                 # 缓存 24 小时 + 随机抖动
                 import random
+
                 ttl = 86400 + random.randint(0, 3600)
                 self._config_cache[user_id] = {
                     "ticket": ticket,
@@ -1086,6 +1096,7 @@ class WeixinAdapter(BaseChannelAdapter):
 
 
 # ── 辅助枚举 ──────────────────────────────────
+
 
 class TypingStatus:
     TYPING = 1

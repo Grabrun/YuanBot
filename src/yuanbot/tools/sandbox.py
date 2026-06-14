@@ -152,13 +152,15 @@ class DockerSandboxExecutor:
     ) -> list[str]:
         """构建 docker run 命令"""
         cmd = [
-            "docker", "run",
+            "docker",
+            "run",
             "--rm",  # 执行后自动删除容器
             "--read-only",  # 只读文件系统
             f"--memory={self._memory_limit}",
             f"--cpus={self._cpu_limit}",
             f"--network={self._network_mode}",
-            "--name", f"yuanbot-tool-{invocation_id}",
+            "--name",
+            f"yuanbot-tool-{invocation_id}",
         ]
 
         # 环境变量
@@ -183,7 +185,9 @@ class DockerSandboxExecutor:
         for invocation_id in list(self._active_containers.keys()):
             try:
                 proc = await asyncio.create_subprocess_exec(
-                    "docker", "kill", f"yuanbot-tool-{invocation_id}",
+                    "docker",
+                    "kill",
+                    f"yuanbot-tool-{invocation_id}",
                     stdout=asyncio.subprocess.DEVNULL,
                     stderr=asyncio.subprocess.DEVNULL,
                 )
@@ -305,7 +309,7 @@ class WasmSandboxExecutor:
             logger.warning(
                 "wasm_sandbox_init_fallback",
                 reason="wasmtime Python package not available, "
-                       "will fall back to subprocess execution",
+                "will fall back to subprocess execution",
             )
 
     @property
@@ -418,7 +422,8 @@ class WasmSandboxExecutor:
                 # 允许的目录
                 for dir_path in self._allowed_dirs:
                     wasi_config.preopen_dir(
-                        dir_path, dir_path,
+                        dir_path,
+                        dir_path,
                         self._DirPerms.READ_ONLY,
                         self._FilePerms.READ_ONLY,
                     )
@@ -541,9 +546,7 @@ class WasmSandboxExecutor:
             # 回退到 _start
             entry_func = exports.get("_start")
             if entry_func is None:
-                raise RuntimeError(
-                    f"WASM module has no '{entry_point}' or '_start' export"
-                )
+                raise RuntimeError(f"WASM module has no '{entry_point}' or '_start' export")
 
         if memory is not None:
             # 写入参数到 linear memory
@@ -665,9 +668,7 @@ class WasmSandboxExecutor:
             "total_executions": self._total_executions,
             "cache_hits": self._cache_hits,
             "cache_misses": self._cache_misses,
-            "cache_hit_rate": (
-                self._cache_hits / max(self._cache_hits + self._cache_misses, 1)
-            ),
+            "cache_hit_rate": (self._cache_hits / max(self._cache_hits + self._cache_misses, 1)),
             "cached_modules": len(self._module_cache),
             "memory_limit_pages": self._memory_limit_pages,
             "fuel_limit": self._fuel_limit,

@@ -106,13 +106,9 @@ class MockCore:
         """获取指定方法的所有调用记录"""
         return [c for c in self._calls if c.method == method]
 
-    def _record(
-        self, method: str, args: dict[str, Any] | None = None, **kwargs: Any
-    ) -> None:
+    def _record(self, method: str, args: dict[str, Any] | None = None, **kwargs: Any) -> None:
         """记录一次调用"""
-        self._calls.append(
-            CallRecord(method=method, args=args or {}, kwargs=kwargs)
-        )
+        self._calls.append(CallRecord(method=method, args=args or {}, kwargs=kwargs))
 
     def _get_response(self, method: str, default: Any = None) -> Any:
         """获取已配置的 mock 响应，没有则返回默认值"""

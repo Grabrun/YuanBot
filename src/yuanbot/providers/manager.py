@@ -165,8 +165,7 @@ class ProviderManager:
                 mtype = m.get("type", "chat")
                 if mtype not in ("chat", "embedding", "multimodal"):
                     errors.append(
-                        f"config.models[{i}].type 无效: {mtype}"
-                        f" (应为 chat/embedding/multimodal)"
+                        f"config.models[{i}].type 无效: {mtype} (应为 chat/embedding/multimodal)"
                     )
 
         # default 模型必须在列表中
@@ -476,9 +475,7 @@ class ProviderManager:
             default_model = default_config.default_model
             if not default_model:
                 # 使用第一个 chat 模型
-                chat_models = self.get_models(
-                    default_config.provider_id, model_type="chat"
-                )
+                chat_models = self.get_models(default_config.provider_id, model_type="chat")
                 if chat_models:
                     default_model = chat_models[0].id
                 else:
@@ -492,8 +489,7 @@ class ProviderManager:
             pid, mid = model_ref.split("/", 1)
             if pid not in self._providers:
                 raise ValueError(
-                    f"Provider '{pid}' not found. "
-                    f"Available: {list(self._providers.keys())}"
+                    f"Provider '{pid}' not found. Available: {list(self._providers.keys())}"
                 )
             return pid, mid
 

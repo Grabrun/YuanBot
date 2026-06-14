@@ -140,9 +140,7 @@ class ServerlessHandler:
             "body": json.dumps(response["body"], ensure_ascii=False),
         }
 
-    def _dispatch_aliyun(
-        self, request_data: dict[str, Any], context: Any
-    ) -> dict[str, Any]:
+    def _dispatch_aliyun(self, request_data: dict[str, Any], context: Any) -> dict[str, Any]:
         """处理阿里云函数计算请求"""
         import asyncio
 

@@ -98,8 +98,7 @@ class JWTAuthManager:
     ):
         if not _HAS_PYJWT:
             raise ImportError(
-                "PyJWT is required for JWT authentication. "
-                "Install it with: pip install PyJWT"
+                "PyJWT is required for JWT authentication. Install it with: pip install PyJWT"
             )
         self._secret_key = secret_key
         self._algorithm = algorithm
@@ -135,8 +134,7 @@ class JWTAuthManager:
         for scope in token_scopes:
             if scope not in VALID_SCOPES:
                 raise ValueError(
-                    f"Invalid scope: '{scope}'. "
-                    f"Valid scopes: {', '.join(sorted(VALID_SCOPES))}"
+                    f"Invalid scope: '{scope}'. Valid scopes: {', '.join(sorted(VALID_SCOPES))}"
                 )
 
         now = int(time.time())
@@ -219,8 +217,7 @@ class JWTAuthManager:
                 return
 
         raise InsufficientScopeError(
-            f"Insufficient scope: requires '{required_scope}', "
-            f"but token has {payload.scopes}"
+            f"Insufficient scope: requires '{required_scope}', but token has {payload.scopes}"
         )
 
     @staticmethod

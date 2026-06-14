@@ -96,28 +96,54 @@ _SORTED_EMOTION_WORDS: tuple[str, ...] = tuple(
 )
 
 # 情感分类 frozenset 常量——避免每次方法调用时重新创建集合
-_POSITIVE_EMOTIONS: frozenset[EmotionCategory] = frozenset({
-    EmotionCategory.JOY, EmotionCategory.TRUST, EmotionCategory.ANTICIPATION,
-})
-_NEGATIVE_EMOTIONS: frozenset[EmotionCategory] = frozenset({
-    EmotionCategory.SADNESS, EmotionCategory.ANGER,
-    EmotionCategory.FEAR, EmotionCategory.DISGUST,
-})
-_HIGH_AROUSAL_EMOTIONS: frozenset[EmotionCategory] = frozenset({
-    EmotionCategory.ANGER, EmotionCategory.FEAR, EmotionCategory.SURPRISE,
-})
-_LOW_AROUSAL_EMOTIONS: frozenset[EmotionCategory] = frozenset({
-    EmotionCategory.SADNESS, EmotionCategory.TRUST,
-})
-_HIGH_DOMINANCE_EMOTIONS: frozenset[EmotionCategory] = frozenset({
-    EmotionCategory.ANGER, EmotionCategory.DISGUST, EmotionCategory.JOY,
-})
-_LOW_DOMINANCE_EMOTIONS: frozenset[EmotionCategory] = frozenset({
-    EmotionCategory.FEAR, EmotionCategory.SADNESS,
-})
-_COMFORT_EMOTIONS: frozenset[EmotionCategory] = frozenset({
-    EmotionCategory.SADNESS, EmotionCategory.FEAR, EmotionCategory.ANGER,
-})
+_POSITIVE_EMOTIONS: frozenset[EmotionCategory] = frozenset(
+    {
+        EmotionCategory.JOY,
+        EmotionCategory.TRUST,
+        EmotionCategory.ANTICIPATION,
+    }
+)
+_NEGATIVE_EMOTIONS: frozenset[EmotionCategory] = frozenset(
+    {
+        EmotionCategory.SADNESS,
+        EmotionCategory.ANGER,
+        EmotionCategory.FEAR,
+        EmotionCategory.DISGUST,
+    }
+)
+_HIGH_AROUSAL_EMOTIONS: frozenset[EmotionCategory] = frozenset(
+    {
+        EmotionCategory.ANGER,
+        EmotionCategory.FEAR,
+        EmotionCategory.SURPRISE,
+    }
+)
+_LOW_AROUSAL_EMOTIONS: frozenset[EmotionCategory] = frozenset(
+    {
+        EmotionCategory.SADNESS,
+        EmotionCategory.TRUST,
+    }
+)
+_HIGH_DOMINANCE_EMOTIONS: frozenset[EmotionCategory] = frozenset(
+    {
+        EmotionCategory.ANGER,
+        EmotionCategory.DISGUST,
+        EmotionCategory.JOY,
+    }
+)
+_LOW_DOMINANCE_EMOTIONS: frozenset[EmotionCategory] = frozenset(
+    {
+        EmotionCategory.FEAR,
+        EmotionCategory.SADNESS,
+    }
+)
+_COMFORT_EMOTIONS: frozenset[EmotionCategory] = frozenset(
+    {
+        EmotionCategory.SADNESS,
+        EmotionCategory.FEAR,
+        EmotionCategory.ANGER,
+    }
+)
 
 # 否定词反转时使用的字符串常量（避免在循环中重复创建列表）
 _NEGATION_POSITIVE_EMOTIONS: frozenset[str] = frozenset({"joy", "trust", "anticipation"})
@@ -316,8 +342,8 @@ class EmotionTracker:
                     keyword in text for keyword in pattern.trigger_conditions.get("keywords", [])
                 )
             ):
-                    similar_pattern = pattern
-                    break
+                similar_pattern = pattern
+                break
 
         if similar_pattern:
             # 更新现有模式
@@ -365,9 +391,7 @@ class EmotionTracker:
         text_len = len(text_clean)
         for i in range(text_len - 1):
             end = min(i + 4, text_len)
-            words.extend(
-                text_clean[i : i + length] for length in range(2, end - i + 1)
-            )
+            words.extend(text_clean[i : i + length] for length in range(2, end - i + 1))
         return list(set(words))[:5]  # 返回最多5个关键词
 
     async def get_session_emotion_summary(self, session_id: str) -> dict[str, Any]:

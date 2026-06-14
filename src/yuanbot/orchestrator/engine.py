@@ -96,9 +96,7 @@ class OrchestratorEngine:
         )
 
         # 1. 获取或创建用户画像
-        user_profile = await self._memory.get_or_create_user_profile(
-            message.yuanbot_user_id
-        )
+        user_profile = await self._memory.get_or_create_user_profile(message.yuanbot_user_id)
 
         # 2. 添加用户消息到工作记忆
         await self._memory.add_working_memory(
@@ -150,10 +148,7 @@ class OrchestratorEngine:
             relevant_memories=relevant_memories,
             emotion=decision.emotion_state,
             response_strategy=decision.response_strategy,
-            extra_sections={
-                f"技能提示[{i}]": prompt
-                for i, prompt in enumerate(skill_prompts)
-            },
+            extra_sections={f"技能提示[{i}]": prompt for i, prompt in enumerate(skill_prompts)},
         )
 
         # 7. 获取工作记忆作为对话历史
@@ -205,19 +200,18 @@ class OrchestratorEngine:
                 message.yuanbot_user_id, profile=user_profile
             )
             # calculate_trust_score 已就地更新 profile，直接同步到 persona
-            if (
-                hasattr(self._persona, "relationship_stage")
-                and user_profile.relationship_stage != getattr(
-                    self._persona, "_relationship_stage", None
-                )
+            if hasattr(
+                self._persona, "relationship_stage"
+            ) and user_profile.relationship_stage != getattr(
+                self._persona, "_relationship_stage", None
             ):
-                    self._persona.relationship_stage = user_profile.relationship_stage  # type: ignore[attr-defined]
-                    logger.info(
-                        "persona_relationship_stage_updated",
-                        user_id=message.yuanbot_user_id,
-                        stage=user_profile.relationship_stage,
-                        trust_score=trust_score,
-                    )
+                self._persona.relationship_stage = user_profile.relationship_stage  # type: ignore[attr-defined]
+                logger.info(
+                    "persona_relationship_stage_updated",
+                    user_id=message.yuanbot_user_id,
+                    stage=user_profile.relationship_stage,
+                    trust_score=trust_score,
+                )
         except Exception as e:
             logger.debug(
                 "relationship_evaluation_skipped",

@@ -280,8 +280,10 @@ class WebAdapter(BaseChannelAdapter):
         """清理会话"""
         if session.session_id in self._sessions:
             del self._sessions[session.session_id]
-        if (session.user_id in self._user_sessions
-                and self._user_sessions[session.user_id] == session.session_id):
+        if (
+            session.user_id in self._user_sessions
+            and self._user_sessions[session.user_id] == session.session_id
+        ):
             del self._user_sessions[session.user_id]
         logger.info(
             "session_cleaned",

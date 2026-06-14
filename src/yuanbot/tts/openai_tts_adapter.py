@@ -104,6 +104,7 @@ class OpenAITTSAdapter(TTSAdapter):
             return False
         try:
             import importlib.util
+
             if importlib.util.find_spec("openai"):
                 self._available = True
             else:

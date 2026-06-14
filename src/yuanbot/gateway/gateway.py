@@ -193,12 +193,8 @@ class YuanGateway:
             return None
 
         # 2. 身份解析
-        yuanbot_user_id = await self._identity_service.resolve_user_id(
-            platform, platform_user_id
-        )
-        session_id = self._identity_service.build_session_id(
-            platform, platform_user_id
-        )
+        yuanbot_user_id = await self._identity_service.resolve_user_id(platform, platform_user_id)
+        session_id = self._identity_service.build_session_id(platform, platform_user_id)
 
         # 3. 构建标准化消息
         message = UserMessage(

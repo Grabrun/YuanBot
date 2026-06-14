@@ -251,9 +251,7 @@ class GrpcToolServer:
         self._server = grpc_aio.server()
         # 注册 servicer（proto 编译后已启用）
         if _HAS_PROTO:
-            pb2_grpc.add_ToolExecutorServiceServicer_to_server(
-                self._servicer, self._server
-            )
+            pb2_grpc.add_ToolExecutorServiceServicer_to_server(self._servicer, self._server)
         address = f"{self._host}:{self._port}"
         self._server.add_insecure_port(address)
         await self._server.start()
@@ -514,7 +512,8 @@ class SandboxClient:
         try:
             stub = pb2_grpc.ToolExecutorServiceStub(self._channel)
             response = await stub.ListTools(
-                pb2.ListToolsRequest(), timeout=self._timeout,
+                pb2.ListToolsRequest(),
+                timeout=self._timeout,
             )
             return [
                 ToolInfoData(
@@ -537,7 +536,8 @@ class SandboxClient:
         try:
             stub = pb2_grpc.ToolExecutorServiceStub(self._channel)
             response = await stub.HealthCheck(
-                pb2.HealthCheckRequest(), timeout=self._timeout,
+                pb2.HealthCheckRequest(),
+                timeout=self._timeout,
             )
             return {
                 "healthy": response.healthy,

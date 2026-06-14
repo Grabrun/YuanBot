@@ -136,11 +136,13 @@ class PiperTTSAdapter(TTSAdapter):
         assert self._model is not None
 
         # 收集所有音频 chunk
-        audio_chunks = list(self._model.synthesize_stream_raw(
-            text,
-            length_scale=length_scale,
-            sentence_silence=self._sentence_silence,
-        ))
+        audio_chunks = list(
+            self._model.synthesize_stream_raw(
+                text,
+                length_scale=length_scale,
+                sentence_silence=self._sentence_silence,
+            )
+        )
 
         raw_audio = b"".join(audio_chunks)
 
@@ -244,9 +246,7 @@ class PiperTTSAdapter(TTSAdapter):
                 if matched:
                     available_voices.append(matched[0])
                 else:
-                    available_voices.append(
-                        VoiceInfo(voice_id, voice_id, "zh-CN", "female")
-                    )
+                    available_voices.append(VoiceInfo(voice_id, voice_id, "zh-CN", "female"))
         if not available_voices:
             # 模型目录不存在时返回内置列表
             return _CHINESE_VOICES.copy()

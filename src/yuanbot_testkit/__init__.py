@@ -6,6 +6,7 @@
 
     from yuanbot_testkit import MockCore, TestAdapter
 """
+
 from yuanbot_testkit.fixtures import (
     configured_mock_core,
     mock_core,

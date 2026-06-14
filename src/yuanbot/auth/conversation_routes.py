@@ -235,23 +235,21 @@ async def export_conversation(
         if data is None:
             raise HTTPException(status_code=404, detail="Conversation not found")
         from fastapi.responses import JSONResponse
+
         return JSONResponse(
             content=data,
-            headers={
-                "Content-Disposition": f'attachment; filename="{conversation_id}.json"'
-            },
+            headers={"Content-Disposition": f'attachment; filename="{conversation_id}.json"'},
         )
     else:
         md = store.export_conversation_markdown(conversation_id, user.user_id)
         if md is None:
             raise HTTPException(status_code=404, detail="Conversation not found")
         from fastapi.responses import Response
+
         return Response(
             content=md,
             media_type="text/markdown; charset=utf-8",
-            headers={
-                "Content-Disposition": f'attachment; filename="{conversation_id}.md"'
-            },
+            headers={"Content-Disposition": f'attachment; filename="{conversation_id}.md"'},
         )
 
 

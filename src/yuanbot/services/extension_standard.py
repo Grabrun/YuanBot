@@ -94,6 +94,7 @@ def is_version_compatible(required: str, available: str) -> bool:
         return False
     return compare_versions(available, required) >= 0
 
+
 EXTENSION_TYPES = {
     "ai_provider": "AI 提供商适配器",
     "channel": "消息通道适配器",
@@ -153,8 +154,7 @@ class ExtensionManifest:
             errors.append("Missing required field: type")
         elif self.type not in EXTENSION_TYPES:
             errors.append(
-                f"Invalid type: {self.type}. "
-                f"Must be one of {list(EXTENSION_TYPES.keys())}"
+                f"Invalid type: {self.type}. Must be one of {list(EXTENSION_TYPES.keys())}"
             )
 
         if not self.id:
@@ -172,7 +172,7 @@ class ExtensionManifest:
             errors.append("Channel must declare platform")
 
         if self.type == "tool" and self.permission_level not in ("safe", "restricted", "dangerous"):
-                errors.append(f"Invalid permission_level: {self.permission_level}")
+            errors.append(f"Invalid permission_level: {self.permission_level}")
 
         # 版本号格式检查
         if self.version:

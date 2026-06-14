@@ -52,8 +52,9 @@ def create_app(config: YuanBotConfig) -> FastAPI:
     # ── 0. 配置日志文件输出与轮转 ──────────────
     try:
         from yuanbot.infrastructure.logging_config import setup_file_logging
+
         setup_file_logging(
-            level=config.log_level.upper() if hasattr(config, 'log_level') else "INFO",
+            level=config.log_level.upper() if hasattr(config, "log_level") else "INFO",
         )
     except Exception:
         pass  # 日志配置失败不影响启动
@@ -98,22 +99,22 @@ def create_app(config: YuanBotConfig) -> FastAPI:
 
     persona_manager = PersonaManager(
         config_dir=config_dir,
-        default_persona_id=config.persona.id if hasattr(config, 'persona') else "default",
+        default_persona_id=config.persona.id if hasattr(config, "persona") else "default",
     )
     persona_manager.load_personas()
     # 用管理器中的活跃人设替换默认人设
     persona = persona_manager.active_persona
 
     # ── 4.5. 初始化决策引擎（支持 ML 模型） ──
-    intent_config = config.orchestrator.intent_engine if hasattr(config, 'orchestrator') else None
+    intent_config = config.orchestrator.intent_engine if hasattr(config, "orchestrator") else None
     ml_model_dir = None
     ml_confidence = 0.5
-    if intent_config and hasattr(intent_config, 'use_ml_model') and intent_config.use_ml_model:
-        if hasattr(intent_config, 'model_path'):
+    if intent_config and hasattr(intent_config, "use_ml_model") and intent_config.use_ml_model:
+        if hasattr(intent_config, "model_path"):
             ml_model_dir = str(Path(intent_config.model_path).parent)
         else:
             ml_model_dir = "models"
-        if hasattr(intent_config, 'confidence_threshold'):
+        if hasattr(intent_config, "confidence_threshold"):
             ml_confidence = intent_config.confidence_threshold
 
     decision_engine = DialogueDecisionEngine(
@@ -160,9 +161,7 @@ def create_app(config: YuanBotConfig) -> FastAPI:
     # ── 7. 认证与用户系统 ───────────────────────
     import hashlib
 
-    auth_secret = hashlib.sha256(
-        f"yuanbot-{config.app_name}-{config.version}".encode()
-    ).hexdigest()
+    auth_secret = hashlib.sha256(f"yuanbot-{config.app_name}-{config.version}".encode()).hexdigest()
     auth_manager = AuthManager(
         secret_key=auth_secret,
         token_expire_hours=24,
@@ -446,10 +445,14 @@ def create_app(config: YuanBotConfig) -> FastAPI:
 
                 if msg_type == "subscribe":
                     active_conv_id = data.get("conversation_id")
-                    await ws.send_text(json.dumps({
-                        "type": "subscribed",
-                        "conversation_id": active_conv_id,
-                    }))
+                    await ws.send_text(
+                        json.dumps(
+                            {
+                                "type": "subscribed",
+                                "conversation_id": active_conv_id,
+                            }
+                        )
+                    )
                     continue
 
                 if msg_type == "message":
@@ -465,8 +468,10 @@ def create_app(config: YuanBotConfig) -> FastAPI:
                         # 同步到 SQLite FTS 索引
                         try:
                             from yuanbot.auth.conversation_routes import _sqlite_store
+
                             if _sqlite_store and _sqlite_store.is_initialized:
                                 import uuid as _uuid
+
                                 await _sqlite_store.save_message(
                                     message_id=str(_uuid.uuid4())[:8],
                                     conversation_id=conv_id,
@@ -478,10 +483,14 @@ def create_app(config: YuanBotConfig) -> FastAPI:
                             pass
 
                     # 通知开始生成
-                    await ws.send_text(json.dumps({
-                        "type": "stream_start",
-                        "conversation_id": conv_id,
-                    }))
+                    await ws.send_text(
+                        json.dumps(
+                            {
+                                "type": "stream_start",
+                                "conversation_id": conv_id,
+                            }
+                        )
+                    )
 
                     try:
                         response = await orchestrator.process_message(
@@ -491,18 +500,22 @@ def create_app(config: YuanBotConfig) -> FastAPI:
 
                         # 模拟流式推送（逐句发送）
                         sentences = (
-                            reply_text
-                            .replace("。", "。\n")
+                            reply_text.replace("。", "。\n")
                             .replace("！", "！\n")
                             .replace("？", "？\n")
                             .split("\n")
                         )
                         for sent in sentences:
                             if sent.strip():
-                                await ws.send_text(json.dumps({
-                                    "type": "stream_delta",
-                                    "delta": sent,
-                                }, ensure_ascii=False))
+                                await ws.send_text(
+                                    json.dumps(
+                                        {
+                                            "type": "stream_delta",
+                                            "delta": sent,
+                                        },
+                                        ensure_ascii=False,
+                                    )
+                                )
 
                         # 保存 AI 回复
                         if conv_id:
@@ -512,8 +525,10 @@ def create_app(config: YuanBotConfig) -> FastAPI:
                             # 同步到 SQLite FTS 索引
                             try:
                                 from yuanbot.auth.conversation_routes import _sqlite_store
+
                                 if _sqlite_store and _sqlite_store.is_initialized:
                                     import uuid as _uuid
+
                                     await _sqlite_store.save_message(
                                         message_id=str(_uuid.uuid4())[:8],
                                         conversation_id=conv_id,
@@ -524,18 +539,27 @@ def create_app(config: YuanBotConfig) -> FastAPI:
                             except Exception:
                                 pass
 
-                        await ws.send_text(json.dumps({
-                            "type": "stream_end",
-                            "conversation_id": conv_id,
-                            "full_text": reply_text,
-                        }, ensure_ascii=False))
+                        await ws.send_text(
+                            json.dumps(
+                                {
+                                    "type": "stream_end",
+                                    "conversation_id": conv_id,
+                                    "full_text": reply_text,
+                                },
+                                ensure_ascii=False,
+                            )
+                        )
 
                     except Exception as e:
                         logger.error("ws_chat_error", error=str(e))
-                        await ws.send_text(json.dumps({
-                            "type": "error",
-                            "message": "AI 服务暂时不可用",
-                        }))
+                        await ws.send_text(
+                            json.dumps(
+                                {
+                                    "type": "error",
+                                    "message": "AI 服务暂时不可用",
+                                }
+                            )
+                        )
 
         except Exception as e:
             logger.info("ws_chat_disconnected", user_id=user.user_id, error=str(e))
@@ -594,9 +618,9 @@ def create_app(config: YuanBotConfig) -> FastAPI:
                 if msg_type == "synthesize":
                     text = data.get("text", "")
                     if not text:
-                        await ws.send_text(json.dumps(
-                            {"type": "error", "message": "text is required"}
-                        ))
+                        await ws.send_text(
+                            json.dumps({"type": "error", "message": "text is required"})
+                        )
                         continue
 
                     engine = data.get("engine")
@@ -605,10 +629,14 @@ def create_app(config: YuanBotConfig) -> FastAPI:
                     tts = app.state.tts_manager
 
                     try:
-                        await ws.send_text(json.dumps({
-                            "type": "audio_start",
-                            "format": "mp3",
-                        }))
+                        await ws.send_text(
+                            json.dumps(
+                                {
+                                    "type": "audio_start",
+                                    "format": "mp3",
+                                }
+                            )
+                        )
 
                         # 将完整文本包装为单元素异步迭代器
                         async def _text_iter(t=text):
@@ -621,16 +649,24 @@ def create_app(config: YuanBotConfig) -> FastAPI:
                             voice=voice,
                         ):
                             b64_data = base64.b64encode(audio_chunk).decode("ascii")
-                            await ws.send_text(json.dumps({
-                                "type": "audio_chunk",
-                                "data": b64_data,
-                            }))
+                            await ws.send_text(
+                                json.dumps(
+                                    {
+                                        "type": "audio_chunk",
+                                        "data": b64_data,
+                                    }
+                                )
+                            )
                             chunk_count += 1
 
-                        await ws.send_text(json.dumps({
-                            "type": "audio_end",
-                            "chunks": chunk_count,
-                        }))
+                        await ws.send_text(
+                            json.dumps(
+                                {
+                                    "type": "audio_end",
+                                    "chunks": chunk_count,
+                                }
+                            )
+                        )
                         logger.info(
                             "ws_tts_synthesized",
                             user_id=user.user_id,
@@ -640,16 +676,24 @@ def create_app(config: YuanBotConfig) -> FastAPI:
 
                     except Exception as e:
                         logger.error("ws_tts_error", error=str(e))
-                        await ws.send_text(json.dumps({
-                            "type": "error",
-                            "message": f"TTS 合成失败: {e}",
-                        }))
+                        await ws.send_text(
+                            json.dumps(
+                                {
+                                    "type": "error",
+                                    "message": f"TTS 合成失败: {e}",
+                                }
+                            )
+                        )
 
                 else:
-                    await ws.send_text(json.dumps({
-                        "type": "error",
-                        "message": f"Unknown message type: {msg_type}",
-                    }))
+                    await ws.send_text(
+                        json.dumps(
+                            {
+                                "type": "error",
+                                "message": f"Unknown message type: {msg_type}",
+                            }
+                        )
+                    )
 
         except Exception as e:
             logger.info("ws_tts_disconnected", user_id=user.user_id, error=str(e))
@@ -685,7 +729,7 @@ def create_app(config: YuanBotConfig) -> FastAPI:
                         "type": "log",
                         "level": "info",
                         "message": f"CPU: {psutil.cpu_percent(interval=0.1)}% | "
-                                    f"Memory: {psutil.virtual_memory().percent}%",
+                        f"Memory: {psutil.virtual_memory().percent}%",
                         "timestamp": datetime.now().isoformat(),
                     }
                 except ImportError:
@@ -888,9 +932,11 @@ def _register_routes(
     # 初始化图谱存储
     from yuanbot.infrastructure.graph_store import GraphStore
 
-    _graph_store = GraphStore(
-        db_path=getattr(config, 'graph_db_path', None)
-    ) if hasattr(config, 'graph_db_path') else GraphStore()
+    _graph_store = (
+        GraphStore(db_path=getattr(config, "graph_db_path", None))
+        if hasattr(config, "graph_db_path")
+        else GraphStore()
+    )
     app.state.graph_store = _graph_store
 
     # 节点类型到分类索引的映射
@@ -899,7 +945,7 @@ def _register_routes(
         "Entity": 1,
         "Event": 2,
         "AIPersona": 3,
-        "Trait": 1,       # Trait 归入 Entity 类别
+        "Trait": 1,  # Trait 归入 Entity 类别
         "SemanticMemory": 1,
     }
 
@@ -969,16 +1015,18 @@ def _register_routes(
             category = node_type_category.get(node_type, 1)
             base_size = node_base_size.get(node_type, 24)
 
-            echarts_nodes.append({
-                "id": node.get("id", ""),
-                "name": name,
-                "category": category,
-                "value": 1,
-                "symbolSize": base_size,
-                "nodeType": node_type,
-                "properties": props,
-                "isCenter": node.get("id") == center_id,
-            })
+            echarts_nodes.append(
+                {
+                    "id": node.get("id", ""),
+                    "name": name,
+                    "category": category,
+                    "value": 1,
+                    "symbolSize": base_size,
+                    "nodeType": node_type,
+                    "properties": props,
+                    "isCenter": node.get("id") == center_id,
+                }
+            )
 
         # 转换边
         echarts_links: list[dict[str, Any]] = [
@@ -1088,9 +1136,7 @@ def _register_routes(
         response = await orchestrator.process_message(message)
         return {
             "content": response.content.text,
-            "proactive_followups": [
-                t.model_dump() for t in (response.proactive_followups or [])
-            ],
+            "proactive_followups": [t.model_dump() for t in (response.proactive_followups or [])],
         }
 
     @app.get("/api/memory/{user_id}")
@@ -1289,11 +1335,13 @@ def _register_routes(
 
         triggers_info = []
         for name, trigger_obj in trigger_mgr._triggers.items():
-            triggers_info.append({
-                "name": name,
-                "event_type": trigger_obj.get_event_type(),
-                "priority": trigger_obj.get_priority(),
-            })
+            triggers_info.append(
+                {
+                    "name": name,
+                    "event_type": trigger_obj.get_event_type(),
+                    "priority": trigger_obj.get_priority(),
+                }
+            )
         return {"triggers": triggers_info}
 
     @app.post("/api/proactive/triggers/{name}/check")
@@ -1415,7 +1463,7 @@ def _register_routes(
         return {
             "status": "ok",
             "message": f"{'Embedding' if switch_type == 'embedding' else 'Default'} "
-                        f"provider switched to '{provider_id}'",
+            f"provider switched to '{provider_id}'",
             "provider_id": provider_id,
             "default_model": provider.default_model,
         }
@@ -1781,9 +1829,9 @@ def _register_routes(
                             status_code=409,
                             content={
                                 "error": (
-                            f"Extension '{manifest.id}' version"
-                            f" {manifest.version} is already installed"
-                        ),
+                                    f"Extension '{manifest.id}' version"
+                                    f" {manifest.version} is already installed"
+                                ),
                                 "hint": "Use 'force': true to reinstall",
                             },
                         )
@@ -2062,6 +2110,7 @@ def _register_routes(
 
         except Exception as e:
             import structlog
+
             _logger = structlog.get_logger("persona_install")
             _logger.error("persona_install_failed", persona_id=persona_id, error=str(e))
             return JSONResponse(
@@ -2115,10 +2164,12 @@ def _register_routes(
         if persona_id == pm.active_id:
             return JSONResponse(
                 status_code=400,
-                content={"error": (
-                    "Cannot delete the currently active persona."
-                    " Switch to another persona first."
-                )},
+                content={
+                    "error": (
+                        "Cannot delete the currently active persona."
+                        " Switch to another persona first."
+                    )
+                },
             )
 
         personas_dir = Path("configs/Personas")
@@ -2214,12 +2265,14 @@ def _register_routes(
             if manifest_path.exists():
                 try:
                     manifest = ExtensionManifest.from_file(manifest_path)
-                    installed.append({
-                        "id": manifest.id,
-                        "name": manifest.name,
-                        "version": manifest.version,
-                        "type": manifest.type if hasattr(manifest, "type") else "",
-                    })
+                    installed.append(
+                        {
+                            "id": manifest.id,
+                            "name": manifest.name,
+                            "version": manifest.version,
+                            "type": manifest.type if hasattr(manifest, "type") else "",
+                        }
+                    )
                 except Exception:
                     installed.append({"id": ext_dir.name, "version": "unknown", "type": ""})
             else:

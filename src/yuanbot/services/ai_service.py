@@ -299,15 +299,11 @@ class AIService:
 
     # ── 指标记录 ──────────────────────────────
 
-    def _record_ai_call(
-        self, provider_id: str, model: str, status: str
-    ) -> None:
+    def _record_ai_call(self, provider_id: str, model: str, status: str) -> None:
         """记录 AI 调用指标到 Prometheus 计数器（如果已配置）"""
         ai_call_count = self._metrics.get("ai_call_count")
         if ai_call_count:
-            ai_call_count.labels(
-                provider=provider_id, model=model, status=status
-            ).inc()
+            ai_call_count.labels(provider=provider_id, model=model, status=status).inc()
 
     # ── 速率限制 ──────────────────────────────
 
@@ -343,9 +339,8 @@ class AIService:
         if self._circuit_breaker.is_open(provider_id):
             # 尝试找备用提供商
             for config in self._pm.get_enabled_providers():
-                if (
-                    config.provider_id != provider_id
-                    and not self._circuit_breaker.is_open(config.provider_id)
+                if config.provider_id != provider_id and not self._circuit_breaker.is_open(
+                    config.provider_id
                 ):
                     logger.warning(
                         "failover_to_provider",
@@ -353,9 +348,7 @@ class AIService:
                         to_provider=config.provider_id,
                     )
                     return await self._pm.get_adapter(config.provider_id)
-            raise RuntimeError(
-                f"Circuit breaker open for '{provider_id}' and no healthy fallback"
-            )
+            raise RuntimeError(f"Circuit breaker open for '{provider_id}' and no healthy fallback")
         return await self._pm.get_adapter(provider_id)
 
     # ── 健康检查 ──────────────────────────────
@@ -366,9 +359,7 @@ class AIService:
         for config in self._pm.get_enabled_providers():
             providers[config.provider_id] = {
                 "enabled": config.enabled,
-                "circuit_breaker_open": self._circuit_breaker.is_open(
-                    config.provider_id
-                ),
+                "circuit_breaker_open": self._circuit_breaker.is_open(config.provider_id),
                 "default_model": config.default_model,
             }
         return {

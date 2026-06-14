@@ -272,33 +272,37 @@ class DeepEmotionAnalyzer:
             parts.extend(["## 对话上下文", f"```\n{context_summary}\n`", ""])
 
         if rule_result:
-            parts.extend([
-                "## 规则引擎初步结果（供参考）",
-                f"- 情感: {rule_result.emotion.value}",
-                f"- 强度: {rule_result.intensity}",
-                f"- 置信度: {rule_result.confidence}",
-                "",
-                "如果规则引擎结果不准确，请基于你的分析给出修正。",
-                "",
-            ])
+            parts.extend(
+                [
+                    "## 规则引擎初步结果（供参考）",
+                    f"- 情感: {rule_result.emotion.value}",
+                    f"- 强度: {rule_result.intensity}",
+                    f"- 置信度: {rule_result.confidence}",
+                    "",
+                    "如果规则引擎结果不准确，请基于你的分析给出修正。",
+                    "",
+                ]
+            )
 
-        parts.extend([
-            "## 输出格式",
-            "请严格按以下 JSON 格式输出（不要输出其他内容）：",
-            "```json",
-            "{",
-            '  "thinking": "你的分析思考过程（2-3句话）",',
-            '  "emotion": "joy|sadness|anger|fear|surprise|disgust|trust|anticipation|neutral",',
-            '  "intensity": 0.0到1.0之间的浮点数,',
-            '  "confidence": 0.0到1.0之间的浮点数,',
-            '  "valence": "positive|negative|neutral",',
-            '  "arousal": "low|medium|high",',
-            '  "needs_comfort": true或false',
-            "}",
-            "```",
-            "",
-            "请开始分析：",
-        ])
+        parts.extend(
+            [
+                "## 输出格式",
+                "请严格按以下 JSON 格式输出（不要输出其他内容）：",
+                "```json",
+                "{",
+                '  "thinking": "你的分析思考过程（2-3句话）",',
+                '  "emotion": "joy|sadness|anger|fear|surprise|disgust|trust|anticipation|neutral",',
+                '  "intensity": 0.0到1.0之间的浮点数,',
+                '  "confidence": 0.0到1.0之间的浮点数,',
+                '  "valence": "positive|negative|neutral",',
+                '  "arousal": "low|medium|high",',
+                '  "needs_comfort": true或false',
+                "}",
+                "```",
+                "",
+                "请开始分析：",
+            ]
+        )
 
         return "\n".join(parts)
 

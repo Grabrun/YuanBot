@@ -596,9 +596,7 @@ class EventEngine:
                         continue
 
                     if date_str == today_str:
-                        event = self.check_special_date(
-                            user_id, {desc: date_str}
-                        )
+                        event = self.check_special_date(user_id, {desc: date_str})
                         if event:
                             await self.emit_event(
                                 EventType.SPECIAL_DATE,

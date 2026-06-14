@@ -116,7 +116,7 @@ class DialogueDecisionEngine:
             DecisionResult: 综合决策结果
         """
         # 1. 意图识别（支持 ML 分类器和规则引擎）
-        if hasattr(self._intent_engine, 'classify'):
+        if hasattr(self._intent_engine, "classify"):
             intent = self._intent_engine.classify(text)
         else:
             intent = self._intent_engine.recognize(text)
@@ -284,7 +284,7 @@ class DialogueDecisionEngine:
 
     def get_intent_engine_info(self) -> dict[str, Any]:
         """获取意图引擎信息（用于诊断和状态查询）"""
-        if hasattr(self._intent_engine, 'get_model_info'):
+        if hasattr(self._intent_engine, "get_model_info"):
             info = self._intent_engine.get_model_info()
             info["engine_type"] = type(self._intent_engine).__name__
             return info

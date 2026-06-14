@@ -77,9 +77,7 @@ class EdgeTTSAdapter(TTSAdapter):
         )
 
         audio_chunks = [
-            chunk["data"]
-            async for chunk in communicate.stream()
-            if chunk["type"] == "audio"
+            chunk["data"] async for chunk in communicate.stream() if chunk["type"] == "audio"
         ]
 
         return b"".join(audio_chunks)
@@ -116,6 +114,7 @@ class EdgeTTSAdapter(TTSAdapter):
             return self._available
         try:
             import importlib.util
+
             if importlib.util.find_spec("edge_tts"):
                 self._available = True
             else:
