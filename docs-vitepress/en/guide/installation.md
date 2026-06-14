@@ -11,7 +11,9 @@
 
 ## via source (recommended)
 
-```bash
+::: code-group
+
+```bash [Linux / macOS]
 git clone https://github.com/Grabrun/YuanBot.git
 cd YuanBot
 python3 -m venv .venv
@@ -19,6 +21,17 @@ source .venv/bin/activate
 pip install -e ".[dev]"
 yuanbot version
 ```
+
+```powershell [Windows]
+git clone https://github.com/Grabrun/YuanBot.git
+cd YuanBot
+python -m venv .venv
+.venv\Scripts\activate
+pip install -e ".\[dev]"
+yuanbot version
+```
+
+:::
 
 ## via Docker
 

@@ -19,25 +19,41 @@
 
 ### 源码安装（推荐）
 
-```bash
+::: code-group
+
+```bash [Linux / macOS]
 # 1. 克隆仓库
 git clone https://github.com/Grabrun/YuanBot.git
 cd YuanBot
 
-# 2. 创建虚拟环境（Python 3.12+）
-python3 -m venv .venv     # 没反应? sudo apt install python3-venv python3-full -y
+# 2. 创建虚拟环境
+python3 -m venv .venv
 source .venv/bin/activate
 
-# 3. 安装依赖（推荐 uv）
+# 3. 安装依赖
 pip install -e ".[dev]"
-
-# 或用 uv（更快）
-# pip install uv
-# uv sync --all-extras
 
 # 4. 验证
 yuanbot version
 ```
+
+```powershell [Windows]
+# 1. 克隆仓库
+git clone https://github.com/Grabrun/YuanBot.git
+cd YuanBot
+
+# 2. 创建虚拟环境
+python -m venv .venv
+.venv\Scripts\activate
+
+# 3. 安装依赖
+pip install -e ".[dev]"
+
+# 4. 验证
+yuanbot version
+```
+
+:::
 
 ### Docker 部署（推荐生产）
 

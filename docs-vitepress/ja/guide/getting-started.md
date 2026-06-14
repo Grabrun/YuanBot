@@ -10,14 +10,27 @@
 
 ## インストール
 
-```bash
+::: code-group
+
+```bash [Linux / macOS]
 git clone https://github.com/Grabrun/YuanBot.git
 cd YuanBot
-python3 -m venv .venv     # 没反应? sudo apt install python3-venv python3-full -y
+python3 -m venv .venv
 source .venv/bin/activate
 pip install -e ".[dev]"
 yuanbot version
 ```
+
+```powershell [Windows]
+git clone https://github.com/Grabrun/YuanBot.git
+cd YuanBot
+python -m venv .venv
+.venv\Scripts\activate
+pip install -e ".\[dev]"
+yuanbot version
+```
+
+:::
 
 ## 起動
 

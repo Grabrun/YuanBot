@@ -45,8 +45,8 @@ features:
 # 源码安装（见 Installation 页面）
 git clone https://github.com/Grabrun/YuanBot.git
 cd YuanBot
-python3 -m venv .venv
-source .venv/bin/activate
+python -m venv .venv
+.venv\Scripts\activate
 pip install -e ".[dev]"
 yuanbot start
 ```
