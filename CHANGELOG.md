@@ -2,41 +2,88 @@
 
 本项目遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
-## [1.2.0] - 2026-05-30
+## [1.2.0] - 2026-06-14
 
 ### ✨ 新增功能
 
-#### P1 功能实现
+#### 用户界面系统
+- **人格商店 WebUI** — `PersonaStoreView.vue` (457行)，支持"我的人设"/"商店"双Tab、卡片网格、详情抽屉、一键安装/激活/删除
+- **记忆图谱可视化** — `MemoryView.vue` ECharts 力导向图渲染，节点按类型着色，支持拖拽/缩放/搜索
+- **扩展市场 WebUI** — `MarketplaceView.vue` (562行)，搜索/分类筛选/卡片展示/详情抽屉/评分评论/安装卸载
+- **流式播放同步 (WebSocket TTS)** — `/ws/tts` 端点 + ChatBubble 语音播放按钮 + Web Audio API
+- **本地意图分类模型** — `MLIntentClassifier`，ONNX 模型本地运行，无需外部 API
 
-##### 备份/恢复系统
-- 新增 `BackupManager` 备份管理器（tar.gz 归档格式 + meta.json 元数据）
-- CLI 命令：`yuanbot backup create|list|info|delete|cleanup`
-- CLI 命令：`yuanbot restore <name> [--dry-run] [--no-data] [--no-configs]`
-- REST API 统一使用 BackupManager（`/api/admin/backup`、`/api/admin/backups`、`/api/admin/restore`）
-- 支持试运行模式、选择性恢复、自动清理旧备份
+#### 人格与决策系统
+- **多人设运行时切换** — `PersonaManager` + `YamlPersona`，YAML 配置加载 + 运行时切换
+- 内置 3 个示例人设：cheerful（小晴）、mentor（明远）、gentle（静安）
+- CLI 命令：`yuanbot persona list|info|switch|stage`
+- REST API：/api/persona/list /switch /stage /reload
+- 20 个人设管理器测试
+- **深度情感分析** — `DeepEmotionAnalyzer`，LLM 链式思考模式
+- **关系阶段动态调整** — 4阶段：初期→熟悉→亲密→深度
+
+#### 备份与扩展市场
+- **备份/恢复系统** — `BackupManager`（tar.gz + meta.json），支持选择性恢复、自动清理
+- CLI 命令：`yuanbot backup create|list|info|delete|cleanup|restore`
+- REST API 统一的备份管理端点
 - 16 个备份系统测试
-
-##### 社区扩展市场
-- 新增 `MarketplaceClient` 市场客户端（注册表搜索、缓存、下载）
-- CLI 命令：`yuanbot search <query> [--type] [--limit]`
-- CLI 命令：`yuanbot install <ext_id> [--version] [--force]`
-- CLI 命令：`yuanbot marketplace categories|refresh`
-- REST API：`/api/marketplace/search`、`/api/marketplace/extensions`、`/api/marketplace/extensions/{id}`、`/api/marketplace/categories`、`/api/marketplace/refresh`
-- 离线缓存 + 自动降级
+- **社区扩展市场** — `MarketplaceClient`（注册表搜索、缓存、下载）
+- CLI 命令：`yuanbot search|install|marketplace`
+- REST API 市场端点 + 离线缓存自动降级
 - 14 个市场客户端测试
 
-##### 多人设运行时切换
-- 新增 `PersonaManager` 人设管理器（YAML 配置加载 + 运行时切换）
-- 新增 `YamlPersona` 动态人设（支持自定义 prompt、行为规则、语音风格、阶段覆盖）
-- CLI 命令：`yuanbot persona list|info|switch|stage`
-- REST API：`/api/persona`、`/api/persona/list`、`/api/persona/switch`、`/api/persona/stage`、`/api/persona/reload`
-- 内置 3 个示例人设：cheerful（小晴）、mentor（明远）、gentle（静安）
-- 人设切换自动同步编排引擎
-- 20 个人设管理器测试
+#### 性能优化
+- **工具调用并行执行** — 多工具同时运行，互不阻塞
+- **事件引擎并行化** — 循环并行处理，触发器预索引，最近事件上限
+- **SQLite 复合索引** — 关键查询路径索引优化
+- **记忆冲突检测 DB 级过滤** — 数据库层去重减少内存开销
+- **批量异步操作** — TTS、Provider 提供商、事件引擎批量处理
+- **热路径优化** — should_send 交互计数修复 + frozenset 常量优化
+
+#### 可观测性
+- **日志聚合运维系统** — Loki + Promtail + Grafana 全栈配置
+- 预置 Grafana 日志监控仪表盘
+- Prometheus 监控指标 `/metrics`（请求计数、延迟、AI调用、记忆操作）
+- 健康检查端点 `/healthz` 和 `/readyz`（Kubernetes 探针规范）
+- 配置热加载（Providers/Channels 配置变化自动重载适配器）
+
+#### 安全与合规
+- JWT 权限令牌（gateway/jwt_auth.py，支持 readonly/user_data/system）
+- GDPR 数据导出/删除 API（/api/gdpr/export、/api/gdpr/delete）
+- CSRF 全链路保护（随机 Token + hash_equals 时间安全比较）
+- AI 适配器速率限制（token bucket 算法）
+
+#### 存储引擎
+- Milvus Lite 向量数据库集成（自动检测，fallback 内存模式）
+- Kuzu 嵌入式图数据库集成（知识图谱持久化）
+- MySQL 存储支持（SQLite/MySQL 无缝切换）
+- Redis 工作记忆自动启用
+- 记忆整理定时调度（记忆固化 + 遗忘曲线 Cron 任务）
+
+#### 部署与扩展
+- Serverless 部署模式（AWS Lambda / 阿里云 FC handler）
+- gRPC 工具沙盒框架（proto 定义 + server/client stub）
+- yuanbot-cli 完整命令：`create|validate|test|build|publish|search|install`
+- Docker Compose 一站式部署（含 Loki + Grafana + Promtail）
+
+### 🧪 开发者工具（P3 增强项）
+- **yuanbot-testkit 测试框架** — `MockCore` + `TestAdapter` 包
+  - `MockCore`：模拟 AI 对话、嵌入、记忆、工具执行，支持调用记录与断言
+  - `TestAdapter`：模拟通道消息收发，支持回调注册、消息记录
+  - 8 个开箱即用的 pytest fixtures，41 个专用测试
+  - `pip install -e ".[test]"` 即可安装
+- **VitePress 多语言文档站** — `docs-vitepress/`，中文（完整）、英文/日文（WIP）
+  - `npx vitepress build` 成功构建，GitHub Actions 自动部署
+- **社区贡献 CI/CD 流水线**
+  - PR 自动审查（`pr-review.yml`）：变更分类、风险检测、自动标签
+  - CI 扩展验证（`ci.yml`）：manifest.json 校验、接口完整性检查、安全扫描
+  - 自动发布（`publish.yml`）：GitHub Release + Docker 镜像 + 版本标签
+- **CONTRIBUTING.md** 全面重写（386行），含 PR 流程、扩展开发、贡献清单
 
 ### 📊 测试
-- 总计 1079 个测试通过（新增 50 个）
-- 3 个跳过，14 个 warnings
+- 总计 **1453 个测试通过**（+374 自 v1.1.1）
+- 41 个 testkit 专项测试覆盖 MockCore / TestAdapter / Fixtures
+- Ruff lint 全通过：0 个 RUF100/F/PERF/SIM/C4/B 问题
 
 ## [1.1.1] - 2026-05-29
 
