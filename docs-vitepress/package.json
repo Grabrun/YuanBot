@@ -1,0 +1,15 @@
+{
+  "name": "yuanbot-docs",
+  "version": "1.0.0",
+  "private": true,
+  "description": "YuanBot 多语言文档站",
+  "type": "module",
+  "scripts": {
+    "dev": "vitepress dev",
+    "build": "vitepress build",
+    "preview": "vitepress preview"
+  },
+  "devDependencies": {
+    "vitepress": "^1.6.3"
+  }
+}

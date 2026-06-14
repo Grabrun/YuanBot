@@ -49,7 +49,7 @@ jobs:
       - name: Run tests
         run: uv run python -m pytest tests/ -q --tb=short --junitxml=test-results.xml
         env:
-          YUANBOT_ADMIN_PASSWORD: "test-password-ci"
+          YUANBOT_ADMIN_PASSWORD: "***"
       - name: Upload test results
         if: always()
         uses: actions/upload-artifact@v4
@@ -93,3 +93,203 @@ jobs:
           tags: yuanbot:ci-${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+  # ── Extension validation ─────────────────────────────────────
+  extension-validate:
+    name: "🧩 Extension Validate"
+    runs-on: ubuntu-latest
+    if: >
+      github.event_name == 'pull_request' &&
+      (startsWith(github.head_ref, 'extension/') ||
+       startsWith(github.head_ref, 'ext/'))
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Install dependencies
+        run: uv sync --all-extras
+
+      - name: Find changed extensions
+        id: find-ext
+        run: |
+          CHANGED=$(git diff --name-only origin/${{ github.base_ref }}...HEAD \
+            | grep -E '^extensions/\w+/' \
+            | sed 's|^\(extensions/[^/]*\)/.*|\1|' \
+            | sort -u || true)
+          echo "changed_extensions=$CHANGED" >> "$GITHUB_OUTPUT"
+          echo "count=$(echo "$CHANGED" | wc -l)" >> "$GITHUB_OUTPUT"
+
+      - name: Validate manifest.json Schema
+        if: steps.find-ext.outputs.count > 0
+        run: |
+          cat > /tmp/validate_manifest.py << 'PYEOF'
+          import json, sys
+          from pathlib import Path
+          from yuanbot.services.extension_standard import ExtensionManifest
+
+          manifest_path = Path(sys.argv[1])
+          if not manifest_path.exists():
+              print(f'::error file={manifest_path}::Missing manifest.json')
+              sys.exit(1)
+
+          try:
+              manifest = ExtensionManifest.from_file(manifest_path)
+              errors = manifest.validate()
+              if errors:
+                  for e in errors:
+                      print(f'::error file={manifest_path}::{e}')
+                  sys.exit(1)
+              else:
+                  print(f'✅ {manifest.id} v{manifest.version} ({manifest.type})')
+          except Exception as e:
+              print(f'::error file={manifest_path}::{e}')
+              sys.exit(1)
+          PYEOF
+
+          FAILED=0
+          for dir in ${{ steps.find-ext.outputs.changed_extensions }}; do
+            echo "--- Validating $dir/manifest.json ---"
+            uv run python /tmp/validate_manifest.py "$dir/manifest.json" || FAILED=$((FAILED + 1))
+          done
+          [ "$FAILED" -eq 0 ] || { echo "::error::$FAILED extension(s) failed manifest validation"; exit 1; }
+
+      - name: Check interface completeness
+        if: steps.find-ext.outputs.count > 0
+        run: |
+          cat > /tmp/check_interface.py << 'PYEOF'
+          import sys
+          from pathlib import Path
+          from yuanbot.services.extension_standard import ExtensionManifest, ExtensionValidator
+
+          ext_dir = Path(sys.argv[1])
+          manifest_path = ext_dir / "manifest.json"
+          manifest = ExtensionManifest.from_file(manifest_path)
+
+          errors = ExtensionValidator.validate_extension_dir(ext_dir)
+          if errors:
+              for e in errors:
+                  print(f'::error file={ext_dir}::{e}')
+              sys.exit(1)
+          else:
+              print(f'✅ Interface check passed: {manifest.id}')
+          PYEOF
+
+          FAILED=0
+          for dir in ${{ steps.find-ext.outputs.changed_extensions }}; do
+            echo "--- Interface check $dir ---"
+            uv run python /tmp/check_interface.py "$dir" || FAILED=$((FAILED + 1))
+          done
+          [ "$FAILED" -eq 0 ] || { echo "::error::$FAILED extension(s) failed interface check"; exit 1; }
+
+      - name: Security scan (hardcoded keys / secrets)
+        if: steps.find-ext.outputs.count > 0
+        run: |
+          cat > /tmp/security_scan.py << 'PYEOF'
+          import re, sys
+          from pathlib import Path
+
+          ext_dir = Path(sys.argv[1])
+          patterns = [
+              (r'(api_key|apikey)\s*[=:]\s*["\']([A-Za-z0-9_]{16,})["\']', 'API key'),
+              (r'(secret)\s*[=:]\s*["\']([A-Za-z0-9_]{16,})["\']', 'Secret'),
+              (r'(password|passwd)\s*[=:]\s*["\']([A-Za-z0-9_]{8,})["\']', 'Password'),
+              (r'(token)\s*[=:]\s*["\']([A-Za-z0-9_]{16,})["\']', 'Token'),
+              (r'(bearer|auth)\s*[=:]\s*["\']([A-Za-z0-9_]{16,})["\']', 'Auth token'),
+          ]
+          allowlist = ['test_fixture', 'example', 'mock', 'placeholder', 'YOUR_', 'changeme', 'TODO', 'dummy']
+
+          findings = []
+          for ext_file in ext_dir.rglob('*'):
+              if ext_file.suffix not in ('.py', '.yaml', '.yml', '.json', '.env', '.conf'):
+                  continue
+              try:
+                  text = ext_file.read_text(encoding='utf-8', errors='ignore')
+              except Exception:
+                  continue
+
+              for pattern, ptype in patterns:
+                  for m in re.finditer(pattern, text, re.IGNORECASE):
+                      line_num = text[:m.start()].count('\n') + 1
+                      snippet = text.split('\n')[line_num - 1].strip()
+                      # Skip if contains allowlisted keywords
+                      if any(w in snippet.lower() for w in allowlist):
+                          continue
+                      findings.append(f'  {ext_file.relative_to(ext_dir)}:{line_num} — possible {ptype}')
+
+          if findings:
+              print(f'::warning file={ext_dir}::Potential hardcoded secrets detected')
+              for f in findings:
+                  print(f'  {f}')
+              sys.exit(1)
+          else:
+              print(f'✅ Security scan passed: {ext_dir}')
+          PYEOF
+
+          FAILED=0
+          for dir in ${{ steps.find-ext.outputs.changed_extensions }}; do
+            echo "--- Security scan $dir ---"
+            uv run python /tmp/security_scan.py "$dir" || FAILED=$((FAILED + 1))
+          done
+          [ "$FAILED" -eq 0 ] || echo "::warning::Review flagged secrets before merging"
+
+      - name: Check dependencies for known vulnerabilities
+        if: steps.find-ext.outputs.count > 0
+        run: |
+          for dir in ${{ steps.find-ext.outputs.changed_extensions }}; do
+            if [ -f "$dir/requirements.txt" ]; then
+              echo "--- Dependency check $dir/requirements.txt ---"
+              while IFS= read -r line; do
+                if echo "$line" | grep -qE '^[a-zA-Z]'; then
+                  pkg=$(echo "$line" | sed 's/[>=<!~].*//')
+                  echo "  📦 $pkg"
+                fi
+              done < "$dir/requirements.txt"
+            fi
+          done
+
+      - name: Add CI labels to PR
+        if: steps.find-ext.outputs.count > 0
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { data: currentLabels } = await github.rest.issues.listLabelsOnIssue({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+            const existing = currentLabels.map(l => l.name);
+
+            const conclusion = '${{ job.status }}';
+            const passLabel = 'extension-ci/pass';
+            const failLabel = 'extension-ci/fail';
+
+            if (conclusion === 'success' && existing.includes(failLabel)) {
+              await github.rest.issues.removeLabel({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                name: failLabel,
+              }).catch(() => {});
+            }
+            if (conclusion !== 'success' && existing.includes(passLabel)) {
+              await github.rest.issues.removeLabel({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                name: passLabel,
+              }).catch(() => {});
+            }
+
+            const labelToAdd = conclusion === 'success' ? passLabel : failLabel;
+            if (!existing.includes(labelToAdd)) {
+              await github.rest.issues.addLabels({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                labels: [labelToAdd],
+              });
+            }

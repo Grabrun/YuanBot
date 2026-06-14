@@ -1,0 +1,207 @@
+# PR Review Assistant
+name: PR Review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+jobs:
+  review:
+    name: "👀 Review Assistant"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Analyze PR changes
+        id: analyze
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { data: pr } = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.issue.number,
+            });
+
+            const { data: files } = await github.rest.pulls.listFiles({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.issue.number,
+            });
+
+            const summary = {
+              title: pr.title,
+              description: pr.body || '(none)',
+              changedFiles: files.length,
+              additions: files.reduce((s, f) => s + f.additions, 0),
+              deletions: files.reduce((s, f) => s + f.deletions, 0),
+            };
+
+            // Categorize files
+            const categories = {
+              source: [],
+              test: [],
+              docs: [],
+              config: [],
+              extension: [],
+              other: [],
+            };
+
+            for (const file of files) {
+              if (file.filename.startsWith('extensions/')) {
+                categories.extension.push(file.filename);
+              } else if (file.filename.startsWith('tests/') || file.filename.includes('test_')) {
+                categories.test.push(file.filename);
+              } else if (file.filename.startsWith('docs/') || file.filename.endsWith('.md')) {
+                categories.docs.push(file.filename);
+              } else if (file.filename.match(/\.(yml|yaml|json|toml|ini|cfg)$/)) {
+                categories.config.push(file.filename);
+              } else if (file.filename.match(/\.(py|js|ts|tsx)$/)) {
+                categories.source.push(file.filename);
+              } else {
+                categories.other.push(file.filename);
+              }
+            }
+
+            // Detect risky changes
+            const flags = [];
+            if (files.some(f => f.filename.includes('secret') || f.filename.includes('credential'))) {
+              flags.push('⚠️ Contains files related to credentials/secrets');
+            }
+            if (files.some(f => f.filename.match(/configs\/(bot|extensions|providers)\.(yml|yaml)/))) {
+              flags.push('🔧 Modifies core configuration');
+            }
+            if (files.some(f => f.filename === 'pyproject.toml' || f.filename === 'Dockerfile' || f.filename === 'docker-compose.yaml')) {
+              flags.push('🏗️ Modifies build/infrastructure files');
+            }
+            if (files.some(f => f.filename.includes('requirements.txt') || f.filename.includes('pyproject.toml'))) {
+              flags.push('📦 Modifies dependencies');
+            }
+            if (files.length > 20) {
+              flags.push('📏 Large PR (20+ files) — consider splitting');
+            }
+            if (files.every(f => f.filename.endsWith('.md'))) {
+              flags.push('📝 Documentation-only PR');
+            }
+
+            // Check for test coverage
+            const hasTestChanges = files.some(f => f.filename.startsWith('tests/'));
+            const hasSourceChanges = files.some(f => f.filename.match(/\.py$/) && !f.filename.startsWith('tests/'));
+            if (hasSourceChanges && !hasTestChanges) {
+              flags.push('🧪 Source code changes without test changes — please add tests');
+            }
+
+            // Build markdown comment
+            let comment = `## 👀 PR Review Summary\n\n`;
+            comment += `### 📊 Overview\n\n`;
+            comment += `| Metric | Value |\n`;
+            comment += `|--------|-------|\n`;
+            comment += `| Files changed | ${summary.changedFiles} |\n`;
+            comment += `| Additions | ${summary.additions} |\n`;
+            comment += `| Deletions | ${summary.deletions} |\n`;
+            comment += `| Description | ${summary.description.substring(0, 200)}${summary.description.length > 200 ? '...' : ''} |\n\n`;
+
+            comment += `### 📁 Changed Files\n\n`;
+            comment += `**Source:** ${categories.source.length} file(s)\n`;
+            comment += `**Tests:** ${categories.test.length} file(s)\n`;
+            comment += `**Docs:** ${categories.docs.length} file(s)\n`;
+            comment += `**Config:** ${categories.config.length} file(s)\n`;
+            comment += `**Extensions:** ${categories.extension.length} file(s)\n`;
+            comment += `**Other:** ${categories.other.length} file(s)\n\n`;
+
+            if (flags.length > 0) {
+              comment += `### 🚩 Flags\n\n`;
+              comment += flags.map(f => `- ${f}`).join('\n');
+              comment += '\n\n';
+            }
+
+            comment += `### 📋 Review Checklist\n\n`;
+            comment += `- [ ] All CI checks pass\n`;
+            comment += `- [ ] Code follows project conventions (ruff lint)\n`;
+            comment += `- [ ] Types are properly annotated\n`;
+            comment += `- [ ] Tests are added/updated\n`;
+            comment += `- [ ] Documentation is updated\n`;
+            comment += `- [ ] No hardcoded secrets or credentials\n`;
+            comment += `- [ ] CHANGELOG.md is updated (if applicable)\n`;
+            comment += `- [ ] Extension manifest is valid (if applicable)\n\n`;
+
+            comment += `> 💡 This is an automated review. Please address the flags above before requesting a human review.\n`;
+
+            // Determine labels
+            const needsReviewLabel = 'needs-review';
+            const { data: currentLabels } = await github.rest.issues.listLabelsOnIssue({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+            const existingLabels = currentLabels.map(l => l.name);
+
+            // Add needs-review label if PR is new and not already labeled
+            if (context.payload.action === 'opened' && !existingLabels.includes(needsReviewLabel)) {
+              const labelsToAdd = [needsReviewLabel];
+              // Add type labels
+              if (categories.extension.length > 0 && !existingLabels.includes('extension')) {
+                labelsToAdd.push('extension');
+              }
+              if (categories.docs.length > categories.source.length && !existingLabels.includes('documentation')) {
+                labelsToAdd.push('documentation');
+              }
+
+              await github.rest.issues.addLabels({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                labels: labelsToAdd,
+              });
+            }
+
+            // Post or update the review comment
+            const { data: existingComments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              per_page: 100,
+            });
+
+            const botComment = existingComments.find(c =>
+              c.user.type === 'Bot' && c.body.includes('## 👀 PR Review Summary')
+            );
+
+            if (botComment) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: botComment.id,
+                body: comment,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: comment,
+              });
+            }
+
+            core.setOutput('has_flags', flags.length > 0 ? 'true' : 'false');
+            core.setOutput('comment_posted', 'true');
+
+      - name: Notify on flagged PRs
+        if: steps.analyze.outputs.has_flags == 'true' && github.event.action == 'opened'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { data: pr } = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.issue.number,
+            });
+
+            // Add a reviewer round-robin if flag exists (uses project maintainers)
+            // Silently done — the PR comment already contains the review checklist
+            console.log(`PR #${context.issue.number} has flags requiring attention`);

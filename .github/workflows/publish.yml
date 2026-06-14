@@ -1,0 +1,155 @@
+# Publish to GitHub Releases
+name: Publish
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - "docs/**"
+      - "*.md"
+      - ".github/**"
+
+permissions:
+  contents: write
+  actions: read
+
+env:
+  PYTHON_VERSION: "3.12"
+
+jobs:
+  publish:
+    name: "🚀 Publish Release"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Install dependencies
+        run: uv sync --all-extras
+
+      - name: Run full test suite
+        run: uv run python -m pytest tests/ -q --tb=short
+        env:
+          YUANBOT_ADMIN_PASSWORD: "***"
+
+      - name: Build distribution
+        run: uv build
+
+      - name: Determine version from pyproject.toml
+        id: version
+        run: |
+          cat > /tmp/get_version.py << 'PYEOF'
+          import tomllib
+          with open('pyproject.toml', 'rb') as f:
+              data = tomllib.load(f)
+          print(data['project']['version'])
+          PYEOF
+          VERSION=$(uv run python /tmp/get_version.py)
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Check if tag already exists
+        id: tag-check
+        run: |
+          if git rev-parse "refs/tags/v${{ steps.version.outputs.version }}" >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "Tag v${{ steps.version.outputs.version }} already exists — skipping release creation"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Generate release notes from CHANGELOG
+        id: release-notes
+        if: steps.tag-check.outputs.exists == 'false'
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          awk -v ver="[$VERSION]" '
+            $0 ~ "^## \\[" ver "\\]" {found=1; next}
+            found && /^## \\[/ {exit}
+            found {print}
+          ' CHANGELOG.md > _release_notes.md
+          if [ ! -s _release_notes.md ]; then
+            echo "Release $VERSION" > _release_notes.md
+          fi
+          {
+            echo 'notes<<EOF'
+            cat _release_notes.md
+            echo 'EOF'
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Create Git tag
+        if: steps.tag-check.outputs.exists == 'false'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -a "v${{ steps.version.outputs.version }}" -m "Release v${{ steps.version.outputs.version }}"
+          git push origin "v${{ steps.version.outputs.version }}"
+
+      - name: Create GitHub Release
+        if: steps.tag-check.outputs.exists == 'false'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.version.outputs.version }}
+          name: v${{ steps.version.outputs.version }}
+          body: ${{ steps.release-notes.outputs.notes }}
+          files: |
+            dist/yuanbot-${{ steps.version.outputs.version }}.tar.gz
+            dist/yuanbot-${{ steps.version.outputs.version }}-py3-none-any.whl
+          draft: false
+          prerelease: false
+          generate_release_notes: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push Docker image
+        if: steps.tag-check.outputs.exists == 'false'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false  # Set to true if Docker Hub credentials are configured
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/yuanbot:latest
+            ghcr.io/${{ github.repository_owner }}/yuanbot:v${{ steps.version.outputs.version }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Trigger Docs rebuild
+        if: steps.tag-check.outputs.exists == 'false'
+        run: |
+          gh workflow run "Deploy Docs" --ref main 2>/dev/null || true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Update CHANGELOG release date if missing
+        if: steps.tag-check.outputs.exists == 'false'
+        run: |
+          cat > /tmp/update_changelog_date.py << 'PYEOF'
+          import re, sys
+          version = sys.argv[1]
+          today = sys.argv[2]
+
+          with open('CHANGELOG.md', 'r') as f:
+              content = f.read()
+
+          pattern = r'^## \[' + re.escape(version) + r'\]\s*-\s*(\S+)'
+          match = re.search(pattern, content, re.MULTILINE)
+          if match:
+              date = match.group(1)
+              if date == 'Unreleased':
+                  content = content.replace(
+                      f'## [{version}] - Unreleased',
+                      f'## [{version}] - {today}'
+                  )
+                  with open('CHANGELOG.md', 'w') as f:
+                      f.write(content)
+                  print(f'Updated release date for v{version} to {today}')
+          PYEOF
+          uv run python /tmp/update_changelog_date.py "${{ steps.version.outputs.version }}" "$(date -u +%Y-%m-%d)"
