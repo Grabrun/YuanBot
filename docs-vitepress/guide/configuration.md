@@ -20,14 +20,16 @@ configs/
 ├── memory.yaml               # 记忆系统配置
 ├── tts.yaml                  # TTS 语音合成配置
 ├── serverless.yaml           # Serverless 部署配置
-├── Providers/                # AI 提供商配置
-│   ├── openai.yaml
-│   ├── deepseek.yaml
-│   ├── anthropic.yaml
-│   ├── glm.yaml
-│   ├── qwen.yaml
-│   ├── hunyuan.yaml
-│   └── ollama.yaml
+├── Providers/                # AI 提供商配置（9 个）
+│   ├── openai.yaml           # GPT-5.4 / GPT-5.5
+│   ├── deepseek.yaml         # DeepSeek-V4-Pro / V4-Flash (1M ctx)
+│   ├── anthropic.yaml        # Claude Sonnet 4.6 / Opus 4.8
+│   ├── glm.yaml              # GLM-5 (744B)
+│   ├── qwen.yaml             # Qwen3-Max / Qwen3.5-Plus (1M ctx)
+│   ├── hunyuan.yaml          # Hunyuan-TurboS / 2.0-Thinking
+│   ├── mimo.yaml             # MiMo-V2.5-Pro
+│   ├── kimi.yaml             # Kimi K2.6 🆕
+│   └── ollama.yaml           # 本地模型
 ├── Channels/                 # 消息通道配置
 │   ├── telegram.yaml
 │   ├── discord.yaml
@@ -100,9 +102,9 @@ graph:
 
 | 变量名 | 用途 |
 |--------|------|
-| `OPENAI_API_KEY` | OpenAI API Key |
-| `ANTHROPIC_API_KEY` | Claude API Key |
-| `DEEPSEEK_API_KEY` | DeepSeek API Key |
+| `OPENAI_API_KEY` | OpenAI API Key（GPT-5.4 / GPT-5.5） |
+| `ANTHROPIC_API_KEY` | Claude API Key（Sonnet 4.6 / Opus 4.8） |
+| `DEEPSEEK_API_KEY` | DeepSeek API Key（V4-Flash / V4-Pro，1M 上下文） |
 | `YUANBOT_ADMIN_PASSWORD` | 管理员密码 |
 | `YUAN_TELEGRAM_BOT_TOKEN` | Telegram Bot Token |
 | `YUAN_DB_MYSQL_PASSWORD` | MySQL 密码 |

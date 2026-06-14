@@ -32,10 +32,10 @@ features:
     details: 微信、QQ、Telegram、Discord、企业微信、钉钉、飞书、Web Chat，一处部署，处处陪伴
   - icon: 🤖
     title: 多 AI 提供商
-    details: 支持 OpenAI、DeepSeek、GLM、Claude 等 8 大 AI 提供商，自由切换
+    details: 支持 OpenAI (GPT-5.5)、DeepSeek (V4, 1M ctx)、Claude (Sonnet 4.6)、GLM-5、Qwen3-Max 等 9 大 AI 提供商
   - icon: 🗣️
     title: TTS 语音引擎
-    details: Edge-TTS、Piper、OpenAI TTS、Azure TTS 四种方案，让伴侣「开口说话」
+    details: Edge-TTS、Piper、OpenAI TTS、Azure TTS 四种方案，WebSocket 流式播放
   - icon: 🖥️
     title: 双界面
     details: TUI 终端界面（Textual）+ WebUI（Vue 3 + Naive UI），满足不同使用习惯
