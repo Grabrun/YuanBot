@@ -37,12 +37,8 @@ dev = [
     "mypy>=1.10",
     "bcrypt>=4.0",
     "PyJWT>=2.8",
-    "cryptography>=42.0",
 ]
-test = [
-    "pytest>=8.0",
-    "pytest-asyncio>=0.23",
-]
+wechat = ["cryptography>=42.0"]
 mysql = ["aiomysql>=0.2"]
 openai = ["openai>=1.30"]
 anthropic = ["anthropic>=0.28"]

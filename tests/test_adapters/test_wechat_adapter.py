@@ -28,6 +28,12 @@ from yuanbot.core.types import ChannelConfig, ContentType, MessageContent
 # ── AES 加密测试 ──────────────────────────────
 
 
+try:
+    import cryptography  # noqa: F401
+except ImportError:
+    pytest.skip("cryptography not installed, skipping AES tests", allow_module_level=True)
+
+
 class TestAesEcb:
     """AES-128-ECB 加解密测试"""
 
