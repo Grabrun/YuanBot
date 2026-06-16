@@ -117,8 +117,8 @@ def _run_install(args: argparse.Namespace) -> None:
         target_dir.mkdir(parents=True, exist_ok=True)
         _info(f"目标目录: {target_dir}")
     else:
-        target_dir = Path.cwd() / "YuanBot"
-        _info(f"默认目录: {target_dir}")
+        target_dir = Path.cwd()
+        _info(f"当前目录: {target_dir}")
 
     # 检查是否已存在
     is_existing = (target_dir / "pyproject.toml").exists() and (target_dir / "src" / "yuanbot").exists()
@@ -147,8 +147,10 @@ def _run_install(args: argparse.Namespace) -> None:
         _ok("代码已更新")
     else:
         _info(f"正在从 GitHub 克隆...")
+        # 如果目标目录是当前目录，用 "."；否则用完整路径
+        clone_target = "." if str(target_dir) == str(Path.cwd()) else str(target_dir)
         result = subprocess.run(
-            ["git", "clone", "--depth=1", REPO_URL, str(target_dir)],
+            ["git", "clone", "--depth=1", REPO_URL, clone_target],
             capture_output=True, text=True,
         )
         if result.returncode != 0:
@@ -321,7 +323,7 @@ def main() -> None:
     install_parser = sub.add_parser("install", help="全自动安装 YuanBot")
     install_parser.add_argument(
         "--dir", default="",
-        help="安装目录（默认当前目录下的 YuanBot/）",
+        help="安装目录（默认直接安装到当前目录）",
     )
     install_parser.add_argument(
         "--provider", default=None,
