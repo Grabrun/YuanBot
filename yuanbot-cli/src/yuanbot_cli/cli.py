@@ -55,7 +55,7 @@ def _info(msg: str) -> None:
 
 # ── 核心安装逻辑 ──────────────────────────
 
-VERSION = "1.0.4"
+VERSION = "1.0.5"
 REPO_URL = "https://github.com/Grabrun/YuanBot.git"
 
 
@@ -256,11 +256,11 @@ def _run_install(args: argparse.Namespace) -> None:
         provider_path = target_dir / "configs" / "Providers" / p["file"]
         if provider_path.exists():
             import yaml  # type: ignore[import-untyped]
-            with open(provider_path) as f:
+            with open(provider_path, encoding="utf-8") as f:
                 cfg = yaml.safe_load(f) or {}
             cfg.setdefault("config", {})["api_key"] = api_key
             cfg["enabled"] = True
-            with open(provider_path, "w") as f:
+            with open(provider_path, "w", encoding="utf-8") as f:
                 yaml.safe_dump(cfg, f, allow_unicode=True, default_flow_style=False)
             _ok(f"API Key 已配置到 {p['file']}")
 
@@ -268,11 +268,11 @@ def _run_install(args: argparse.Namespace) -> None:
         bot_path = target_dir / "configs" / "bot.yaml"
         if bot_path.exists():
             import yaml
-            with open(bot_path) as f:
+            with open(bot_path, encoding="utf-8") as f:
                 bot_cfg = yaml.safe_load(f) or {}
             bot_cfg.setdefault("ai", {})["default_provider"] = provider_id
             bot_cfg["ai"]["default_model"] = p["model"]
-            with open(bot_path, "w") as f:
+            with open(bot_path, "w", encoding="utf-8") as f:
                 yaml.safe_dump(bot_cfg, f, allow_unicode=True, default_flow_style=False)
             _ok(f"默认提供商设为 {p['name']}")
 
