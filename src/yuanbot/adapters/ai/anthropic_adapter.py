@@ -29,6 +29,9 @@ logger = structlog.get_logger(__name__)
 
 # Claude 模型上下文长度映射
 MODEL_CONTEXT_LENGTHS = {
+    "claude-sonnet-4-6-20260517": 200000,
+    "claude-haiku-4-5-20260506": 200000,
+    "claude-opus-4-8-20260528": 200000,
     "claude-opus-4-20250514": 200000,
     "claude-sonnet-4-20250514": 200000,
     "claude-3-5-haiku-20241022": 200000,

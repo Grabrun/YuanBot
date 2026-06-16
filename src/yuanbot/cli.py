@@ -2256,8 +2256,8 @@ log_level: "INFO"
 
 # AI 提供商
 ai:
-  default_provider: "openai"
-  default_model: "gpt-4o"
+  default_provider: "deepseek"
+  default_model: "deepseek-v4-flash"
 
 # 消息通道
 channels:
@@ -2389,16 +2389,28 @@ api:
   max_retries: 3
 
 models:
-  - id: "gpt-4o"
-    type: "chat"
-    default: true
-    max_tokens: 128000
-    supports_tools: true
-    supports_streaming: true
-  - id: "gpt-4o-mini"
+  - id: "gpt-5.5"
     type: "chat"
     default: false
-    max_tokens: 128000
+    max_tokens: 256000
+    supports_tools: true
+    supports_streaming: true
+  - id: "gpt-5.4"
+    type: "chat"
+    default: true
+    max_tokens: 256000
+    supports_tools: true
+    supports_streaming: true
+  - id: "gpt-5.4-mini"
+    type: "chat"
+    default: false
+    max_tokens: 256000
+    supports_tools: true
+    supports_streaming: true
+  - id: "o4-mini"
+    type: "chat"
+    default: false
+    max_tokens: 200000
     supports_tools: true
     supports_streaming: true
   - id: "text-embedding-3-small"
@@ -2409,8 +2421,8 @@ models:
 # DeepSeek 提供商配置
 provider_id: "deepseek"
 display_name: "DeepSeek"
-enabled: false
-default: false
+enabled: true
+default: true
 
 api:
   base_url: "https://api.deepseek.com/v1"
@@ -2419,10 +2431,16 @@ api:
   max_retries: 3
 
 models:
-  - id: "deepseek-chat"
+  - id: "deepseek-v4-pro"
+    type: "chat"
+    default: false
+    max_tokens: 1000000
+    supports_tools: true
+    supports_streaming: true
+  - id: "deepseek-v4-flash"
     type: "chat"
     default: true
-    max_tokens: 64000
+    max_tokens: 1000000
     supports_tools: true
     supports_streaming: true
 """,
@@ -2440,9 +2458,21 @@ api:
   max_retries: 3
 
 models:
-  - id: "claude-sonnet-4-20250514"
+  - id: "claude-sonnet-4-6-20260517"
     type: "chat"
     default: true
+    max_tokens: 200000
+    supports_tools: true
+    supports_streaming: true
+  - id: "claude-haiku-4-5-20260506"
+    type: "chat"
+    default: false
+    max_tokens: 200000
+    supports_tools: true
+    supports_streaming: true
+  - id: "claude-opus-4-8-20260528"
+    type: "chat"
+    default: false
     max_tokens: 200000
     supports_tools: true
     supports_streaming: true
@@ -2461,12 +2491,16 @@ api:
   max_retries: 1
 
 models:
-  - id: "qwen2.5:7b"
+  - id: "qwen3:14b"
     type: "chat"
     default: true
-    max_tokens: 32000
+    max_tokens: 32768
     supports_tools: true
     supports_streaming: true
+  - id: "nomic-embed-text"
+    type: "embedding"
+    default: false
+    dimensions: 768
 """,
 }
 

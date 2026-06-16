@@ -77,8 +77,8 @@ class ChannelConfigEntry(BaseModel):
 class AiConfig(BaseModel):
     """AI 子系统配置 (bot.yaml 的 ai 段)"""
 
-    default_provider: str = "openai"
-    default_model: str = "gpt-5.4"
+    default_provider: str = "deepseek"
+    default_model: str = "deepseek-v4-flash"
     embedding_provider: str | None = None
 
 

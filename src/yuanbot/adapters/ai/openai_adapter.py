@@ -30,6 +30,10 @@ logger = structlog.get_logger(__name__)
 
 # OpenAI 模型上下文长度映射
 MODEL_CONTEXT_LENGTHS = {
+    "gpt-5.5": 256000,
+    "gpt-5.4": 256000,
+    "gpt-5.4-mini": 256000,
+    "o4-mini": 200000,
     "gpt-4o": 128000,
     "gpt-4o-mini": 128000,
     "gpt-4.1": 1047576,
