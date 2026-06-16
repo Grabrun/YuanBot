@@ -58,12 +58,34 @@ export default defineConfig({
                 { text: '配置说明', link: '/guide/configuration' },
               ],
             },
+            {
+              text: '设计文档',
+              items: [
+                { text: '总体架构', link: '/guide/design/architecture-v1.5' },
+                { text: 'AI 提供商', link: '/guide/design/ai-provider-system-v2' },
+                { text: '记忆与情感', link: '/guide/design/memory-emotion-system' },
+                { text: '人格与决策', link: '/guide/design/persona-decision-system' },
+                { text: '能力与工具', link: '/guide/design/capability-tool-system' },
+                { text: '语音合成', link: '/guide/design/tts-system' },
+                { text: '主动陪伴', link: '/guide/design/proactive-companion-system' },
+                { text: '接入与通信', link: '/guide/design/gateway-communication-system' },
+              ],
+            },
           ],
           '/api/': [
             {
               text: 'API 文档',
               items: [
                 { text: 'API 参考', link: '/api/reference' },
+              ],
+            },
+          ],
+          '/channels-apis/': [
+            {
+              text: '通道适配器 API',
+              items: [
+                { text: 'NapCat API', link: '/channels-apis/napcat-api' },
+                { text: 'WeChat iLink API', link: '/channels-apis/openclaw-weixin-api' },
               ],
             },
           ],

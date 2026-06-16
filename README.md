@@ -162,18 +162,18 @@ ruff check    # All checks passed
 
 ## 📖 设计文档
 
-| 系统 | 文档 | 符合度 |
-|------|------|--------|
-| 🏗️ 接入与通信 | [gateway-communication-system.md](docs/gateway-communication-system.md) | 97% |
-| 🎨 用户界面 | [user-interface-system.md](docs/user-interface-system.md) | **100%** |
-| 🎤 语音合成 (TTS) | [tts-system.md](docs/tts-system.md) | 98% |
-| 🎭 人格与决策 | [persona-decision-system.md](docs/persona-decision-system.md) | **100%** |
-| 🧠 记忆与情感 | [memory-emotion-system.md](docs/memory-emotion-system.md) | 98% |
-| 🔧 能力与工具 | [capability-tool-system.md](docs/capability-tool-system.md) | 98% |
-| 🤖 AI 提供商 | [ai-provider-system-v2.md](docs/ai-provider-system-v2.md) | 97% |
-| 💞 主动陪伴 | [proactive-companion-system.md](docs/proactive-companion-system.md) | 98% |
-| 🌍 社区生态 | [development-standards-ecosystem.md](docs/development-standards-ecosystem.md) | 98% |
-| 🏛️ 基础架构 | [deployment.md](docs/deployment.md) | 99% |
+设计文档已迁移至 [📚 文档站](https://grabrun.github.io/YuanBot/guide/design/architecture-v1.5)。
+
+| 系统 | 文档链接 |
+|------|----------|
+| 🏗️ 接入与通信 | [gateway-communication-system](/guide/design/gateway-communication-system) |
+| 🎤 语音合成 (TTS) | [tts-system](/guide/design/tts-system) |
+| 🎭 人格与决策 | [persona-decision-system](/guide/design/persona-decision-system) |
+| 🧠 记忆与情感 | [memory-emotion-system](/guide/design/memory-emotion-system) |
+| 🔧 能力与工具 | [capability-tool-system](/guide/design/capability-tool-system) |
+| 🤖 AI 提供商 | [ai-provider-system-v2](/guide/design/ai-provider-system-v2) |
+| 💞 主动陪伴 | [proactive-companion-system](/guide/design/proactive-companion-system) |
+| 🔌 通道适配器 API | [NapCat API](/channels-apis/napcat-api) · [WeChat iLink API](/channels-apis/openclaw-weixin-api) |
 
 ---
 

@@ -277,7 +277,7 @@ AIService.generate(model="deepseek-chat") 时：
 
 7.3 动态切换
 
-· 通过 API PUT /api/providers/active 或 CLI 命令 yuanbot-cli provider set default <provider_id> 可实时切换活跃 Provider。
+· 通过 API PUT /api/providers/active 或 CLI 命令 yuanbot-cli provider set default `<provider_id>` 可实时切换活跃 Provider。
 · 切换后，后续对话立即使用新 Provider 的默认模型。
 · 不影响正在进行的流式请求。
 
@@ -316,10 +316,10 @@ yuanbot-cli provider 命令组：
 
 命令 说明
 provider list 列出所有已配置的 Provider 及其状态（启用/禁用，活跃）
-provider info <id> 显示 Provider 的详细信息（模型列表、API 端点）
-provider set default <id> 设置默认对话 Provider
-provider set embedding <id> 设置嵌入专用 Provider
-provider install <name> 从市场安装一个 Provider 配置文件
+provider info `<id>` 显示 Provider 的详细信息（模型列表、API 端点）
+provider set default `<id>` 设置默认对话 Provider
+provider set embedding `<id>` 设置嵌入专用 Provider
+provider install `<name>` 从市场安装一个 Provider 配置文件
 provider create 交互式创建新的 Provider 配置文件
 
 ---
