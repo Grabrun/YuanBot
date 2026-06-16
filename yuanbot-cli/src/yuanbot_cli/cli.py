@@ -55,14 +55,13 @@ def _info(msg: str) -> None:
 
 # ── 核心安装逻辑 ──────────────────────────
 
-VERSION = "1.0.5"
+VERSION = "1.0.6"
 REPO_URL = "https://github.com/Grabrun/YuanBot.git"
 
 
 def _run_cmd(cmd: list[str], cwd: str | None = None, timeout: int | None = None) -> int:
     """运行命令并实时显示输出（流式输出到终端，避免管道死锁）"""
     import subprocess as _sp
-    import sys as _sys
     env = os.environ.copy()
     env["PYTHONIOENCODING"] = "utf-8"
     env["GIT_TERMINAL_PROMPT"] = "0"
@@ -70,7 +69,7 @@ def _run_cmd(cmd: list[str], cwd: str | None = None, timeout: int | None = None)
     proc = _sp.Popen(cmd, cwd=cwd, env=env)
     try:
         proc.wait(timeout=timeout)
-    except _sp.TimeoutExpired:
+    except subprocess.TimeoutExpired:
         proc.kill()
         proc.wait()
         raise
@@ -169,7 +168,7 @@ def _run_install(args: argparse.Namespace) -> None:
         clone_target = "." if str(target_dir) == str(Path.cwd()) else str(target_dir)
         code = _run_cmd(["git", "clone", "--depth=1", REPO_URL, clone_target])
         if code != 0:
-            _info(f"错误: {msg}")
+            _fail("克隆失败")
             _info("可能的原因:")
             _info("  1. 网络连接问题 — 请检查能否访问 github.com")
             _info("  2. 防火墙/代理限制 — 可设置 HTTP_PROXY 环境变量")
@@ -184,12 +183,9 @@ def _run_install(args: argparse.Namespace) -> None:
     venv_path = target_dir / ".venv"
     if not venv_path.exists():
         _info("创建中...")
-        result = subprocess.run(
-            [sys.executable, "-m", "venv", str(venv_path)],
-            capture_output=True, text=True,
-        )
-        if result.returncode != 0:
-            _fail(f"创建失败: {result.stderr.strip()}")
+        code = _run_cmd([sys.executable, "-m", "venv", str(venv_path)])
+        if code != 0:
+            _fail("创建虚拟环境失败")
             sys.exit(1)
         _ok(".venv 已创建")
     else:
