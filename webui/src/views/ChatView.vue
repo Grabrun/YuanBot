@@ -171,16 +171,22 @@ function handleRegenerate(_messageId: string) {
 
           <n-divider />
 
-          <!-- 记忆快捷入口 -->
+          <!-- 快捷入口 -->
           <n-space vertical :size="8" style="margin-bottom: 12px">
             <n-button text @click="router.push('/memory')">
               🧠 记忆浏览器
+            </n-button>
+            <n-button text @click="router.push('/personas')">
+              🎭 人格商店
             </n-button>
             <n-button text @click="router.push('/providers')">
               🔌 Provider 管理
             </n-button>
             <n-button text @click="router.push('/plugins')">
               🧩 插件管理
+            </n-button>
+            <n-button text @click="router.push('/marketplace')">
+              🏪 扩展市场
             </n-button>
             <n-button text @click="router.push('/logs')">
               📋 实时日志
