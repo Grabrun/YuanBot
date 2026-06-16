@@ -55,7 +55,7 @@ def _info(msg: str) -> None:
 
 # ── 核心安装逻辑 ──────────────────────────
 
-VERSION = "1.0.3"
+VERSION = "1.0.4"
 REPO_URL = "https://github.com/Grabrun/YuanBot.git"
 
 
@@ -216,15 +216,12 @@ def _run_install(args: argparse.Namespace) -> None:
 
     # ── 7. 初始化配置 ───────────────────
     _header("初始化配置")
-    result = subprocess.run(
-        [str(py_venv), "-m", "yuanbot.cli", "config", "init"],
-        capture_output=True, text=True, cwd=target_dir,
-        env={**os.environ, "PYTHONIOENCODING": "utf-8"},
-    )
-    if result.returncode == 0:
+    _info("生成配置模板...")
+    code = _run_cmd([str(py_venv), "-m", "yuanbot.cli", "config", "init"], cwd=str(target_dir))
+    if code == 0:
         _ok("配置模板已生成")
     else:
-        _warn(f"config init 输出: {result.stderr[-200:]}")
+        _warn("config init 遇到问题，继续执行...")
     print()
 
     # ── 8. 配置 AI 提供商 ───────────────
@@ -283,10 +280,7 @@ def _run_install(args: argparse.Namespace) -> None:
 
     # ── 9. 运行诊断 ─────────────────────
     _header("运行诊断")
-    subprocess.run(
-        [str(py_venv), "-m", "yuanbot.cli", "doctor"],
-        cwd=target_dir,
-    )
+    _run_cmd([str(py_venv), "-m", "yuanbot.cli", "doctor"], cwd=str(target_dir))
     print()
 
     # ── 10. 完成 ─────────────────────────
