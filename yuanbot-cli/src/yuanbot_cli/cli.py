@@ -55,7 +55,7 @@ def _info(msg: str) -> None:
 
 # ── 核心安装逻辑 ──────────────────────────
 
-VERSION = "1.0.2"
+VERSION = "1.0.3"
 REPO_URL = "https://github.com/Grabrun/YuanBot.git"
 
 
@@ -219,6 +219,7 @@ def _run_install(args: argparse.Namespace) -> None:
     result = subprocess.run(
         [str(py_venv), "-m", "yuanbot.cli", "config", "init"],
         capture_output=True, text=True, cwd=target_dir,
+        env={**os.environ, "PYTHONIOENCODING": "utf-8"},
     )
     if result.returncode == 0:
         _ok("配置模板已生成")
