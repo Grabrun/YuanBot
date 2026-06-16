@@ -149,9 +149,11 @@ def _run_install(args: argparse.Namespace) -> None:
         _info(f"正在从 GitHub 克隆...")
         # 如果目标目录是当前目录，用 "."；否则用完整路径
         clone_target = "." if str(target_dir) == str(Path.cwd()) else str(target_dir)
+        env = os.environ.copy()
+        env["PYTHONIOENCODING"] = "utf-8"
         result = subprocess.run(
             ["git", "clone", "--depth=1", REPO_URL, clone_target],
-            capture_output=True, text=True,
+            capture_output=True, text=True, env=env,
         )
         if result.returncode != 0:
             msg = result.stderr.strip()
@@ -212,7 +214,7 @@ def _run_install(args: argparse.Namespace) -> None:
     _header("初始化配置")
     result = subprocess.run(
         [str(py_venv), "-m", "yuanbot.cli", "config", "init"],
-        capture_output=True, text=True, cwd=target_dir,
+        capture_output=True, text=True, cwd=target_dir, env=env,
     )
     if result.returncode == 0:
         _ok("配置模板已生成")

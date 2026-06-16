@@ -10,6 +10,9 @@ readme = "README.md"
 license = { text = "MIT" }
 requires-python = ">=3.12"
 keywords = ["yuanbot", "ai", "companion", "chatbot", "installer"]
+dependencies = [
+  "PyYAML>=6.0",
+]
 
 authors = [
   { name = "Grabrun", email = "grabrun@users.noreply.github.com" },
