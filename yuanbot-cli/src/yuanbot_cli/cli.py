@@ -15,7 +15,6 @@ import subprocess
 import sys
 from pathlib import Path
 
-
 # ── ANSI 颜色 ──────────────────────────────
 
 _CYAN = "\033[36m"
@@ -55,13 +54,14 @@ def _info(msg: str) -> None:
 
 # ── 核心安装逻辑 ──────────────────────────
 
-VERSION = "1.0.6"
+VERSION = "1.0.7"
 REPO_URL = "https://github.com/Grabrun/YuanBot.git"
 
 
 def _run_cmd(cmd: list[str], cwd: str | None = None, timeout: int | None = None) -> int:
     """运行命令并实时显示输出（流式输出到终端，避免管道死锁）"""
     import subprocess as _sp
+
     env = os.environ.copy()
     env["PYTHONIOENCODING"] = "utf-8"
     env["GIT_TERMINAL_PROMPT"] = "0"
@@ -74,6 +74,8 @@ def _run_cmd(cmd: list[str], cwd: str | None = None, timeout: int | None = None)
         proc.wait()
         raise
     return proc.returncode
+
+
 MIN_PYTHON = (3, 12)
 
 # 支持的 AI 提供商
@@ -138,7 +140,9 @@ def _run_install(args: argparse.Namespace) -> None:
         _info(f"当前目录: {target_dir}")
 
     # 检查是否已存在
-    is_existing = (target_dir / "pyproject.toml").exists() and (target_dir / "src" / "yuanbot").exists()
+    is_existing = (target_dir / "pyproject.toml").exists() and (
+        target_dir / "src" / "yuanbot"
+    ).exists()
     if is_existing:
         if args.force:
             _warn("目录已有 YuanBot 项目，--force 模式下将覆盖安装")
@@ -163,7 +167,7 @@ def _run_install(args: argparse.Namespace) -> None:
         _run_cmd(["git", "pull"], cwd=str(target_dir))
         _ok("代码已更新")
     else:
-        _info(f"正在从 GitHub 克隆...")
+        _info("正在从 GitHub 克隆...")
         # 如果目标目录是当前目录，用 "."；否则用完整路径
         clone_target = "." if str(target_dir) == str(Path.cwd()) else str(target_dir)
         code = _run_cmd(["git", "clone", "--depth=1", REPO_URL, clone_target])
@@ -242,7 +246,9 @@ def _run_install(args: argparse.Namespace) -> None:
 
         if provider_id:
             p = PROVIDERS[provider_id]
-            api_key = input(f"  {_c('?', _CYAN)} 输入 {p['name']} API Key (如 {p['key_hint']}): ").strip()
+            api_key = input(
+                f"  {_c('?', _CYAN)} 输入 {p['name']} API Key (如 {p['key_hint']}): "
+            ).strip()
 
     if provider_id and api_key:
         _header("写入配置")
@@ -252,6 +258,7 @@ def _run_install(args: argparse.Namespace) -> None:
         provider_path = target_dir / "configs" / "Providers" / p["file"]
         if provider_path.exists():
             import yaml  # type: ignore[import-untyped]
+
             with open(provider_path, encoding="utf-8") as f:
                 cfg = yaml.safe_load(f) or {}
             cfg.setdefault("config", {})["api_key"] = api_key
@@ -264,6 +271,7 @@ def _run_install(args: argparse.Namespace) -> None:
         bot_path = target_dir / "configs" / "bot.yaml"
         if bot_path.exists():
             import yaml
+
             with open(bot_path, encoding="utf-8") as f:
                 bot_cfg = yaml.safe_load(f) or {}
             bot_cfg.setdefault("ai", {})["default_provider"] = provider_id
@@ -295,7 +303,7 @@ def _run_install(args: argparse.Namespace) -> None:
     print(f"    {_c('yuanbot tui', _CYAN)}               # 终端聊天")
     print(f"    打开 {_c('http://localhost:8000', _CYAN)}   # WebUI")
     print()
-    _info(f"📖 文档: https://grabrun.github.io/YuanBot")
+    _info("📖 文档: https://grabrun.github.io/YuanBot")
     print()
 
 
@@ -308,7 +316,8 @@ def main() -> None:
         description="YuanBot 安装引导工具 — 一行命令部署 AI 虚拟伴侣",
     )
     parser.add_argument(
-        "-v", "--version",
+        "-v",
+        "--version",
         action="version",
         version=f"yuanbot-cli {VERSION}",
         help="显示版本号",
@@ -319,27 +328,33 @@ def main() -> None:
     # yuanbot install
     install_parser = sub.add_parser("install", help="全自动安装 YuanBot")
     install_parser.add_argument(
-        "--dir", default="",
+        "--dir",
+        default="",
         help="安装目录（默认直接安装到当前目录）",
     )
     install_parser.add_argument(
-        "--provider", default=None,
+        "--provider",
+        default=None,
         help="AI 提供商 (deepseek/openai/anthropic)",
     )
     install_parser.add_argument(
-        "--api-key", default=None,
+        "--api-key",
+        default=None,
         help="API Key",
     )
     install_parser.add_argument(
-        "--non-interactive", action="store_true",
+        "--non-interactive",
+        action="store_true",
         help="非交互式安装（需同时指定 --provider 和 --api-key）",
     )
     install_parser.add_argument(
-        "--force", action="store_true",
+        "--force",
+        action="store_true",
         help="强制重新安装",
     )
     install_parser.add_argument(
-        "--no-clone", action="store_true",
+        "--no-clone",
+        action="store_true",
         help="跳过 git clone（代码已存在时使用）",
     )
 
