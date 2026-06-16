@@ -216,10 +216,14 @@ def main() -> None:
 
     # yuanbot install
     install_parser = subparsers.add_parser("install", help="安装 YuanBot 或从社区市场安装扩展")
-    install_parser.add_argument("ext_id", nargs="?", default=None, help="扩展 ID（留空则自动安装 YuanBot 本体）")
+    install_parser.add_argument(
+        "ext_id", nargs="?", default=None, help="扩展 ID（留空则自动安装 YuanBot 本体）"
+    )
     install_parser.add_argument("--version", "-v", help="指定扩展版本 (默认最新)")
     install_parser.add_argument("--force", action="store_true", help="强制重新安装")
-    install_parser.add_argument("--provider", default=None, help="AI 提供商 (openai/deepseek/anthropic 等)")
+    install_parser.add_argument(
+        "--provider", default=None, help="AI 提供商 (openai/deepseek/anthropic 等)"
+    )
     install_parser.add_argument("--api-key", default=None, help="API Key")
     install_parser.add_argument("--non-interactive", action="store_true", help="非交互式安装")
 
@@ -1819,9 +1823,9 @@ def _run_install_extension(args: argparse.Namespace) -> None:
 
 def _run_full_install(args: argparse.Namespace) -> None:
     """自动化完整安装 YuanBot"""
+    import os
     import subprocess
     import sys
-    import os
     from pathlib import Path
 
     print(_c("🌸 欢迎使用 YuanBot 自动化安装程序", _CYAN + _BOLD))
@@ -1831,9 +1835,6 @@ def _run_full_install(args: argparse.Namespace) -> None:
     # 1. 检查 Python 版本
     _info("检查环境...")
     py_ver = f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
-    if sys.version_info < (3, 12):
-        _fail(f"需要 Python 3.12+，当前: {py_ver}")
-        sys.exit(1)
     _ok(f"Python {py_ver}")
 
     # 2. 检查 git
@@ -1846,14 +1847,17 @@ def _run_full_install(args: argparse.Namespace) -> None:
 
     # 3. 确认安装目录
     project_root = Path.cwd().resolve()
-    is_yuanbot_dir = (project_root / "pyproject.toml").exists() or (project_root / "src" / "yuanbot").exists()
+    is_yuanbot_dir = (project_root / "pyproject.toml").exists() or (
+        project_root / "src" / "yuanbot"
+    ).exists()
 
     if not is_yuanbot_dir:
         _info("当前目录不是 YuanBot 项目，正在克隆...")
         repo_url = "https://github.com/Grabrun/YuanBot.git"
         result = subprocess.run(
             ["git", "clone", repo_url, str(project_root / "YuanBot")],
-            capture_output=True, text=True,
+            capture_output=True,
+            text=True,
         )
         if result.returncode != 0:
             _fail(f"克隆失败: {result.stderr.strip()}")
@@ -1870,7 +1874,8 @@ def _run_full_install(args: argparse.Namespace) -> None:
         _info("创建虚拟环境...")
         result = subprocess.run(
             [sys.executable, "-m", "venv", str(venv_path)],
-            capture_output=True, text=True,
+            capture_output=True,
+            text=True,
         )
         if result.returncode != 0:
             _fail(f"创建虚拟环境失败: {result.stderr.strip()}")
@@ -1891,7 +1896,9 @@ def _run_full_install(args: argparse.Namespace) -> None:
     _info("安装依赖 (这可能需要几分钟)...")
     result = subprocess.run(
         [str(pip_path), "install", "-e", ".[dev]"],
-        capture_output=True, text=True, timeout=300,
+        capture_output=True,
+        text=True,
+        timeout=300,
     )
     if result.returncode != 0:
         _warn(f"pip 安装警告: {result.stderr[-200:]}")
@@ -1901,7 +1908,9 @@ def _run_full_install(args: argparse.Namespace) -> None:
     _info("初始化配置...")
     result = subprocess.run(
         [str(python_path), "-m", "yuanbot.cli", "config", "init"],
-        capture_output=True, text=True, cwd=project_root,
+        capture_output=True,
+        text=True,
+        cwd=project_root,
     )
     if result.returncode != 0:
         _fail(f"配置初始化失败: {result.stderr.strip()}")
@@ -1931,24 +1940,30 @@ def _run_full_install(args: argparse.Namespace) -> None:
         provider_file = project_root / "configs" / "Providers" / f"{provider}.yaml"
         if provider_file.exists():
             import yaml
+
             with open(provider_file) as f:
                 cfg = yaml.safe_load(f) or {}
             cfg.setdefault("config", {})["api_key"] = api_key
             if provider == provider:
                 cfg["enabled"] = True
             with open(provider_file, "w") as f:
-                yaml.safe_dump(cfg, f, allow_unicode=True, default_flow_style=False, sort_keys=False)
+                yaml.safe_dump(
+                    cfg, f, allow_unicode=True, default_flow_style=False, sort_keys=False
+                )
             _ok(f"{provider} API Key 已配置")
 
         # 设置默认提供商
         bot_yaml = project_root / "configs" / "bot.yaml"
         if bot_yaml.exists():
             import yaml
+
             with open(bot_yaml) as f:
                 bot_cfg = yaml.safe_load(f) or {}
             bot_cfg.setdefault("ai", {})["default_provider"] = provider
             with open(bot_yaml, "w") as f:
-                yaml.safe_dump(bot_cfg, f, allow_unicode=True, default_flow_style=False, sort_keys=False)
+                yaml.safe_dump(
+                    bot_cfg, f, allow_unicode=True, default_flow_style=False, sort_keys=False
+                )
             _ok(f"默认提供商已设为 {provider}")
 
     # 8. 运行 doctor 验证
@@ -1975,11 +1990,11 @@ def _run_full_install(args: argparse.Namespace) -> None:
     else:
         activate = f"source {venv_path}/bin/activate"
 
-    print(f"  " + _c(f"  激活虚拟环境:", _BOLD))
+    print("  " + _c("  激活虚拟环境:", _BOLD))
     print(f"    {_c(activate, _CYAN)}")
-    print(f"  " + _c(f"  启动服务:", _BOLD))
+    print("  " + _c("  启动服务:", _BOLD))
     print(f"    {_c('yuanbot start', _CYAN)}")
-    print(f"  " + _c(f"  终端聊天:", _BOLD))
+    print("  " + _c("  终端聊天:", _BOLD))
     print(f"    {_c('yuanbot tui', _CYAN)}")
     print()
 
