@@ -1,0 +1,48 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "yuanbot-cli"
+version = "1.0.0"
+description = "YuanBot 安装引导工具 — 一行命令部署 YuanBot AI 虚拟伴侣"
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.12"
+keywords = ["yuanbot", "ai", "companion", "chatbot", "installer"]
+
+authors = [
+  { name = "Grabrun", email = "grabrun@users.noreply.github.com" },
+]
+
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Environment :: Console",
+  "Intended Audience :: Developers",
+  "Intended Audience :: End Users/Desktop",
+  "License :: OSI Approved :: MIT License",
+  "Natural Language :: Chinese (Simplified)",
+  "Natural Language :: English",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Utilities",
+]
+
+[project.urls]
+Homepage = "https://grabrun.github.io/YuanBot"
+Repository = "https://github.com/Grabrun/YuanBot"
+Documentation = "https://grabrun.github.io/YuanBot/guide/getting-started"
+
+[project.scripts]
+yuanbot = "yuanbot_cli.cli:main"
+
+[project.optional-dependencies]
+dev = [
+  "build>=1.0",
+  "twine>=4.0",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/yuanbot_cli"]
