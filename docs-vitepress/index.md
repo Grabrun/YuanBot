@@ -29,8 +29,7 @@ features:
     details: 自定义人设，不同场景不同性格。温柔朋友 / 专业助手 / 可爱伙伴
   - icon: 🔌
     title: 全平台接入
-    details: 微信（iLink Bot 个人号）、QQ（开放平台 + NapCat OneBot v11）、Telegram、Discord、
-    企业微信、钉钉、飞书、Web Chat，一处部署，处处陪伴
+    details: 微信（iLink Bot 个人号）、QQ（开放平台 + NapCat OneBot v11）、Telegram、Discord、企业微信、钉钉、飞书、Web Chat，一处部署，处处陪伴
   - icon: 🤖
     title: 多 AI 提供商
     details: 支持 OpenAI (GPT-5.5)、DeepSeek (V4, 1M ctx)、Claude (Sonnet 4.6)、GLM-5、Qwen3-Max 等 9 大 AI 提供商
