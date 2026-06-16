@@ -39,7 +39,11 @@ class TestCreateApp:
         assert app.title == "缘·Bot (YuanBot)"
 
     def test_app_has_routes(self, app):
-        routes = [r.path for r in app.routes]
+        routes = []
+        for r in app.routes:
+            path = getattr(r, "path", None)
+            if path:
+                routes.append(path)
         assert "/health" in routes
         assert "/api/chat" in routes
         assert "/api/memory/{user_id}" in routes
