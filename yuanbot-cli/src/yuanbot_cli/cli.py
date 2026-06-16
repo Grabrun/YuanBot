@@ -54,7 +54,7 @@ def _info(msg: str) -> None:
 
 # ── 核心安装逻辑 ──────────────────────────
 
-VERSION = "1.0.8"
+VERSION = "1.0.9"
 REPO_URL = "https://github.com/Grabrun/YuanBot.git"
 
 
@@ -210,7 +210,7 @@ def _run_install(args: argparse.Namespace) -> None:
     code = _run_cmd([str(pip_venv), "install", "-e", str(target_dir)], timeout=300)
     if code != 0:
         _warn("部分依赖安装有警告，继续执行...")
-    code = _run_cmd([str(pip_venv), "install", "-e", str(target_dir) + "[dev,openai,anthropic]"], timeout=300)
+    code = _run_cmd([str(pip_venv), "install", "-e", str(target_dir) + "[dev]"], timeout=300)
     _ok("YuanBot 已安装")
     print()
 
