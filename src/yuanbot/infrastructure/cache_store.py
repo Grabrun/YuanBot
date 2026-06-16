@@ -250,11 +250,14 @@ class InMemoryCacheStore:
     """内存缓存存储（回退方案）
 
     使用字典实现，支持 TTL 过期。
+    默认最大 1000 条，超出时按最后访问时间淘汰。
     """
 
-    def __init__(self):
+    def __init__(self, max_entries: int = 1000):
         self._cache: dict[str, Any] = {}
         self._expires: dict[str, float] = {}  # key -> expiry timestamp
+        self._access_order: list[str] = []  # LRU 顺序
+        self._max_entries = max_entries
 
     def _cleanup_expired(self) -> None:
         """清理过期的缓存"""
@@ -263,6 +266,24 @@ class InMemoryCacheStore:
         for key in expired_keys:
             self._cache.pop(key, None)
             self._expires.pop(key, None)
+        if expired_keys:
+            self._access_order = [k for k in self._access_order if k in self._cache]
+
+    def _touch(self, key: str) -> None:
+        """更新访问顺序（LRU）"""
+        if key in self._access_order:
+            self._access_order.remove(key)
+        self._access_order.append(key)
+
+    def _evict(self) -> None:
+        """淘汰最久未访问的条目"""
+        while len(self._cache) > self._max_entries:
+            # 淘汰最久未访问的（访问顺序列表最前面）
+            oldest = self._access_order.pop(0) if self._access_order else None
+            if oldest is None:
+                break
+            self._cache.pop(oldest, None)
+            self._expires.pop(oldest, None)
 
     def get(self, key: str) -> Any | None:
         """获取缓存值"""
@@ -271,6 +292,8 @@ class InMemoryCacheStore:
             self._cache.pop(key, None)
             self._expires.pop(key, None)
             return None
+        if key in self._cache:
+            self._touch(key)
         return self._cache.get(key)
 
     def set(
@@ -285,11 +308,15 @@ class InMemoryCacheStore:
             self._expires[key] = time.time() + ttl
         else:
             self._expires.pop(key, None)
+        self._touch(key)
+        self._evict()
 
     def delete(self, key: str) -> None:
         """删除缓存"""
         self._cache.pop(key, None)
         self._expires.pop(key, None)
+        if key in self._access_order:
+            self._access_order.remove(key)
 
     def exists(self, key: str) -> bool:
         """检查是否存在"""

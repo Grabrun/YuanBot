@@ -458,8 +458,8 @@ def _run_doctor(args: argparse.Namespace) -> None:
     except ImportError:
         _warn("redis 库未安装")
     except Exception as e:
-        _fail(f"Redis 连接失败: {e}")
-        all_ok = False
+        _warn(f"Redis 不可用: {e} (将使用内存缓存)")
+        # Redis 可选，运行时自动降级为内存缓存
 
     # 4. 数据库连通性
     db_url = config.memory.db_url
