@@ -100,8 +100,9 @@ ai:
 | 通道 | 配置文件 | 支持场景 |
 |------|----------|----------|
 | 🌐 Web Chat | `webchat.yaml` | 浏览器直接聊天（WebSocket 流式） |
-| 💚 微信 | `wechat.yaml` | 个人微信（扫码登录） |
-| 🐧 QQ | `qq.yaml` | 单聊 / 群聊 / 频道 |
+| 💚 微信 | `wechat.yaml` | **个人微信（iLink Bot 长轮询，支持文本/图片/语音/文件/视频）** |
+| 🐧 QQ (开放平台) | `qq.yaml` | QQ 开放平台 Bot，单聊 / 群聊 / 频道 |
+| 🐧 **QQ (NapCat)** | `napcat.yaml` | **NapCat 第三方通道（OneBot v11 协议，HTTP API + 事件上报）** 🆕 |
 | ✈️ Telegram | `telegram.yaml` | 私聊 / 群组 |
 | 🎮 Discord | `discord.yaml` | 私聊 / 服务器 |
 | 🏢 企业微信 | `wecom.yaml` | 私聊 / 群聊 |
@@ -199,7 +200,7 @@ MIT License — 详见 [LICENSE](LICENSE)
 ---
 
 <p align="center">
-  🌸 缘·Bot v1.2.0 — 让 AI 陪伴更有温度<br>
+  🌸 缘·Bot v1.5.0 — 让 AI 陪伴更有温度<br>
   <a href="https://grabrun.github.io/YuanBot">📖 文档站</a> · 
   <a href="https://github.com/Grabrun/YuanBot/releases">📦 Release</a>
 </p>

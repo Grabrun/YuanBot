@@ -119,11 +119,12 @@ curl http://localhost:8000/healthz
 | `yuanbot start` | 启动服务 |
 | `yuanbot tui` | TUI 终端界面 |
 | `yuanbot webui` | WebUI |
-| `yuanbot doctor` | 系统诊断 |
+| `yuanbot doctor` | 系统诊断（检查各组件连通性） |
 | `yuanbot version` | 查看版本 |
 | `yuanbot config show` | 查看配置 |
 | `yuanbot provider list` | 列出 AI 提供商 |
 | `yuanbot persona list` | 列出人设 |
+| `yuanbot list channels` | 列出消息通道 |
 | `yuanbot memory stats` | 记忆统计 |
 | `yuanbot logs` | 查看日志 |
 

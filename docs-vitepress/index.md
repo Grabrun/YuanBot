@@ -29,7 +29,8 @@ features:
     details: 自定义人设，不同场景不同性格。温柔朋友 / 专业助手 / 可爱伙伴
   - icon: 🔌
     title: 全平台接入
-    details: 微信、QQ、Telegram、Discord、企业微信、钉钉、飞书、Web Chat，一处部署，处处陪伴
+    details: 微信（iLink Bot 个人号）、QQ（开放平台 + NapCat OneBot v11）、Telegram、Discord、
+    企业微信、钉钉、飞书、Web Chat，一处部署，处处陪伴
   - icon: 🤖
     title: 多 AI 提供商
     details: 支持 OpenAI (GPT-5.5)、DeepSeek (V4, 1M ctx)、Claude (Sonnet 4.6)、GLM-5、Qwen3-Max 等 9 大 AI 提供商
@@ -84,8 +85,9 @@ docker-compose up -d
 ## 📊 项目数据
 
 - **10 大核心系统** — 覆盖记忆、情感、通信、AI、TUI、WebUI 等全链路
-- **107 个源代码文件** — 高内聚、低耦合的模块化架构
-- **1412 个测试全部通过** — 99% 设计文档符合度
+- **100+ 个源代码文件** — 高内聚、低耦合的模块化架构
+- **1453 个测试全部通过** — 99% 设计文档符合度
+- **10 种消息通道** — 涵盖主流 IM 平台，频道适配器 API 文档开源参考
 - **CI/CD 自动化** — GitHub Actions 持续集成与部署
 
 ---

@@ -87,4 +87,17 @@ GET /healthz    # 存活探针
 GET /readyz     # 就绪探针
 ```
 
+## 通道适配器 API
+
+YuanBot 的通道适配器 API 文档基于开源实现整理，供开发参考：
+
+| 通道 | 协议 | 文档 |
+|------|------|------|
+| **NapCat QQ** | OneBot v11 (HTTP API + 事件上报) | [NapCat API 文档](https://napcat.apifox.cn) |
+| **微信 iLink Bot** | 腾讯 iLink Bot API (长轮询 + CDN 加密传输) | 基于 `@tencent-weixin/openclaw-weixin` 源码整理 |
+
+::: tip
+通道适配器源码位于 `src/yuanbot/adapters/channel/`，完整 API 参考见 `docs/channels-apis/` 目录。
+:::
+
 完整 API 文档请参考 [GitHub 源码](https://github.com/Grabrun/YuanBot)。

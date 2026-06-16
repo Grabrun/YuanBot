@@ -31,11 +31,15 @@ configs/
 │   ├── kimi.yaml             # Kimi K2.6 🆕
 │   └── ollama.yaml           # 本地模型
 ├── Channels/                 # 消息通道配置
-│   ├── telegram.yaml
-│   ├── discord.yaml
-│   ├── webchat.yaml
-│   ├── wechat.yaml
-│   ├── qq.yaml
+│   ├── telegram.yaml         # Telegram Bot
+│   ├── discord.yaml          # Discord Bot
+│   ├── webchat.yaml          # Web Chat (WebSocket)
+│   ├── wechat.yaml           # 微信个人号（iLink Bot 长轮询）
+│   ├── qq.yaml               # QQ 开放平台 Bot
+│   ├── napcat.yaml           # QQ (NapCat / OneBot v11) 🆕
+│   ├── dingtalk.yaml         # 钉钉
+│   ├── feishu.yaml           # 飞书
+│   ├── wecom.yaml            # 企业微信
 │   └── ...
 ├── Personas/                 # 人设配置
 │   ├── default.yaml
