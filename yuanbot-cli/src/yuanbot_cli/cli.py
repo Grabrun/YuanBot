@@ -55,8 +55,33 @@ def _info(msg: str) -> None:
 
 # ── 核心安装逻辑 ──────────────────────────
 
-VERSION = "1.0.0"
+VERSION = "1.0.1"
 REPO_URL = "https://github.com/Grabrun/YuanBot.git"
+
+
+def _run_cmd(cmd: list[str], cwd: str | None = None, timeout: int | None = None) -> int:
+    """运行命令并实时显示输出"""
+    import subprocess as _sp
+    env = os.environ.copy()
+    env["PYTHONIOENCODING"] = "utf-8"
+    env["GIT_TERMINAL_PROMPT"] = "0"
+    proc = _sp.Popen(
+        cmd,
+        cwd=cwd,
+        stdout=_sp.PIPE,
+        stderr=_sp.STDOUT,
+        env=env,
+        bufsize=1,
+        text=True,
+    )
+    if proc.stdout:
+        for line in iter(proc.stdout.readline, ''):
+            line = line.rstrip()
+            if line:
+                # 缩进显示子进程输出，区分于主程序的日志
+                print(f"     {line}")
+    proc.wait(timeout=timeout)
+    return proc.returncode
 MIN_PYTHON = (3, 12)
 
 # 支持的 AI 提供商
@@ -143,21 +168,14 @@ def _run_install(args: argparse.Namespace) -> None:
             sys.exit(1)
     elif target_dir.exists() and is_existing:
         _info("拉取最新代码...")
-        subprocess.run(["git", "pull"], cwd=target_dir, capture_output=True)
+        _run_cmd(["git", "pull"], cwd=str(target_dir))
         _ok("代码已更新")
     else:
         _info(f"正在从 GitHub 克隆...")
         # 如果目标目录是当前目录，用 "."；否则用完整路径
         clone_target = "." if str(target_dir) == str(Path.cwd()) else str(target_dir)
-        env = os.environ.copy()
-        env["PYTHONIOENCODING"] = "utf-8"
-        result = subprocess.run(
-            ["git", "clone", "--depth=1", REPO_URL, clone_target],
-            capture_output=True, text=True, env=env,
-        )
-        if result.returncode != 0:
-            msg = result.stderr.strip()
-            _fail(f"克隆失败")
+        code = _run_cmd(["git", "clone", "--depth=1", REPO_URL, clone_target])
+        if code != 0:
             _info(f"错误: {msg}")
             _info("可能的原因:")
             _info("  1. 网络连接问题 — 请检查能否访问 github.com")
@@ -196,17 +214,10 @@ def _run_install(args: argparse.Namespace) -> None:
     # ── 6. 安装依赖 ─────────────────────
     _header("安装依赖")
     _info("正在安装 YuanBot (这可能需要几分钟)...")
-    result = subprocess.run(
-        [str(pip_venv), "install", "-e", str(target_dir)],
-        capture_output=True, text=True, timeout=300,
-    )
-    if result.returncode != 0:
-        _warn(f"安装输出: {result.stderr[-200:]}")
-    # 额外安装开发依赖
-    subprocess.run(
-        [str(pip_venv), "install", "-e", str(target_dir) + "[dev]"],
-        capture_output=True, timeout=300,
-    )
+    code = _run_cmd([str(pip_venv), "install", "-e", str(target_dir)], timeout=300)
+    if code != 0:
+        _warn("部分依赖安装有警告，继续执行...")
+    code = _run_cmd([str(pip_venv), "install", "-e", str(target_dir) + "[dev]"], timeout=300)
     _ok("YuanBot 已安装")
     print()
 
@@ -214,7 +225,7 @@ def _run_install(args: argparse.Namespace) -> None:
     _header("初始化配置")
     result = subprocess.run(
         [str(py_venv), "-m", "yuanbot.cli", "config", "init"],
-        capture_output=True, text=True, cwd=target_dir, env=env,
+        capture_output=True, text=True, cwd=target_dir,
     )
     if result.returncode == 0:
         _ok("配置模板已生成")
