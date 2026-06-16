@@ -54,7 +54,7 @@ def _info(msg: str) -> None:
 
 # ── 核心安装逻辑 ──────────────────────────
 
-VERSION = "1.0.9"
+VERSION = "1.1.0"
 REPO_URL = "https://github.com/Grabrun/YuanBot.git"
 
 
@@ -282,7 +282,16 @@ def _run_install(args: argparse.Namespace) -> None:
 
         print()
 
-    # ── 9. 运行诊断 ─────────────────────
+    # ── 9. 配置聊天通道 ────────────────
+    if not non_interactive:
+        _header("聊天通道")
+        _info("YuanBot 支持微信、QQ、Telegram 等聊天通道")
+        answer = input(f"  {_c('?', _CYAN)} 是否配置微信个人通道？(y/N): ").strip().lower()
+        if answer in ("y", "yes"):
+            _setup_wechat_channel(target_dir, py_venv, venv_path)
+    print()
+
+    # ── 10. 运行诊断 ────────────────────
     _header("运行诊断")
     _run_cmd([str(py_venv), "-m", "yuanbot.cli", "doctor"], cwd=str(target_dir))
     print()
@@ -305,6 +314,139 @@ def _run_install(args: argparse.Namespace) -> None:
     print()
     _info("📖 文档: https://grabrun.github.io/YuanBot")
     print()
+
+
+# ── 微信通道配置 ──────────────────────
+
+
+def _setup_wechat_channel(
+    target_dir: Path,
+    py_venv: Path,
+    venv_path: Path,
+) -> None:
+    """配置微信个人通道（QR 码扫码登录）"""
+    import json
+    import urllib.parse
+    import urllib.request
+
+    wechat_path = target_dir / "configs" / "Channels" / "wechat.yaml"
+    if not wechat_path.exists():
+        _warn("wechat.yaml 配置文件不存在")
+        return
+
+    api_base = "https://ilinkai.weixin.qq.com"
+    _info("正在获取微信登录二维码...")
+
+    try:
+        # 1. 获取二维码
+        req = urllib.request.Request(
+            f"{api_base}/ilink/bot/get_bot_qrcode?bot_type=3",
+            data=json.dumps({"local_token_list": []}).encode(),
+            headers={"Content-Type": "application/json"},
+        )
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            qr_data = json.loads(resp.read())
+
+        qrcode = qr_data.get("qrcode", "")
+        qrcode_url = qr_data.get("qrcode_img_content", "")
+        if not qrcode:
+            _fail("获取二维码失败")
+            return
+
+        _ok("二维码已获取")
+        print()
+        _info("请用手机微信扫描以下二维码以登录：")
+        print(f"    {_c(qrcode_url, _CYAN)}")
+
+        # 尝试生成文本二维码
+        try:
+            import qrcode as _qr
+
+            qr = _qr.QRCode(border=1, box_size=2)
+            qr.add_data(qrcode_url)
+            qr.print_ascii()
+        except ImportError:
+            pass
+
+        print()
+        _info("扫码后等待确认...")
+
+        # 2. 轮询二维码状态
+        import time as _time
+
+        deadline = _time.time() + 480  # 8分钟超时
+        bot_token = ""
+        ilink_user_id = ""
+        ilink_bot_id = ""
+        base_url = ""
+
+        while _time.time() < deadline:
+            query = urllib.parse.urlencode({"qrcode": qrcode})
+            status_url = f"{api_base}/ilink/bot/get_qrcode_status?{query}"
+            try:
+                req = urllib.request.Request(status_url)
+                with urllib.request.urlopen(req, timeout=35) as resp:
+                    status_data = json.loads(resp.read())
+
+                status = status_data.get("status", "wait")
+                if status == "wait":
+                    print(f"  {_c('.', _DIM)}", end="", flush=True)
+                elif status == "scaned":
+                    print()
+                    _ok("已扫码，等待确认...")
+                elif status == "confirmed":
+                    bot_token = status_data.get("bot_token", "")
+                    ilink_bot_id = status_data.get("ilink_bot_id", "")
+                    ilink_user_id = status_data.get("ilink_user_id", "")
+                    base_url = status_data.get("baseurl", api_base)
+                    _ok("微信登录成功！")
+                    break
+                elif status == "expired":
+                    _warn("二维码已过期，请重新运行")
+                    return
+                elif status == "need_verifycode":
+                    code = input(f"  {_c('?', _CYAN)} 输入手机微信显示的数字: ").strip()
+                    status_url += f"&verify_code={urllib.parse.quote(code)}"
+                    continue
+                elif status == "binded_redirect":
+                    _info("此微信已连接过此 OpenClaw")
+                    return
+                else:
+                    _info(f"状态: {status}")
+
+            except Exception as e:
+                _warn(f"轮询异常: {e}")
+                _time.sleep(3)
+                continue
+
+            _time.sleep(1)
+
+        if not bot_token:
+            _fail("微信登录超时")
+            return
+
+        # 3. 保存配置到 wechat.yaml
+        import yaml
+
+        with open(wechat_path, encoding="utf-8") as f:
+            cfg = yaml.safe_load(f) or {}
+
+        cfg["enabled"] = True
+        cfg["config"]["token"] = bot_token
+        cfg["config"]["ilink_user_id"] = ilink_user_id
+        cfg["config"]["bot_id"] = ilink_bot_id
+        cfg["config"]["base_url"] = base_url
+
+        with open(wechat_path, "w", encoding="utf-8") as f:
+            yaml.safe_dump(cfg, f, allow_unicode=True, default_flow_style=False)
+
+        _ok("微信通道配置已保存")
+        _info(f"微信用户: {ilink_user_id}")
+        _info(f"Bot ID: {ilink_bot_id}")
+
+    except Exception as e:
+        _fail(f"微信配置失败: {e}")
+        _info("可在安装完成后手动配置")
 
 
 # ── CLI 入口 ──────────────────────────────
