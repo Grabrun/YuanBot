@@ -137,12 +137,34 @@ export default defineConfig({
                 { text: 'Configuration', link: '/en/guide/configuration' },
               ],
             },
+            {
+              text: 'Design Docs',
+              items: [
+                { text: 'Architecture', link: '/en/guide/design/architecture-v1.5' },
+                { text: 'AI Provider', link: '/en/guide/design/ai-provider-system-v2' },
+                { text: 'Memory & Emotion', link: '/en/guide/design/memory-emotion-system' },
+                { text: 'Persona & Decision', link: '/en/guide/design/persona-decision-system' },
+                { text: 'Capability & Tools', link: '/en/guide/design/capability-tool-system' },
+                { text: 'TTS System', link: '/en/guide/design/tts-system' },
+                { text: 'Proactive Companion', link: '/en/guide/design/proactive-companion-system' },
+                { text: 'Gateway & Communication', link: '/en/guide/design/gateway-communication-system' },
+              ],
+            },
           ],
           '/en/api/': [
             {
               text: 'API',
               items: [
                 { text: 'API Reference', link: '/en/api/reference' },
+              ],
+            },
+          ],
+          '/en/channels-apis/': [
+            {
+              text: 'Channel APIs',
+              items: [
+                { text: 'NapCat API', link: '/en/channels-apis/napcat-api' },
+                { text: 'WeChat iLink API', link: '/en/channels-apis/openclaw-weixin-api' },
               ],
             },
           ],
@@ -194,12 +216,34 @@ export default defineConfig({
                 { text: '設定', link: '/ja/guide/configuration' },
               ],
             },
+            {
+              text: '設計ドキュメント',
+              items: [
+                { text: 'アーキテクチャ', link: '/ja/guide/design/architecture-v1.5' },
+                { text: 'AI プロバイダ', link: '/ja/guide/design/ai-provider-system-v2' },
+                { text: '記憶と感情', link: '/ja/guide/design/memory-emotion-system' },
+                { text: '人格と決定', link: '/ja/guide/design/persona-decision-system' },
+                { text: '能力とツール', link: '/ja/guide/design/capability-tool-system' },
+                { text: '音声合成 (TTS)', link: '/ja/guide/design/tts-system' },
+                { text: 'プロアクティブ', link: '/ja/guide/design/proactive-companion-system' },
+                { text: 'ゲートウェイ通信', link: '/ja/guide/design/gateway-communication-system' },
+              ],
+            },
           ],
           '/ja/api/': [
             {
               text: 'API',
               items: [
                 { text: 'APIリファレンス', link: '/ja/api/reference' },
+              ],
+            },
+          ],
+          '/ja/channels-apis/': [
+            {
+              text: 'チャンネルAPI',
+              items: [
+                { text: 'NapCat API', link: '/ja/channels-apis/napcat-api' },
+                { text: 'WeChat iLink API', link: '/ja/channels-apis/openclaw-weixin-api' },
               ],
             },
           ],
