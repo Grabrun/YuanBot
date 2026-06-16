@@ -122,7 +122,7 @@ class TestConfigIntegration:
         """验证各子配置模型可以独立实例化"""
         bot = BotConfig()
         assert bot.app_name == "YuanBot"
-        assert bot.ai.default_provider == "openai"
+        assert bot.ai.default_provider == "deepseek"
 
         db = DatabaseConfig()
         assert db.relational.type == "sqlite"

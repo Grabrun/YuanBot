@@ -202,8 +202,8 @@ class TestBotConfig:
         assert config.version == "1.0.0"
         assert config.debug is False
         assert config.log_level == "INFO"
-        assert config.ai.default_provider == "openai"
-        assert config.ai.default_model == "gpt-5.4"
+        assert config.ai.default_provider == "deepseek"
+        assert config.ai.default_model == "deepseek-v4-flash"
         assert config.persona.id == "default"
 
     def test_proactive_defaults(self):
