@@ -1,0 +1,27 @@
+# NapCat QQ 通道配置
+# 基于 OneBot v11 协议 + NapCat 扩展
+# 部署 NapCat 后填写以下配置
+
+platform: napcat
+display_name: "NapCat QQ"
+enabled: false
+
+config:
+  # NapCat HTTP 服务地址
+  http_host: "127.0.0.1"
+  http_port: 3000
+
+  # NapCat HTTP Token（对应 onebot_config 中的 access_token）
+  http_token: ""
+
+  # WebSocket 监听地址（事件上报，不配置则使用 HTTP webhook）
+  ws_host: ""
+  ws_port: 0
+
+  # 机器人 QQ 号
+  bot_qq: ""
+
+  # 启用场景
+  enabled_scenes:
+    - private
+    - group

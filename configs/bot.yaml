@@ -10,7 +10,7 @@ log_level: "INFO"
 # default_provider: 默认对话提供商（对应 configs/Providers/ 下的 provider_id）
 # embedding_provider: 嵌入专用提供商（可选，不指定则使用 default_provider 的嵌入模型）
 ai:
-  default_provider: "openai"
+  default_provider: "deepseek"
   embedding_provider: null  # 可设为 "openai" 或其他有 embedding 模型的 provider
 
 # 消息通道

@@ -6,7 +6,7 @@
 provider_id: deepseek
 name: "DeepSeek"
 adapter: openai-adapter
-enabled: false
+enabled: true
 
 config:
   api_key: "${DEEPSEEK_API_KEY}"

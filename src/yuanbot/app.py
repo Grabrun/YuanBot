@@ -176,6 +176,25 @@ def create_app(config: YuanBotConfig) -> FastAPI:
     # ── 8. Web 通道适配器 ─────────────────────
     web_adapter = WebAdapter()
 
+    # ── 8b. 微信通道适配器 ───────────────────────
+    wechat_adapter = None
+    for ch in config.channels:
+        if ch.platform == "wechat" and ch.enabled:
+            from yuanbot.adapters.channel.wechat_adapter import WeixinAdapter
+
+            wechat_adapter = WeixinAdapter()
+            wechat_adapter._sync_buf = ch.config.get("sync_buf", "")
+            break
+
+    # ── 8c. NapCat QQ 通道适配器 ───────────────────
+    napcat_adapter = None
+    for ch in config.channels:
+        if ch.platform == "napcat" and ch.enabled:
+            from yuanbot.adapters.channel.napcat_adapter import NapCatAdapter
+
+            napcat_adapter = NapCatAdapter()
+            break
+
     # ── 8. TTS 系统 ─────────────────────────────
     from yuanbot.tts.manager import TTSManager
 
@@ -270,6 +289,52 @@ def create_app(config: YuanBotConfig) -> FastAPI:
 
         await web_adapter.listen(on_message)
 
+        # 启动微信适配器
+        if wechat_adapter is not None:
+            try:
+                from yuanbot.core.types import ChannelConfig
+
+                for ch in config.channels:
+                    if ch.platform == "wechat":
+                        wechat_cfg = ch
+                        break
+                else:
+                    wechat_cfg = None
+
+                if wechat_cfg:
+                    channel_cfg = ChannelConfig(
+                        platform="wechat",
+                        config=wechat_cfg.config,
+                    )
+                    await wechat_adapter.initialize(channel_cfg)
+                    await wechat_adapter.listen(on_message)
+                    _logger.info("wechat_adapter_started")
+            except Exception as e:
+                _logger.error("wechat_adapter_start_failed", error=str(e), exc_info=True)
+
+        # 启动 NapCat QQ 通道适配器
+        if napcat_adapter is not None:
+            try:
+                from yuanbot.core.types import ChannelConfig
+
+                for ch in config.channels:
+                    if ch.platform == "napcat":
+                        napcat_cfg = ch
+                        break
+                else:
+                    napcat_cfg = None
+
+                if napcat_cfg:
+                    channel_cfg = ChannelConfig(
+                        platform="napcat",
+                        config=napcat_cfg.config,
+                    )
+                    await napcat_adapter.initialize(channel_cfg)
+                    await napcat_adapter.listen(on_message)
+                    _logger.info("napcat_adapter_started")
+            except Exception as e:
+                _logger.error("napcat_adapter_start_failed", error=str(e), exc_info=True)
+
         # 启动主动陪伴系统
         await proactive_scheduler.start()
         await event_engine.start()
@@ -293,6 +358,10 @@ def create_app(config: YuanBotConfig) -> FastAPI:
         await event_engine.stop()
         await proactive_scheduler.stop()
         await web_adapter.close()
+        if wechat_adapter is not None:
+            await wechat_adapter.shutdown()
+        if napcat_adapter is not None:
+            await napcat_adapter.shutdown()
         await memory_manager.close()
         await provider_manager.close_all()
         print("🌸 YuanBot 已停止")
