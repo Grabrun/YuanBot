@@ -135,7 +135,13 @@ def _run_install(args: argparse.Namespace) -> None:
 
     # ── 4. 克隆/更新代码 ────────────────
     _header("获取代码")
-    if target_dir.exists() and is_existing:
+    if args.no_clone:
+        _info("跳过克隆（--no-clone）")
+        if not is_existing:
+            _fail(f"目标目录 {target_dir} 中未找到 YuanBot 项目")
+            _info("请先手动下载代码到该目录，或去掉 --no-clone 参数")
+            sys.exit(1)
+    elif target_dir.exists() and is_existing:
         _info("拉取最新代码...")
         subprocess.run(["git", "pull"], cwd=target_dir, capture_output=True)
         _ok("代码已更新")
@@ -146,7 +152,14 @@ def _run_install(args: argparse.Namespace) -> None:
             capture_output=True, text=True,
         )
         if result.returncode != 0:
-            _fail(f"克隆失败: {result.stderr.strip()}")
+            msg = result.stderr.strip()
+            _fail(f"克隆失败")
+            _info(f"错误: {msg}")
+            _info("可能的原因:")
+            _info("  1. 网络连接问题 — 请检查能否访问 github.com")
+            _info("  2. 防火墙/代理限制 — 可设置 HTTP_PROXY 环境变量")
+            _info("  3. Git 未正确配置 — 运行 git config --global http.sslVerify false 尝试")
+            _info(f"  4. 也可手动下载代码到 {target_dir}，再用 --no-clone 跳过此步骤")
             sys.exit(1)
         _ok("代码已下载")
     print()
@@ -325,6 +338,10 @@ def main() -> None:
     install_parser.add_argument(
         "--force", action="store_true",
         help="强制重新安装",
+    )
+    install_parser.add_argument(
+        "--no-clone", action="store_true",
+        help="跳过 git clone（代码已存在时使用）",
     )
 
     # yuanbot version
