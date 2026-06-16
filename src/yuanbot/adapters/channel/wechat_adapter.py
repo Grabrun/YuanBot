@@ -17,7 +17,6 @@ from __future__ import annotations
 import asyncio
 import base64
 import contextlib
-import hashlib
 import json
 import os
 import random
@@ -932,7 +931,6 @@ class WeixinAdapter(BaseChannelAdapter):
 
         # 2. 确定媒体类型
         from yuanbot.adapters.channel.weixin_cdn import (
-            UploadMediaType,
             get_media_ref_from_upload,
             mime_to_media_type,
         )
@@ -1292,7 +1290,6 @@ class WeixinAdapter(BaseChannelAdapter):
             解密后的明文数据，失败返回 None
         """
         from yuanbot.adapters.channel.weixin_cdn import (
-            aes_ecb_decrypt,
             download_media_file,
         )
 
@@ -1309,7 +1306,8 @@ class WeixinAdapter(BaseChannelAdapter):
         """解析 AES 密钥，支持两种编码格式
 
         方式 1: base64(raw 16 bytes) → 直接得到 16 字节密钥
-        方式 2: base64(32 字符 hex 字符串) → 先 base64 解码得 32 字节 hex 字符串，再解析为 16 字节密钥
+        方式 2: base64(32 字符 hex 字符串) → 先 base64 解码得 32 字节 hex 字符串，
+           再解析为 16 字节密钥
 
         Args:
             aes_key_b64: base64 编码的 AES 密钥
@@ -1379,9 +1377,7 @@ class WeixinAdapter(BaseChannelAdapter):
         """
         for attempt in range(1, CDN_MAX_RETRIES + 1):
             try:
-                async with httpx.AsyncClient(
-                    timeout=httpx.Timeout(CDN_TIMEOUT_S)
-                ) as cdn_client:
+                async with httpx.AsyncClient(timeout=httpx.Timeout(CDN_TIMEOUT_S)) as cdn_client:
                     resp = await cdn_client.post(
                         cdn_url,
                         content=ciphertext,
@@ -1579,8 +1575,7 @@ class WeixinAdapter(BaseChannelAdapter):
         if time.time() < self._session_paused_until:
             remaining_min = int((self._session_paused_until - time.time()) / 60)
             raise RuntimeError(
-                f"会话已暂停 (errcode={SESSION_EXPIRED_ERRCODE})，"
-                f"剩余 {remaining_min} 分钟恢复"
+                f"会话已暂停 (errcode={SESSION_EXPIRED_ERRCODE})，剩余 {remaining_min} 分钟恢复"
             )
 
     # ── 持久化存储 ────────────────────────────
@@ -1922,18 +1917,21 @@ class WeixinAdapter(BaseChannelAdapter):
 
 class TypingStatus:
     """输入状态枚举"""
+
     TYPING = 1
     CANCEL = 2
 
 
 class MessageType:
     """消息类型枚举"""
+
     USER = 1
     BOT = 2
 
 
 class MessageState:
     """消息状态枚举"""
+
     NEW = 0
     GENERATING = 1
     FINISH = 2
@@ -1941,6 +1939,7 @@ class MessageState:
 
 class MessageItemType:
     """消息段类型枚举"""
+
     TEXT = 1
     IMAGE = 2
     VOICE = 3

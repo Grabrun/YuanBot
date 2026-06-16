@@ -1,5 +1,8 @@
 adapter: wechat-clawbot-adapter
+platform: wechat
+display_name: "个人微信"
 enabled: false
+
 config:
   # iLink Bot Token（通过 QR 码登录获取，不要手动填写）
   token: ""

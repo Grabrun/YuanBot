@@ -11,8 +11,6 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import json
-import time
-import uuid
 from collections.abc import Awaitable, Callable
 from enum import StrEnum
 from typing import Any
@@ -336,9 +334,7 @@ class NapCatAdapter(BaseChannelAdapter):
             callback: 收到用户消息后的回调函数。
         """
         if not self._client:
-            raise RuntimeError(
-                "NapCat adapter not initialized. Call initialize() first."
-            )
+            raise RuntimeError("NapCat adapter not initialized. Call initialize() first.")
 
         self._callback = callback
         self._running = True
@@ -378,9 +374,7 @@ class NapCatAdapter(BaseChannelAdapter):
 
         parts = target_id.split(":", 1)
         if len(parts) != 2:
-            return SendResult(
-                success=False, error=f"Invalid target_id format: {target_id}"
-            )
+            return SendResult(success=False, error=f"Invalid target_id format: {target_id}")
 
         target_type, target_value = parts
 
@@ -388,22 +382,30 @@ class NapCatAdapter(BaseChannelAdapter):
             return await self.send_text(target_type, target_value, content.text or "")
         elif content.content_type == ContentType.IMAGE:
             return await self.send_image(
-                target_type, target_value, content.media_url or "",
+                target_type,
+                target_value,
+                content.media_url or "",
                 media_data=content.media_data,
             )
         elif content.content_type == ContentType.VOICE:
             return await self.send_voice(
-                target_type, target_value, content.media_url or "",
+                target_type,
+                target_value,
+                content.media_url or "",
                 media_data=content.media_data,
             )
         elif content.content_type == ContentType.VIDEO:
             return await self.send_video(
-                target_type, target_value, content.media_url or "",
+                target_type,
+                target_value,
+                content.media_url or "",
                 media_data=content.media_data,
             )
         elif content.content_type == ContentType.FILE:
             return await self.send_file(
-                target_type, target_value, content.media_url or "",
+                target_type,
+                target_value,
+                content.media_url or "",
                 filename=content.metadata.get("filename"),
                 media_data=content.media_data,
             )
@@ -474,9 +476,7 @@ class NapCatAdapter(BaseChannelAdapter):
             if reply_to is not None:
                 segments.insert(0, build_reply_segment(reply_to))
 
-            last_result = await self._call_send_msg(
-                target_type, target_value, segments
-            )
+            last_result = await self._call_send_msg(target_type, target_value, segments)
             if not last_result.success:
                 logger.error("napcat_send_text_failed", error=last_result.error)
                 break
@@ -602,9 +602,7 @@ class NapCatAdapter(BaseChannelAdapter):
         if not resolved_file:
             return SendResult(success=False, error="Failed to resolve file")
 
-        segments: list[dict[str, Any]] = [
-            build_file_segment(resolved_file, name=filename)
-        ]
+        segments: list[dict[str, Any]] = [build_file_segment(resolved_file, name=filename)]
 
         return await self._call_send_msg(target_type, target_value, segments)
 
@@ -685,9 +683,7 @@ class NapCatAdapter(BaseChannelAdapter):
         result = await self._api_call("get_group_info", {"group_id": group_id})
         return result.get("data", {})
 
-    async def get_group_member_list(
-        self, group_id: str | int
-    ) -> list[dict[str, Any]]:
+    async def get_group_member_list(self, group_id: str | int) -> list[dict[str, Any]]:
         """获取群成员列表
 
         Args:
@@ -696,9 +692,7 @@ class NapCatAdapter(BaseChannelAdapter):
         Returns:
             list[dict]: 成员列表。
         """
-        result = await self._api_call(
-            "get_group_member_list", {"group_id": group_id}
-        )
+        result = await self._api_call("get_group_member_list", {"group_id": group_id})
         return result.get("data", [])
 
     async def get_group_member_info(
@@ -746,9 +740,7 @@ class NapCatAdapter(BaseChannelAdapter):
             error=result.get("wording", result.get("message", "Ban failed")),
         )
 
-    async def set_group_whole_ban(
-        self, group_id: str | int, enable: bool = True
-    ) -> SendResult:
+    async def set_group_whole_ban(self, group_id: str | int, enable: bool = True) -> SendResult:
         """全员禁言
 
         Args:
@@ -827,9 +819,7 @@ class NapCatAdapter(BaseChannelAdapter):
             error=result.get("wording", result.get("message", "Set admin failed")),
         )
 
-    async def get_group_notice(
-        self, group_id: str | int
-    ) -> list[dict[str, Any]]:
+    async def get_group_notice(self, group_id: str | int) -> list[dict[str, Any]]:
         """获取群公告列表
 
         Args:
@@ -838,14 +828,10 @@ class NapCatAdapter(BaseChannelAdapter):
         Returns:
             list[dict]: 公告列表。
         """
-        result = await self._api_call(
-            "get_group_notice", {"group_id": group_id}
-        )
+        result = await self._api_call("get_group_notice", {"group_id": group_id})
         return result.get("data", [])
 
-    async def send_group_notice(
-        self, group_id: str | int, content: str
-    ) -> SendResult:
+    async def send_group_notice(self, group_id: str | int, content: str) -> SendResult:
         """发送群公告
 
         Args:
@@ -875,9 +861,7 @@ class NapCatAdapter(BaseChannelAdapter):
         Returns:
             SendResult: 操作结果。
         """
-        result = await self._api_call(
-            "set_essence_msg", {"message_id": message_id}
-        )
+        result = await self._api_call("set_essence_msg", {"message_id": message_id})
         if result.get("status") == "ok":
             return SendResult(success=True, message_id=str(message_id))
         return SendResult(
@@ -885,9 +869,7 @@ class NapCatAdapter(BaseChannelAdapter):
             error=result.get("wording", result.get("message", "Set essence failed")),
         )
 
-    async def get_essence_msg_list(
-        self, group_id: str | int
-    ) -> list[dict[str, Any]]:
+    async def get_essence_msg_list(self, group_id: str | int) -> list[dict[str, Any]]:
         """获取群精华消息列表
 
         Args:
@@ -896,9 +878,7 @@ class NapCatAdapter(BaseChannelAdapter):
         Returns:
             list[dict]: 精华消息列表。
         """
-        result = await self._api_call(
-            "get_essence_msg_list", {"group_id": group_id}
-        )
+        result = await self._api_call("get_essence_msg_list", {"group_id": group_id})
         return result.get("data", [])
 
     async def set_group_card(
@@ -928,9 +908,7 @@ class NapCatAdapter(BaseChannelAdapter):
             error=result.get("wording", result.get("message", "Set card failed")),
         )
 
-    async def set_group_name(
-        self, group_id: str | int, group_name: str
-    ) -> SendResult:
+    async def set_group_name(self, group_id: str | int, group_name: str) -> SendResult:
         """设置群名称
 
         Args:
@@ -1023,9 +1001,7 @@ class NapCatAdapter(BaseChannelAdapter):
             error=result.get("wording", result.get("message", "Request failed")),
         )
 
-    async def get_stranger_info(
-        self, user_id: str | int
-    ) -> dict[str, Any]:
+    async def get_stranger_info(self, user_id: str | int) -> dict[str, Any]:
         """获取陌生人信息
 
         Args:
@@ -1034,9 +1010,7 @@ class NapCatAdapter(BaseChannelAdapter):
         Returns:
             dict: 用户信息。
         """
-        result = await self._api_call(
-            "get_stranger_info", {"user_id": user_id}
-        )
+        result = await self._api_call("get_stranger_info", {"user_id": user_id})
         return result.get("data", {})
 
     # ── 文件操作 ──────────────────────────────
@@ -1065,9 +1039,7 @@ class NapCatAdapter(BaseChannelAdapter):
         result = await self._api_call("get_image", {"file_id": file_id})
         return result.get("data", {})
 
-    async def get_record(
-        self, file_id: str, out_format: str = "mp3"
-    ) -> dict[str, Any]:
+    async def get_record(self, file_id: str, out_format: str = "mp3") -> dict[str, Any]:
         """获取语音文件信息
 
         Args:
@@ -1077,9 +1049,7 @@ class NapCatAdapter(BaseChannelAdapter):
         Returns:
             dict: 语音文件信息。
         """
-        result = await self._api_call(
-            "get_record", {"file_id": file_id, "out_format": out_format}
-        )
+        result = await self._api_call("get_record", {"file_id": file_id, "out_format": out_format})
         return result.get("data", {})
 
     async def get_group_file_url(
@@ -1192,9 +1162,7 @@ class NapCatAdapter(BaseChannelAdapter):
         elif target_type == "group":
             params["group_id"] = str(target_value)
         else:
-            return SendResult(
-                success=False, error=f"Unsupported target type: {target_type}"
-            )
+            return SendResult(success=False, error=f"Unsupported target type: {target_type}")
 
         result = await self._api_call("send_msg", params)
 
@@ -1206,9 +1174,7 @@ class NapCatAdapter(BaseChannelAdapter):
             )
         return SendResult(
             success=False,
-            error=result.get(
-                "wording", result.get("message", "Send failed")
-            ),
+            error=result.get("wording", result.get("message", "Send failed")),
         )
 
     async def _fetch_bot_info(self) -> None:
@@ -1295,9 +1261,7 @@ class NapCatAdapter(BaseChannelAdapter):
                         content_length = int(value.strip())
 
             # 只处理 POST 请求
-            request_parts = (
-                request_line.decode("utf-8", errors="replace").strip().split()
-            )
+            request_parts = request_line.decode("utf-8", errors="replace").strip().split()
             if len(request_parts) < 2 or request_parts[0] != "POST":
                 self._send_http_response(writer, 405, "Method Not Allowed")
                 return
@@ -1729,54 +1693,40 @@ class NapCatAdapter(BaseChannelAdapter):
             text = content.text or ""
             if not text:
                 return
-            result = await self.send_text(
-                scene, target, text, reply_to=msg_id
-            )
+            result = await self.send_text(scene, target, text, reply_to=msg_id)
             if not result.success:
                 logger.error("napcat_deliver_failed", error=result.error)
 
         elif content.content_type == ContentType.IMAGE:
             file = content.media_url or content.text or ""
             if content.media_data:
-                result = await self.send_image(
-                    scene, target, file, media_data=content.media_data
-                )
+                result = await self.send_image(scene, target, file, media_data=content.media_data)
             elif file:
                 result = await self.send_image(scene, target, file)
             else:
-                result = SendResult(
-                    success=False, error="No image data available"
-                )
+                result = SendResult(success=False, error="No image data available")
             if not result.success:
                 logger.error("napcat_deliver_image_failed", error=result.error)
 
         elif content.content_type == ContentType.VOICE:
             file = content.media_url or content.text or ""
             if content.media_data:
-                result = await self.send_voice(
-                    scene, target, file, media_data=content.media_data
-                )
+                result = await self.send_voice(scene, target, file, media_data=content.media_data)
             elif file:
                 result = await self.send_voice(scene, target, file)
             else:
-                result = SendResult(
-                    success=False, error="No voice data available"
-                )
+                result = SendResult(success=False, error="No voice data available")
             if not result.success:
                 logger.error("napcat_deliver_voice_failed", error=result.error)
 
         elif content.content_type == ContentType.VIDEO:
             file = content.media_url or content.text or ""
             if content.media_data:
-                result = await self.send_video(
-                    scene, target, file, media_data=content.media_data
-                )
+                result = await self.send_video(scene, target, file, media_data=content.media_data)
             elif file:
                 result = await self.send_video(scene, target, file)
             else:
-                result = SendResult(
-                    success=False, error="No video data available"
-                )
+                result = SendResult(success=False, error="No video data available")
             if not result.success:
                 logger.error("napcat_deliver_video_failed", error=result.error)
 
@@ -1785,17 +1735,21 @@ class NapCatAdapter(BaseChannelAdapter):
             filename = content.metadata.get("filename")
             if content.media_data:
                 result = await self.send_file(
-                    scene, target, file, filename=filename,
+                    scene,
+                    target,
+                    file,
+                    filename=filename,
                     media_data=content.media_data,
                 )
             elif file:
                 result = await self.send_file(
-                    scene, target, file, filename=filename,
+                    scene,
+                    target,
+                    file,
+                    filename=filename,
                 )
             else:
-                result = SendResult(
-                    success=False, error="No file data available"
-                )
+                result = SendResult(success=False, error="No file data available")
             if not result.success:
                 logger.error("napcat_deliver_file_failed", error=result.error)
 
