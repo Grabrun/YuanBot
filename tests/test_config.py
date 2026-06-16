@@ -402,7 +402,7 @@ class TestNewConfigLoader:
         config = loader.load_bot_config()
         assert isinstance(config, BotConfig)
         assert config.app_name == "YuanBot"
-        assert config.ai.default_provider == "openai"
+        assert config.ai.default_provider == "deepseek"
 
     def test_load_database_config(self):
         loader = ConfigLoader(Path(__file__).parent.parent / "configs")
@@ -520,7 +520,7 @@ class TestLoadConfigFromDirectory:
         project_root = Path(__file__).parent.parent
         config = load_config(project_root / "configs")
         assert config.app_name == "YuanBot"
-        assert config.ai_provider.provider_id == "openai"
+        assert config.ai_provider.provider_id == "deepseek"
         assert config.persona_id == "default"
 
     def test_load_from_tmp_directory(self, tmp_path):
