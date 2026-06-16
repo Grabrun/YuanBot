@@ -55,7 +55,7 @@ def _info(msg: str) -> None:
 
 # ── 核心安装逻辑 ──────────────────────────
 
-VERSION = "1.0.1"
+VERSION = "1.0.2"
 REPO_URL = "https://github.com/Grabrun/YuanBot.git"
 
 
