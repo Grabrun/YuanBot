@@ -60,27 +60,20 @@ REPO_URL = "https://github.com/Grabrun/YuanBot.git"
 
 
 def _run_cmd(cmd: list[str], cwd: str | None = None, timeout: int | None = None) -> int:
-    """运行命令并实时显示输出"""
+    """运行命令并实时显示输出（流式输出到终端，避免管道死锁）"""
     import subprocess as _sp
+    import sys as _sys
     env = os.environ.copy()
     env["PYTHONIOENCODING"] = "utf-8"
     env["GIT_TERMINAL_PROMPT"] = "0"
-    proc = _sp.Popen(
-        cmd,
-        cwd=cwd,
-        stdout=_sp.PIPE,
-        stderr=_sp.STDOUT,
-        env=env,
-        bufsize=1,
-        text=True,
-    )
-    if proc.stdout:
-        for line in iter(proc.stdout.readline, ''):
-            line = line.rstrip()
-            if line:
-                # 缩进显示子进程输出，区分于主程序的日志
-                print(f"     {line}")
-    proc.wait(timeout=timeout)
+    # 不捕获输出，直接透传到终端
+    proc = _sp.Popen(cmd, cwd=cwd, env=env)
+    try:
+        proc.wait(timeout=timeout)
+    except _sp.TimeoutExpired:
+        proc.kill()
+        proc.wait()
+        raise
     return proc.returncode
 MIN_PYTHON = (3, 12)
 
