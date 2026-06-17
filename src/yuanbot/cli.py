@@ -1966,7 +1966,11 @@ def _run_full_install(args: argparse.Namespace) -> None:
                 )
             _ok(f"默认提供商已设为 {provider}")
 
-    # 8. 运行 doctor 验证
+    # 8. 配置消息通道
+    if not args.non_interactive:
+        _configure_channels(project_root, python_path)
+
+    # 9. 运行 doctor 验证
     print()
     _info("运行系统诊断...")
     result = subprocess.run(
@@ -1974,7 +1978,7 @@ def _run_full_install(args: argparse.Namespace) -> None:
         cwd=project_root,
     )
 
-    # 9. 完成
+    # 10. 完成
     print()
     print(_c("=" * 50, _GREEN))
     print(_c("🎉 YuanBot 安装完成!", _GREEN + _BOLD))
@@ -1997,6 +2001,227 @@ def _run_full_install(args: argparse.Namespace) -> None:
     print("  " + _c("  终端聊天:", _BOLD))
     print(f"    {_c('yuanbot tui', _CYAN)}")
     print()
+
+
+def _configure_channels(project_root: Path, python_path: Path) -> None:
+    """交互式配置消息通道"""
+    import yaml
+
+    channels_dir = project_root / "configs" / "Channels"
+    if not channels_dir.exists():
+        return
+
+    print()
+    _info("消息通道配置")
+    print(_c("─" * 40, _DIM))
+    print("  是否要配置消息通道？配置后 YuanBot 可以接入")
+    print("  微信、QQ、Telegram、钉钉等平台 (‵▽′)ψ")
+    print()
+    choice = input(_c("  配置通道？(Y/n): ", _BOLD)).strip().lower()
+    if choice == "n":
+        _info("跳过通道配置，可通过 'yuanbot config' 随时配置")
+        return
+
+    # 收集所有可用的通道
+    channel_files = sorted(channels_dir.glob("*.yaml"))
+    if not channel_files:
+        _info("暂无可用通道配置文件")
+        return
+
+    # 通道定义：显示名、描述、所需配置字段
+    channel_defs = {
+        "telegram": {
+            "display": "Telegram",
+            "desc": "Telegram Bot，长轮询模式",
+            "fields": [
+                ("bot_token", "Bot Token", "", True),
+            ],
+        },
+        "napcat": {
+            "display": "QQ (NapCat)",
+            "desc": "基于 NapCat + OneBot v11 的 QQ 机器人",
+            "fields": [
+                ("http_host", "NapCat HTTP 地址", "127.0.0.1", False),
+                ("http_port", "NapCat HTTP 端口", "3000", False),
+                ("http_token", "NapCat HTTP Token (可选)", "", False),
+                ("webhook_host", "Webhook 监听地址", "0.0.0.0", False),
+                ("webhook_port", "Webhook 监听端口", "8081", False),
+            ],
+        },
+        "wechat": {
+            "display": "微信 (iLink)",
+            "desc": "微信 iLink 协议接入，支持 CDN 加解密",
+            "fields": [
+                ("token", "Token", "", True),
+                ("ilink_user_id", "iLink User ID", "", True),
+                ("bot_id", "Bot ID", "", False),
+                ("cdn_base_url", "CDN 地址", "https://file2.ipip.cc", False),
+            ],
+        },
+        "dingtalk": {
+            "display": "钉钉",
+            "desc": "钉钉企业内部应用机器人",
+            "fields": [
+                ("app_key", "App Key / Client ID", "", True),
+                ("app_secret", "App Secret / Client Secret", "", True),
+                ("webhook_token", "Webhook Token (可选)", "", False),
+                ("webhook_port", "Webhook 监听端口", "8080", False),
+            ],
+        },
+        "discord": {
+            "display": "Discord",
+            "desc": "Discord Bot，支持 Slash 命令",
+            "fields": [
+                ("bot_token", "Bot Token", "", True),
+                ("public_key", "Public Key (可选)", "", False),
+            ],
+        },
+        "feishu": {
+            "display": "飞书",
+            "desc": "飞书企业自建应用机器人",
+            "fields": [
+                ("app_id", "App ID", "", True),
+                ("app_secret", "App Secret", "", True),
+                ("verification_token", "Verification Token (可选)", "", False),
+                ("encrypt_key", "Encrypt Key (可选)", "", False),
+            ],
+        },
+        "qq": {
+            "display": "QQ (官方)",
+            "desc": "QQ 官方机器人 API (WebSocket)",
+            "fields": [
+                ("app_id", "App ID", "", True),
+                ("app_secret", "App Secret", "", True),
+            ],
+        },
+        "wecom": {
+            "display": "企业微信",
+            "desc": "企业微信应用机器人",
+            "fields": [
+                ("corp_id", "企业 ID (CorpID)", "", True),
+                ("corp_secret", "应用 Secret", "", True),
+                ("agent_id", "应用 AgentID", "", True),
+                ("token", "Token (可选)", "", False),
+                ("encoding_aes_key", "EncodingAESKey (可选)", "", False),
+            ],
+        },
+        "webchat": {
+            "display": "Web 聊天",
+            "desc": "浏览器 WebUI 聊天 (无需额外配置)",
+            "fields": [],
+        },
+    }
+
+    # 列出可用通道供选择
+    available = []
+    for cf in channel_files:
+        platform = cf.stem
+        if platform in channel_defs:
+            available.append(platform)
+
+    if not available:
+        _info("没有可配置的通道")
+        return
+
+    print()
+    _info("可用通道:")
+    for i, platform in enumerate(available, 1):
+        info = channel_defs[platform]
+        print(f"  {_c(str(i), _BOLD)}. {info['display']} — {info['desc']}")
+
+    selected_input = input(
+        _c(f"\n  请选择要配置的通道 (1-{len(available)}，逗号分隔，或 a=全部，0=跳过): ", _BOLD)
+    ).strip()
+
+    if selected_input == "0":
+        _info("跳过通道配置")
+        return
+
+    if selected_input.lower() == "a":
+        selected_indices = list(range(1, len(available) + 1))
+    else:
+        try:
+            selected_indices = [int(x.strip()) for x in selected_input.split(",")]
+            for idx in selected_indices:
+                if idx < 1 or idx > len(available):
+                    _warn(f"无效选项: {idx}，已忽略")
+            selected_indices = [x for x in selected_indices if 1 <= x <= len(available)]
+        except ValueError:
+            _warn("输入格式无效，跳过通道配置")
+            return
+
+    if not selected_indices:
+        _info("未选择任何通道")
+        return
+
+    # 逐个配置选中的通道
+    for idx in selected_indices:
+        platform = available[idx - 1]
+        info = channel_defs[platform]
+        print()
+        print(_c(f"  📡 配置 {info['display']}", _BOLD))
+        print(_c("  " + "─" * 30, _DIM))
+
+        # 读取现有配置
+        config_file = channels_dir / f"{platform}.yaml"
+        try:
+            with open(config_file) as f:
+                cfg = yaml.safe_load(f) or {}
+        except Exception:
+            cfg = {}
+
+        if "config" not in cfg:
+            cfg["config"] = {}
+        cfg["enabled"] = True
+
+        # 逐个字段询问
+        for field_key, field_label, default_val, required in info["fields"]:
+            current_val = cfg["config"].get(field_key, "")
+            prompt_label = f"    {field_label}"
+            if required:
+                prompt_label += _c(" *", _RED)
+
+            prompt = prompt_label
+            if current_val:
+                prompt += f" [{_c(current_val, _DIM)}]"
+            elif default_val:
+                prompt += f" [{default_val}]"
+            if required and not current_val:
+                prompt += ": "
+            else:
+                prompt += " (回车跳过): "
+
+            val = input(_c(prompt, "")).strip()
+            if val:
+                cfg["config"][field_key] = val
+            elif not current_val and default_val and not required:
+                cfg["config"][field_key] = default_val
+            # 如果已经有值且用户回车，保留原值
+
+        # 保存配置
+        with open(config_file, "w") as f:
+            yaml.safe_dump(
+                cfg, f, allow_unicode=True, default_flow_style=False, sort_keys=False
+            )
+        _ok(f"{info['display']} 配置已保存")
+
+        # 如果是默认通道，更新 bot.yaml
+        if platform in ("telegram", "wechat", "webchat"):
+            bot_yaml = project_root / "configs" / "bot.yaml"
+            if bot_yaml.exists():
+                try:
+                    with open(bot_yaml) as f:
+                        bot_cfg = yaml.safe_load(f) or {}
+                    bot_cfg.setdefault("channels", {})["default_channel"] = platform
+                    with open(bot_yaml, "w") as f:
+                        yaml.safe_dump(
+                            bot_cfg, f, allow_unicode=True, default_flow_style=False, sort_keys=False
+                        )
+                except Exception:
+                    pass
+
+    print()
+    _ok("通道配置完成！(◕‿◕✿)")
 
 
 # --------------------------------------------------------------------------- #
