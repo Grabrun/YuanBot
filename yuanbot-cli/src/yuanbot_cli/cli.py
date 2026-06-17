@@ -54,7 +54,7 @@ def _info(msg: str) -> None:
 
 # ── 核心安装逻辑 ──────────────────────────
 
-VERSION = "1.2.3"
+VERSION = "1.2.4"
 REPO_URL = "https://github.com/Grabrun/YuanBot.git"
 
 
@@ -634,11 +634,14 @@ def _setup_wechat_qrcode(target_dir: Path, channels_dir: Path) -> None:
         print()
         _info("请用手机微信扫描以下二维码以登录：")
 
-        import qrcode as _qr
+        try:
+            import qrcode as _qr
 
-        qr = _qr.QRCode(border=1, box_size=2)
-        qr.add_data(qrcode_url)
-        qr.print_ascii()
+            qr = _qr.QRCode(border=1, box_size=2)
+            qr.add_data(qrcode_url)
+            qr.print_ascii()
+        except ImportError:
+            print(f"    {_c(qrcode_url, _CYAN)}")
         print(f"  {_c('或打开此链接扫码: ' + qrcode_url, _DIM)}")
         print()
 
