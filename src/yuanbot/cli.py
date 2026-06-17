@@ -2112,11 +2112,11 @@ def _configure_channels(project_root: Path, python_path: Path) -> None:
         },
     }
 
-    # 列出可用通道供选择
+    # 列出可用通道供选择（排除默认内置的 webchat）
     available = []
     for cf in channel_files:
         platform = cf.stem
-        if platform in channel_defs:
+        if platform in channel_defs and platform != "webchat":
             available.append(platform)
 
     if not available:
@@ -2205,20 +2205,19 @@ def _configure_channels(project_root: Path, python_path: Path) -> None:
             )
         _ok(f"{info['display']} 配置已保存")
 
-        # 如果是默认通道，更新 bot.yaml
-        if platform in ("telegram", "wechat", "webchat"):
-            bot_yaml = project_root / "configs" / "bot.yaml"
-            if bot_yaml.exists():
-                try:
-                    with open(bot_yaml) as f:
-                        bot_cfg = yaml.safe_load(f) or {}
-                    bot_cfg.setdefault("channels", {})["default_channel"] = platform
-                    with open(bot_yaml, "w") as f:
-                        yaml.safe_dump(
-                            bot_cfg, f, allow_unicode=True, default_flow_style=False, sort_keys=False
-                        )
-                except Exception:
-                    pass
+        # 将最后配置的通道设为默认通道
+        bot_yaml = project_root / "configs" / "bot.yaml"
+        if bot_yaml.exists():
+            try:
+                with open(bot_yaml) as f:
+                    bot_cfg = yaml.safe_load(f) or {}
+                bot_cfg.setdefault("channels", {})["default_channel"] = platform
+                with open(bot_yaml, "w") as f:
+                    yaml.safe_dump(
+                        bot_cfg, f, allow_unicode=True, default_flow_style=False, sort_keys=False
+                    )
+            except Exception:
+                pass
 
     print()
     _ok("通道配置完成！(◕‿◕✿)")
