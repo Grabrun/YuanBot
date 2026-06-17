@@ -54,7 +54,7 @@ def _info(msg: str) -> None:
 
 # ── 核心安装逻辑 ──────────────────────────
 
-VERSION = "1.2.0"
+VERSION = "1.2.1"
 REPO_URL = "https://github.com/Grabrun/YuanBot.git"
 
 
@@ -394,6 +394,103 @@ def _run_install(args: argparse.Namespace) -> None:
     print()
 
 
+# ── 更新 ──────────────────────────────
+
+
+def _run_update(args: argparse.Namespace) -> None:
+    """更新已有 YuanBot 到最新版本"""
+    target_dir: Path
+    if args.dir:
+        target_dir = Path(args.dir).resolve()
+    else:
+        target_dir = Path.cwd()
+
+    print()
+    print(f"  {_c('🌸 正在更新 YuanBot', _CYAN + _BOLD)}")
+    print(f"  {_c('—' * 40, _DIM)}")
+
+    # 1. 检查是否是 YuanBot 项目
+    _header("检查项目")
+    is_valid = (target_dir / "pyproject.toml").exists() and (
+        target_dir / "src" / "yuanbot"
+    ).exists()
+    if not is_valid:
+        _fail(f"{target_dir} 中未找到 YuanBot 项目")
+        _info("请 cd 到 YuanBot 安装目录后重试，或使用 --dir 指定目录")
+        sys.exit(1)
+    _ok(f"YuanBot 项目: {target_dir}")
+    print()
+
+    # 2. 检查 git 并拉取最新代码
+    _header("拉取代码")
+    if not shutil.which("git"):
+        _fail("需要安装 Git")
+        sys.exit(1)
+
+    if not (target_dir / ".git").exists():
+        _warn("不是 Git 仓库，跳过代码更新")
+        _info("如需更新，请手动下载最新代码")
+    else:
+        _info("拉取最新代码...")
+        code = _run_cmd(["git", "pull"], cwd=str(target_dir))
+        if code == 0:
+            _ok("代码已更新到最新")
+        else:
+            _warn("git pull 返回非零，请检查是否有冲突")
+    print()
+
+    # 3. 检测虚拟环境
+    _header("虚拟环境")
+    venv_path = target_dir / ".venv"
+    if sys.platform == "win32":
+        py_venv = venv_path / "Scripts" / "python"
+        pip_venv = venv_path / "Scripts" / "pip"
+    else:
+        py_venv = venv_path / "bin" / "python"
+        pip_venv = venv_path / "bin" / "pip"
+
+    if not venv_path.exists():
+        _warn("虚拟环境不存在，将重新创建")
+        _info("创建虚拟环境...")
+        code = _run_cmd([sys.executable, "-m", "venv", str(venv_path)])
+        if code != 0:
+            _fail("创建虚拟环境失败")
+            sys.exit(1)
+        _ok(".venv 已创建")
+    else:
+        _ok(".venv 已存在")
+    print()
+
+    # 4. 重新安装依赖
+    _header("更新依赖")
+    _info("安装核心包...")
+    _run_cmd([str(pip_venv), "install", "-e", str(target_dir)], timeout=300)
+    _info("安装可选依赖...")
+    _run_cmd([str(pip_venv), "install", "-e", str(target_dir) + "[dev]"], timeout=300)
+    _ok("依赖已更新")
+    print()
+
+    # 5. 刷新配置模板
+    _header("刷新配置")
+    _info("更新配置模板...")
+    _run_cmd([str(py_venv), "-m", "yuanbot.cli", "config", "init"], cwd=str(target_dir))
+    _ok("配置模板已刷新")
+    print()
+
+    # 6. 运行诊断
+    _header("运行诊断")
+    _run_cmd([str(py_venv), "-m", "yuanbot.cli", "doctor"], cwd=str(target_dir))
+    print()
+
+    # 7. 完成
+    print(f"  {_c('🎉 YuanBot 已更新到最新版!', _GREEN + _BOLD)}")
+    _info(f"目录: {target_dir}")
+    print()
+    _header("提示")
+    _info("如果下方有配置模板更新提示，请手动合并差异")
+    print()
+
+
 # ── 通道配置 ──────────────────────────
 
 
@@ -682,9 +779,19 @@ def main() -> None:
     # yuanbot version
     sub.add_parser("version", help="显示版本号")
 
+    # yuanbot update
+    update_parser = sub.add_parser("update", help="更新 YuanBot 到最新版本")
+    update_parser.add_argument(
+        "--dir",
+        default="",
+        help="YuanBot 安装目录（默认当前目录）",
+    )
+
     args = parser.parse_args()
 
     if args.command == "install":
         _run_install(args)
+    elif args.command == "update":
+        _run_update(args)
     else:
         parser.print_help()
