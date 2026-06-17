@@ -14,9 +14,9 @@ config:
   # NapCat HTTP Token（对应 onebot_config 中的 access_token）
   http_token: ""
 
-  # WebSocket 监听地址（事件上报，不配置则使用 HTTP webhook）
-  ws_host: ""
-  ws_port: 0
+  # WebSocket 监听地址（NapCat Forward WebSocket 模式）
+  ws_host: "0.0.0.0"
+  ws_port: 8081
 
   # 机器人 QQ 号
   bot_qq: ""
