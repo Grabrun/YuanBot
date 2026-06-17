@@ -109,6 +109,13 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Build and publish yuanbot-cli to PyPI
+        if: steps.tag-check.outputs.exists == 'false'
+        run: |
+          cd yuanbot-cli
+          uv build
+          uv publish --token "${{ secrets.PYPI_TOKEN }}"
+
       - name: Build and push Docker image
         if: steps.tag-check.outputs.exists == 'false'
         uses: docker/build-push-action@v6

@@ -54,7 +54,7 @@ def _info(msg: str) -> None:
 
 # ── 核心安装逻辑 ──────────────────────────
 
-VERSION = "1.1.0"
+VERSION = "1.2.0"
 REPO_URL = "https://github.com/Grabrun/YuanBot.git"
 
 
@@ -97,6 +97,88 @@ PROVIDERS = {
         "file": "anthropic.yaml",
         "model": "claude-sonnet-4-6",
         "key_hint": "sk-ant-...",
+    },
+}
+
+# 支持的聊天通道
+CHANNELS = {
+    "telegram": {
+        "name": "Telegram",
+        "desc": "Telegram Bot，长轮询模式",
+        "file": "telegram.yaml",
+        "fields": [
+            ("bot_token", "Bot Token", "", True),
+        ],
+    },
+    "napcat": {
+        "name": "QQ (NapCat)",
+        "desc": "基于 NapCat + OneBot v11 的 QQ 机器人",
+        "file": "napcat.yaml",
+        "fields": [
+            ("http_host", "NapCat HTTP 地址", "127.0.0.1", False),
+            ("http_port", "NapCat HTTP 端口", "3000", False),
+            ("http_token", "NapCat HTTP Token (可选)", "", False),
+            ("webhook_host", "Webhook 监听地址", "0.0.0.0", False),
+            ("webhook_port", "Webhook 监听端口", "8081", False),
+        ],
+    },
+    "wechat": {
+        "name": "微信 (iLink)",
+        "desc": "微信 iLink 协议接入，支持扫码登录",
+        "file": "wechat.yaml",
+        "fields": [],  # 微信走扫码登录特殊流程
+    },
+    "dingtalk": {
+        "name": "钉钉",
+        "desc": "钉钉企业内部应用机器人",
+        "file": "dingtalk.yaml",
+        "fields": [
+            ("app_key", "App Key / Client ID", "", True),
+            ("app_secret", "App Secret / Client Secret", "", True),
+            ("webhook_token", "Webhook Token (可选)", "", False),
+            ("webhook_port", "Webhook 监听端口", "8080", False),
+        ],
+    },
+    "discord": {
+        "name": "Discord",
+        "desc": "Discord Bot，支持 Slash 命令",
+        "file": "discord.yaml",
+        "fields": [
+            ("bot_token", "Bot Token", "", True),
+            ("public_key", "Public Key (可选)", "", False),
+        ],
+    },
+    "feishu": {
+        "name": "飞书",
+        "desc": "飞书企业自建应用机器人",
+        "file": "feishu.yaml",
+        "fields": [
+            ("app_id", "App ID", "", True),
+            ("app_secret", "App Secret", "", True),
+            ("verification_token", "Verification Token (可选)", "", False),
+            ("encrypt_key", "Encrypt Key (可选)", "", False),
+        ],
+    },
+    "qq": {
+        "name": "QQ (官方)",
+        "desc": "QQ 官方机器人 API (WebSocket)",
+        "file": "qq.yaml",
+        "fields": [
+            ("app_id", "App ID", "", True),
+            ("app_secret", "App Secret", "", True),
+        ],
+    },
+    "wecom": {
+        "name": "企业微信",
+        "desc": "企业微信应用机器人",
+        "file": "wecom.yaml",
+        "fields": [
+            ("corp_id", "企业 ID (CorpID)", "", True),
+            ("corp_secret", "应用 Secret", "", True),
+            ("agent_id", "应用 AgentID", "", True),
+            ("token", "Token (可选)", "", False),
+            ("encoding_aes_key", "EncodingAESKey (可选)", "", False),
+        ],
     },
 }
 
@@ -284,11 +366,7 @@ def _run_install(args: argparse.Namespace) -> None:
 
     # ── 9. 配置聊天通道 ────────────────
     if not non_interactive:
-        _header("聊天通道")
-        _info("YuanBot 支持微信、QQ、Telegram 等聊天通道")
-        answer = input(f"  {_c('?', _CYAN)} 是否配置微信个人通道？(y/N): ").strip().lower()
-        if answer in ("y", "yes"):
-            _setup_wechat_channel(target_dir, py_venv, venv_path)
+        _configure_channels(target_dir)
     print()
 
     # ── 10. 运行诊断 ────────────────────
@@ -316,20 +394,122 @@ def _run_install(args: argparse.Namespace) -> None:
     print()
 
 
-# ── 微信通道配置 ──────────────────────
+# ── 通道配置 ──────────────────────────
 
 
-def _setup_wechat_channel(
-    target_dir: Path,
-    py_venv: Path,
-    venv_path: Path,
+def _configure_channels(target_dir: Path) -> None:
+    """交互式选择并配置消息通道"""
+    channels_dir = target_dir / "configs" / "Channels"
+    if not channels_dir.exists():
+        _info("通道配置目录不存在，跳过")
+        return
+
+    _header("聊天通道")
+    _info("YuanBot 支持接入多个聊天平台 ヽ(✧∀✧)ﾉ")
+    print()
+
+    # 列出可用通道
+    available = []
+    for ch_file in sorted(channels_dir.glob("*.yaml")):
+        platform = ch_file.stem
+        if platform in CHANNELS:
+            available.append(platform)
+
+    if not available:
+        _info("没有可配置的通道")
+        return
+
+    print(f"  {_c('可用通道:', _BOLD)}")
+    for i, platform in enumerate(available, 1):
+        info = CHANNELS[platform]
+        mark = _c("*", _GREEN) if platform == "wechat" else " "
+        print(f"  {_c(str(i), _BOLD):>3}. {mark} {info['name']} — {info['desc']}")
+    print(f"  \n  {_c('* 微信支持扫码自动登录', _DIM)}")
+
+    choice = input(
+        f"\n  {_c('?', _CYAN)} 选择通道 (1-{len(available)}，逗号分隔，a=全部，0=跳过): "
+    ).strip()
+
+    if choice == "0":
+        _info("跳过通道配置，可通过 yuanbot install 重新配置")
+        return
+
+    if choice.lower() == "a":
+        selected = list(range(1, len(available) + 1))
+    else:
+        try:
+            selected = [int(x.strip()) for x in choice.split(",")]
+            selected = [x for x in selected if 1 <= x <= len(available)]
+        except ValueError:
+            _warn("输入无效，跳过通道配置")
+            return
+
+    if not selected:
+        _info("未选择任何通道")
+        return
+
+    for idx in selected:
+        platform = available[idx - 1]
+        info = CHANNELS[platform]
+        print()
+        print(f"  {_c('──', _DIM)} {_c(info['name'], _BOLD)} {'─' * 20}")
+
+        if platform == "wechat":
+            _setup_wechat_qrcode(target_dir, channels_dir)
+        else:
+            _configure_channel_basic(target_dir / "configs", channels_dir, platform, info)
+
+    print()
+    _ok("通道配置完成！(◕‿◕✿)")
+
+
+def _configure_channel_basic(
+    configs_dir: Path,
+    channels_dir: Path,
+    platform: str,
+    info: dict,
 ) -> None:
+    """配置非微信通道（逐字段引导填写）"""
+    import yaml
+
+    config_file = channels_dir / info["file"]
+    if not config_file.exists():
+        _warn(f"{info['file']} 不存在，跳过")
+        return
+
+    try:
+        with open(config_file, encoding="utf-8") as f:
+            cfg = yaml.safe_load(f) or {}
+    except Exception:
+        cfg = {}
+
+    if "config" not in cfg:
+        cfg["config"] = {}
+    cfg["enabled"] = True
+
+    for field_key, field_label, default_val, required in info["fields"]:
+        current = cfg["config"].get(field_key, "")
+        req_mark = _c(" *", _RED) if required else ""
+        default_hint = f" [{_c(current or default_val, _DIM)}]" if current or default_val else ""
+        prompt = f"  {field_label}{req_mark}{default_hint}: "
+        val = input(prompt).strip()
+        if val:
+            cfg["config"][field_key] = val
+        elif not current and default_val and not required:
+            cfg["config"][field_key] = default_val
+
+    with open(config_file, "w", encoding="utf-8") as f:
+        yaml.safe_dump(cfg, f, allow_unicode=True, default_flow_style=False)
+    _ok(f"{info['name']} 配置已保存")
+
+
+def _setup_wechat_qrcode(target_dir: Path, channels_dir: Path) -> None:
     """配置微信个人通道（QR 码扫码登录）"""
     import json
     import urllib.parse
     import urllib.request
 
-    wechat_path = target_dir / "configs" / "Channels" / "wechat.yaml"
+    wechat_path = channels_dir / "wechat.yaml"
     if not wechat_path.exists():
         _warn("wechat.yaml 配置文件不存在")
         return
@@ -358,7 +538,6 @@ def _setup_wechat_channel(
         _info("请用手机微信扫描以下二维码以登录：")
         print(f"    {_c(qrcode_url, _CYAN)}")
 
-        # 尝试生成文本二维码
         try:
             import qrcode as _qr
 
@@ -374,7 +553,7 @@ def _setup_wechat_channel(
         # 2. 轮询二维码状态
         import time as _time
 
-        deadline = _time.time() + 480  # 8分钟超时
+        deadline = _time.time() + 480
         bot_token = ""
         ilink_user_id = ""
         ilink_bot_id = ""
@@ -425,7 +604,7 @@ def _setup_wechat_channel(
             _fail("微信登录超时")
             return
 
-        # 3. 保存配置到 wechat.yaml
+        # 3. 保存配置
         import yaml
 
         with open(wechat_path, encoding="utf-8") as f:
