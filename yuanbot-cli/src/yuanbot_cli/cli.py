@@ -54,7 +54,7 @@ def _info(msg: str) -> None:
 
 # ── 核心安装逻辑 ──────────────────────────
 
-VERSION = "1.2.4"
+VERSION = "1.2.5"
 REPO_URL = "https://github.com/Grabrun/YuanBot.git"
 
 
@@ -112,14 +112,12 @@ CHANNELS = {
     },
     "napcat": {
         "name": "QQ (NapCat)",
-        "desc": "基于 NapCat + OneBot v11 的 QQ 机器人 (WebSocket)",
+        "desc": "基于 NapCat + OneBot v11 的 QQ 机器人 (正向 WS)",
         "file": "napcat.yaml",
         "fields": [
-            ("http_host", "NapCat HTTP 地址", "127.0.0.1", False),
-            ("http_port", "NapCat HTTP 端口", "3000", False),
-            ("http_token", "NapCat HTTP Token (可选)", "", False),
-            ("ws_host", "WebSocket 监听地址", "0.0.0.0", False),
-            ("ws_port", "WebSocket 监听端口", "8081", False),
+            ("ws_host", "NapCat WS 地址", "127.0.0.1", False),
+            ("ws_port", "NapCat WS 端口", "3001", False),
+            ("ws_token", "NapCat WS Token (可选)", "", False),
         ],
     },
     "wechat": {

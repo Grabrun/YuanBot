@@ -7,16 +7,20 @@ display_name: "NapCat QQ"
 enabled: false
 
 config:
-  # NapCat HTTP 服务地址
+  # ═══ 正向 WebSocket（主要通讯方式）═══
+  # NapCat 的 WebSocket Server 地址
+  # 对应 NapCat onebot_config 中的 ws_server 配置
+  ws_host: "127.0.0.1"
+  ws_port: 3001
+
+  # WebSocket 认证 Token（对应 access_token）
+  ws_token: ""
+
+  # ═══ HTTP API（备选通讯方式）═══════
+  # 仅当 WS 不可用时降级使用
   http_host: "127.0.0.1"
   http_port: 3000
-
-  # NapCat HTTP Token（对应 onebot_config 中的 access_token）
   http_token: ""
-
-  # WebSocket 监听地址（NapCat Forward WebSocket 模式）
-  ws_host: "0.0.0.0"
-  ws_port: 8081
 
   # 机器人 QQ 号
   bot_qq: ""
