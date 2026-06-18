@@ -1,11 +1,12 @@
 """NapCat (OneBot v11) QQ 通道适配器
 
 基于 OneBot v11 协议标准，支持 NapCat QQ 实现。
-通过反向 WebSocket 接收 NapCat 事件推送，通过 HTTP API 发送消息。
+NapCat 通过反向 WebSocket 主动连接 YuanBot，一个连接搞定收发。
 
 通讯方式:
-  - 反向 WS (接收): NapCat 主动连接 YuanBot 的 WebSocket Server，上报事件
-  - HTTP API (发送): 通过 NapCat 的 HTTP API 发送消息/调用接口
+  - 反向 WS (主要): NapCat 主动连接 YuanBot 的 WS Server
+    - 事件上报、API 调用均走此连接
+  - HTTP API (备选): WS 不可用时通过 HTTP 调用接口
 
 协议文档：https://napcat.apifox.cn
 """
@@ -257,11 +258,12 @@ class NapCatAdapter(BaseChannelAdapter):
     """NapCat (OneBot v11) QQ 通道适配器
 
     实现 ChannelAdapter 接口，桥接 NapCat QQ 与 YuanBot。
-    通过反向 WebSocket 接收 NapCat 事件推送，通过 HTTP API 发送消息。
+    NapCat 通过反向 WebSocket 主动连接 YuanBot，一个连接搞定收发。
 
     通讯方式:
-      - 反向 WS (接收): NapCat 主动连接 YuanBot 的 WS Server 上报事件
-      - HTTP API (发送): 所有 API 调用通过 NapCat HTTP 接口执行
+      - 反向 WS (主要): NapCat 主动连接 YuanBot 的 WS Server
+        - 事件上报、API 调用均走此连接
+      - HTTP API (备选): WS 不可用时通过 HTTP 调用接口
     """
 
     def __init__(self) -> None:
@@ -289,6 +291,11 @@ class NapCatAdapter(BaseChannelAdapter):
         self._ws_connected: bool = False
         self._ws_read_task: asyncio.Task | None = None
         self._ws_connect_event: asyncio.Event = asyncio.Event()
+
+        # 请求-响应匹配（echo -> Future），通过反向 WS 调用 API 时使用
+        self._pending: dict[str, asyncio.Future[dict[str, Any]]] = {}
+        self._echo_counter: int = 0
+        self._echo_lock: asyncio.Lock = asyncio.Lock()
 
         # WebSocket 协议常量
         self._WS_GUID = "258EAFA5-E914-47DA-95CA-5AB9F11DCB11"
@@ -361,7 +368,9 @@ class NapCatAdapter(BaseChannelAdapter):
         """启动反向 WebSocket 服务端，等待 NapCat 连接
 
         YuanBot 作为 WebSocket 服务端，等待 NapCat 主动连接。
-        连接建立后，通过该连接接收事件推送。
+        连接建立后，一个连接搞定一切：
+          - 事件上报（NapCat → YuanBot）
+          - API 调用（YuanBot → NapCat，带 echo 匹配）
 
         Args:
             callback: 收到用户消息后的回调函数。
@@ -499,6 +508,12 @@ class NapCatAdapter(BaseChannelAdapter):
             self._ws_read_task = None
 
         self._ws_connect_event.clear()
+
+        # 取消所有待处理的 API 请求
+        for fut in self._pending.values():
+            if not fut.done():
+                fut.cancel()
+        self._pending.clear()
 
         if self._client:
             await self._client.aclose()
@@ -1139,7 +1154,7 @@ class NapCatAdapter(BaseChannelAdapter):
     ) -> dict[str, Any]:
         """调用 NapCat API
 
-        所有 API 调用通过 NapCat HTTP 接口执行。
+        优先通过反向 WebSocket 连接调用，失败时降级到 HTTP API。
 
         Args:
             action: API 端点名称（如 "send_msg", "get_group_list"）。
@@ -1148,7 +1163,7 @@ class NapCatAdapter(BaseChannelAdapter):
         Returns:
             dict: API 响应，包含 status, retcode, data 等。
         """
-        return await self._http_api_call(action, params)
+        return await self._ws_call_api(action, params)
 
     async def _http_api_call(
         self,
@@ -1196,6 +1211,59 @@ class NapCatAdapter(BaseChannelAdapter):
         except Exception as exc:
             logger.error("napcat_api_error", action=action, error=str(exc))
             return {"status": "failed", "retcode": -1, "data": None, "message": str(exc)}
+
+    async def _ws_call_api(
+        self,
+        action: str,
+        params: dict[str, Any] | None = None,
+        timeout: float = API_TIMEOUT_S,
+    ) -> dict[str, Any]:
+        """通过反向 WebSocket 连接调用 NapCat API
+
+        发送 JSON-RPC 请求，通过 echo 匹配响应。
+        如果 WS 不可用，自动降级到 HTTP API。
+
+        Args:
+            action: API 端点名称。
+            params: 请求参数。
+            timeout: 超时时间（秒）。
+
+        Returns:
+            dict: API 响应。
+        """
+        # 优先使用反向 WebSocket
+        if self._ws_connected and self._ws_writer:
+            async with self._echo_lock:
+                self._echo_counter += 1
+                echo = f"napcat_{self._echo_counter}"
+
+            payload = {
+                "action": action,
+                "params": params or {},
+                "echo": echo,
+            }
+
+            try:
+                fut: asyncio.Future[dict[str, Any]] = asyncio.Future()
+                self._pending[echo] = fut
+
+                payload_bytes = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+                await self._ws_send_frame(
+                    self._ws_writer, 0x1, payload_bytes,
+                )
+
+                result = await asyncio.wait_for(fut, timeout=timeout)
+                return result
+            except asyncio.TimeoutError:
+                self._pending.pop(echo, None)
+                logger.warning("napcat_ws_api_timeout", action=action)
+                # 超时后降级到 HTTP
+            except Exception as exc:
+                self._pending.pop(echo, None)
+                logger.warning("napcat_ws_api_error", action=action, error=str(exc))
+
+        # HTTP API 备选
+        return await self._http_api_call(action, params)
 
     async def _call_send_msg(
         self,
@@ -1459,8 +1527,10 @@ class NapCatAdapter(BaseChannelAdapter):
     async def _ws_on_text(self, text: str) -> None:
         """处理收到的 WebSocket 文本消息
 
-        反向 WS 模式下，NapCat 推送的事件通过此连接到达。
-        消息格式为 JSON，区分 API 响应（含 echo）和事件推送。
+        反向 WS 模式下，NapCat 通过此连接推送事件和返回 API 响应。
+        消息格式为 JSON，通过 echo 字段区分：
+          - 含 echo 且匹配 pending → API 响应
+          - 无 echo 或不在 pending 中 → 事件推送
 
         Args:
             text: JSON 文本。
@@ -1470,8 +1540,15 @@ class NapCatAdapter(BaseChannelAdapter):
         except json.JSONDecodeError:
             return
 
-        # 反向 WS 模式下，NapCat 不会通过此连接发送 API 响应（带 echo）
-        # 所有 API 调用走 HTTP，这里只处理事件推送
+        echo = data.get("echo")
+        if echo and echo in self._pending:
+            # API 响应，交付给等待的 Future
+            fut = self._pending.pop(echo, None)
+            if fut and not fut.done():
+                fut.set_result(data)
+            return
+
+        # 事件推送
         await self._process_event(data)
 
     # ── WebSocket 帧编解码 ────────────────────
