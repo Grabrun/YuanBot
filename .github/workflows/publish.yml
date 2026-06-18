@@ -71,21 +71,8 @@ jobs:
         if: steps.tag-check.outputs.exists == 'false'
         run: |
           VERSION="${{ steps.version.outputs.version }}"
-          python3 -c "
-import sys
-version = '$VERSION'
-prefix = '## [' + version + ']'
-in_block = False
-with open('CHANGELOG.md') as f:
-    for line in f:
-        if line.startswith(prefix):
-            in_block = True
-            continue
-        if in_block:
-            if line.startswith('## ['):
-                break
-            sys.stdout.write(line)
-" > _release_notes.md
+          export VERSION
+          python3 scripts/extract_changelog.py > _release_notes.md
           if [ ! -s _release_notes.md ]; then
             echo "Release $VERSION" > _release_notes.md
           fi
