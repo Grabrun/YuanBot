@@ -50,7 +50,7 @@ yuanbot version
 | Extra | Description | Command |
 |-------|-------------|---------|
 | `cli` | TUI + rich output | `pip install -e ".[cli]"` |
-| `openai` | OpenAI GPT models | `pip install -e ".[openai]"` |
+| `openai` | OpenAI GPT models (DeepSeek depends on this) | Included in core deps |
 | `anthropic` | Anthropic Claude | `pip install -e ".[anthropic]"` |
 | `tts` | Speech synthesis | `pip install -e ".[tts]"` |
 | `wechat` | WeChat iLink channel | `pip install -e ".[wechat]"` |

@@ -62,7 +62,7 @@ YuanBot 使用 **Optional Dependencies (extras)** 管理可选功能：
 | Extra | 功能 | 安装命令 |
 |-------|------|---------|
 | `cli` | TUI 终端界面 + `rich` 增强输出 | `pip install -e ".[cli]"` |
-| `openai` | OpenAI GPT 模型支持 | `pip install -e ".[openai]"` |
+| `openai` | OpenAI GPT 模型支持  (DeepSeek 依赖) | 已包含在核心依赖中 |
 | `anthropic` | Anthropic Claude 支持 | `pip install -e ".[anthropic]"` |
 | `tts` | 语音合成（Edge TTS / Piper） | `pip install -e ".[tts]"` |
 | `wechat` | 微信 iLink 通道 | `pip install -e ".[wechat]"` |
