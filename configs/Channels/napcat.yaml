@@ -7,17 +7,22 @@ display_name: "NapCat QQ"
 enabled: false
 
 config:
-  # ═══ 正向 WebSocket（主要通讯方式）═══
-  # NapCat 的 WebSocket Server 地址
-  # 对应 NapCat onebot_config 中的 ws_server 配置
-  ws_host: "127.0.0.1"
-  ws_port: 3001
+  # ═══ 反向 WebSocket（事件上报接收）═══════
+  # YuanBot 作为 WebSocket 服务端，等待 NapCat 主动连接
+  # 对应 NapCat onebot_config 中的 ws_reverse_servers 配置
+  # NapCat 侧配置示例:
+  #   "ws_reverse_servers": [{
+  #     "name": "yuanbot",
+  #     "url": "ws://127.0.0.1:8080/onebot/v11/ws",
+  #     "reconnect_interval": 3000
+  #   }]
+  reverse_ws_host: "0.0.0.0"
+  reverse_ws_port: 8080
+  reverse_ws_path: "/onebot/v11/ws"
+  reverse_ws_token: ""
 
-  # WebSocket 认证 Token（对应 access_token）
-  ws_token: ""
-
-  # ═══ HTTP API（备选通讯方式）═══════
-  # 仅当 WS 不可用时降级使用
+  # ═══ HTTP API（发送消息和调用接口）══════
+  # 所有 API 调用通过 NapCat HTTP 接口执行
   http_host: "127.0.0.1"
   http_port: 3000
   http_token: ""

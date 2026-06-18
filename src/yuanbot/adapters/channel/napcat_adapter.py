@@ -1,7 +1,11 @@
 """NapCat (OneBot v11) QQ 通道适配器
 
 基于 OneBot v11 协议标准，支持 NapCat QQ 实现。
-通过 HTTP API 发送消息，通过 WebSocket 接收事件。
+通过反向 WebSocket 接收 NapCat 事件推送，通过 HTTP API 发送消息。
+
+通讯方式:
+  - 反向 WS (接收): NapCat 主动连接 YuanBot 的 WebSocket Server，上报事件
+  - HTTP API (发送): 通过 NapCat 的 HTTP API 发送消息/调用接口
 
 协议文档：https://napcat.apifox.cn
 """
@@ -253,22 +257,22 @@ class NapCatAdapter(BaseChannelAdapter):
     """NapCat (OneBot v11) QQ 通道适配器
 
     实现 ChannelAdapter 接口，桥接 NapCat QQ 与 YuanBot。
-    通过正向 WebSocket 连接 NapCat 进行消息收发。
-    支持群聊和私聊消息收发。
+    通过反向 WebSocket 接收 NapCat 事件推送，通过 HTTP API 发送消息。
 
     通讯方式:
-      - 正向 WS (主要): 连接到 NapCat 的 WebSocket 服务端
-      - HTTP API (备选): 当 WS 不可用时通过 HTTP 发送
+      - 反向 WS (接收): NapCat 主动连接 YuanBot 的 WS Server 上报事件
+      - HTTP API (发送): 所有 API 调用通过 NapCat HTTP 接口执行
     """
 
     def __init__(self) -> None:
         super().__init__()
-        # 正向 WS 配置（主要通讯方式）
-        self._ws_host: str = "127.0.0.1"
-        self._ws_port: int = 3001
-        self._ws_token: str = ""
+        # 反向 WS 配置（NapCat 主动连接过来）
+        self._reverse_ws_host: str = "0.0.0.0"
+        self._reverse_ws_port: int = 8080
+        self._reverse_ws_path: str = "/onebot/v11/ws"
+        self._reverse_ws_token: str = ""
 
-        # HTTP API 配置（备选）
+        # HTTP API 配置（发送消息/调用接口）
         self._http_host: str = "127.0.0.1"
         self._http_port: int = 3000
         self._http_token: str = ""
@@ -278,16 +282,13 @@ class NapCatAdapter(BaseChannelAdapter):
         self._callback: Callable[[UserMessage], Awaitable[BotResponse]] | None = None
         self._running = False
 
-        # WebSocket 连接状态
+        # WS 服务端状态
+        self._ws_server: asyncio.Server | None = None
         self._ws_reader: asyncio.StreamReader | None = None
         self._ws_writer: asyncio.StreamWriter | None = None
         self._ws_connected: bool = False
         self._ws_read_task: asyncio.Task | None = None
-
-        # 请求-响应匹配（echo -> Future）
-        self._pending: dict[str, asyncio.Future[dict[str, Any]]] = {}
-        self._echo_counter: int = 0
-        self._echo_lock: asyncio.Lock = asyncio.Lock()
+        self._ws_connect_event: asyncio.Event = asyncio.Event()
 
         # WebSocket 协议常量
         self._WS_GUID = "258EAFA5-E914-47DA-95CA-5AB9F11DCB11"
@@ -313,23 +314,24 @@ class NapCatAdapter(BaseChannelAdapter):
 
     @property
     def base_url(self) -> str:
-        """构建 NapCat HTTP API 基础 URL（备选）"""
+        """构建 NapCat HTTP API 基础 URL"""
         return f"http://{self._http_host}:{self._http_port}"
 
     async def initialize(self, config: ChannelConfig) -> None:
         """初始化适配器
 
         Args:
-            config: 通道配置，包含 NapCat WebSocket 和 HTTP 设置。
+            config: 通道配置，包含反向 WebSocket 和 HTTP 设置。
         """
         cfg = config.config
 
-        # 正向 WS 配置
-        self._ws_host = cfg.get("ws_host", "127.0.0.1")
-        self._ws_port = cfg.get("ws_port", 3001)
-        self._ws_token = cfg.get("ws_token", "")
+        # 反向 WS 配置
+        self._reverse_ws_host = cfg.get("reverse_ws_host", "0.0.0.0")
+        self._reverse_ws_port = cfg.get("reverse_ws_port", 8080)
+        self._reverse_ws_path = cfg.get("reverse_ws_path", "/onebot/v11/ws")
+        self._reverse_ws_token = cfg.get("reverse_ws_token", "")
 
-        # HTTP API 备选配置（兼容旧字段）
+        # HTTP API 配置
         self._http_host = cfg.get("http_host", "127.0.0.1")
         self._http_port = cfg.get("http_port", 3000)
         self._http_token = cfg.get("http_token", "")
@@ -339,12 +341,14 @@ class NapCatAdapter(BaseChannelAdapter):
             limits=httpx.Limits(max_connections=20, max_keepalive_connections=10),
         )
 
+        # 通过 HTTP 获取机器人信息
         await self._fetch_bot_info()
 
         logger.info(
             "napcat_adapter_initialized",
-            ws_host=self._ws_host,
-            ws_port=self._ws_port,
+            reverse_ws_host=self._reverse_ws_host,
+            reverse_ws_port=self._reverse_ws_port,
+            reverse_ws_path=self._reverse_ws_path,
             http_host=self._http_host,
             http_port=self._http_port,
             bot_qq=self._bot_qq,
@@ -354,10 +358,10 @@ class NapCatAdapter(BaseChannelAdapter):
         self,
         callback: Callable[[UserMessage], Awaitable[BotResponse]],
     ) -> None:
-        """启动消息监听（正向 WebSocket 连接）
+        """启动反向 WebSocket 服务端，等待 NapCat 连接
 
-        连接到 NapCat 的 WebSocket 服务端（正向 WS 模式），
-        通过该连接接收事件推送并发起 API 调用。
+        YuanBot 作为 WebSocket 服务端，等待 NapCat 主动连接。
+        连接建立后，通过该连接接收事件推送。
 
         Args:
             callback: 收到用户消息后的回调函数。
@@ -368,14 +372,24 @@ class NapCatAdapter(BaseChannelAdapter):
         self._callback = callback
         self._running = True
 
-        # 启动 WebSocket 连接（自动重连）
-        self._ws_read_task = asyncio.create_task(self._ws_connect_loop())
+        # 启动 WebSocket 服务端
+        self._ws_server = await asyncio.start_server(
+            self._on_ws_connect,
+            self._reverse_ws_host,
+            self._reverse_ws_port,
+        )
 
+        addr = self._ws_server.sockets[0].getsockname()
         logger.info(
             "napcat_listen_started",
-            ws_host=self._ws_host,
-            ws_port=self._ws_port,
+            host=self._reverse_ws_host,
+            port=addr[1],
+            path=self._reverse_ws_path,
         )
+
+        # 持续服务
+        async with self._ws_server:
+            await self._ws_server.serve_forever()
 
     async def send_message(
         self,
@@ -388,7 +402,7 @@ class NapCatAdapter(BaseChannelAdapter):
           - 私聊: "private:user_id"
           - 群聊: "group:group_id"
 
-        优先通过 WebSocket 发送，失败时使用 HTTP API 备选。
+        所有消息通过 HTTP API 发送。
 
         Args:
             target_id: 目标标识，格式为 "type:id"。
@@ -463,13 +477,13 @@ class NapCatAdapter(BaseChannelAdapter):
         """关闭适配器"""
         self._running = False
 
-        # 关闭 WS 连接
-        if self._ws_read_task and not self._ws_read_task.done():
-            self._ws_read_task.cancel()
-            with contextlib.suppress(asyncio.CancelledError):
-                await self._ws_read_task
-            self._ws_read_task = None
+        # 关闭 WS 服务端
+        if self._ws_server:
+            self._ws_server.close()
+            await self._ws_server.wait_closed()
+            self._ws_server = None
 
+        # 关闭当前 WS 连接
         if self._ws_writer:
             with contextlib.suppress(Exception):
                 self._ws_writer.close()
@@ -478,11 +492,13 @@ class NapCatAdapter(BaseChannelAdapter):
             self._ws_writer = None
             self._ws_connected = False
 
-        # 取消所有待处理的请求
-        for fut in self._pending.values():
-            if not fut.done():
-                fut.cancel()
-        self._pending.clear()
+        if self._ws_read_task and not self._ws_read_task.done():
+            self._ws_read_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await self._ws_read_task
+            self._ws_read_task = None
+
+        self._ws_connect_event.clear()
 
         if self._client:
             await self._client.aclose()
@@ -1123,7 +1139,7 @@ class NapCatAdapter(BaseChannelAdapter):
     ) -> dict[str, Any]:
         """调用 NapCat API
 
-        优先通过 WebSocket 调用，失败时降级到 HTTP API。
+        所有 API 调用通过 NapCat HTTP 接口执行。
 
         Args:
             action: API 端点名称（如 "send_msg", "get_group_list"）。
@@ -1132,14 +1148,14 @@ class NapCatAdapter(BaseChannelAdapter):
         Returns:
             dict: API 响应，包含 status, retcode, data 等。
         """
-        return await self._ws_call_api(action, params)
+        return await self._http_api_call(action, params)
 
     async def _http_api_call(
         self,
         action: str,
         params: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        """通过 HTTP API 调用 NapCat（备选方案）
+        """通过 HTTP API 调用 NapCat
 
         Args:
             action: API 端点名称。
@@ -1223,7 +1239,7 @@ class NapCatAdapter(BaseChannelAdapter):
         )
 
     async def _fetch_bot_info(self) -> None:
-        """获取机器人自身信息（QQ 号）"""
+        """通过 HTTP 获取机器人自身信息（QQ 号）"""
         result = await self._api_call("get_login_info")
         data = result.get("data", {})
         self._bot_qq = str(data.get("user_id", ""))
@@ -1268,106 +1284,154 @@ class NapCatAdapter(BaseChannelAdapter):
 
         return None
 
-    # ── WebSocket 客户端（正向 WS）─────────────
+    # ── WebSocket 服务端（反向 WS）─────────────
 
-    async def _ws_connect_loop(self) -> None:
-        """WebSocket 连接循环（自动重连）
-
-        持续尝试连接到 NapCat 的正向 WebSocket 服务端，
-        连接成功后读取消息帧，断开后自动重连。
-        """
-        retry_delay = 1.0
-        max_retry = 60.0
-
-        while self._running:
-            try:
-                self._ws_connected = False
-
-                # 连接 TCP
-                reader, writer = await asyncio.open_connection(
-                    self._ws_host, self._ws_port,
-                )
-
-                # WebSocket 握手
-                await self._ws_handshake(reader, writer)
-                self._ws_reader = reader
-                self._ws_writer = writer
-                self._ws_connected = True
-                retry_delay = 1.0
-
-                logger.info(
-                    "napcat_ws_connected",
-                    host=self._ws_host,
-                    port=self._ws_port,
-                )
-
-                # 读取消息帧循环
-                await self._ws_read_loop(reader)
-
-            except asyncio.CancelledError:
-                break
-            except Exception as exc:
-                if self._running:
-                    logger.warning(
-                        "napcat_ws_retry",
-                        error=str(exc)[:100],
-                        retry_in=int(retry_delay),
-                    )
-                    await asyncio.sleep(retry_delay)
-                    retry_delay = min(retry_delay * 1.5, max_retry)
-            finally:
-                with contextlib.suppress(Exception):
-                    if self._ws_writer:
-                        self._ws_writer.close()
-                self._ws_reader = None
-                self._ws_writer = None
-                self._ws_connected = False
-
-    async def _ws_handshake(
+    async def _on_ws_connect(
         self,
         reader: asyncio.StreamReader,
         writer: asyncio.StreamWriter,
     ) -> None:
-        """执行 WebSocket 握手（客户端发起）
+        """处理新的 NapCat 反向 WebSocket 连接
+
+        NapCat 作为 WS 客户端主动连接 YuanBot 服务端。
+        连接建立后进行 WS 握手，进入消息读取循环。
 
         Args:
             reader: 读取流。
             writer: 写入流。
         """
-        import secrets
+        peer = writer.get_extra_info("peername")
+        logger.info("napcat_reverse_ws_incoming", peer=peer)
 
-        # 生成随机 Sec-WebSocket-Key
-        ws_key = base64.b64encode(secrets.token_bytes(16)).decode()
+        try:
+            # 服务端 WebSocket 握手（接收 HTTP Upgrade，返回 101）
+            path = await self._ws_do_server_handshake(reader, writer)
+            if path is None:
+                logger.warning("napcat_reverse_ws_handshake_failed", peer=peer)
+                writer.close()
+                return
 
-        # 构建 HTTP Upgrade 请求
-        headers = [
-            f"GET /onebot/v11/ws HTTP/1.1",
-            f"Host: {self._ws_host}:{self._ws_port}",
-            f"Upgrade: websocket",
-            f"Connection: Upgrade",
-            f"Sec-WebSocket-Key: {ws_key}",
-            f"Sec-WebSocket-Version: 13",
-        ]
-        if self._ws_token:
-            headers.append(f"Authorization: Bearer {self._ws_token}")
-
-        writer.write(("\r\n".join(headers) + "\r\n\r\n").encode())
-        await writer.drain()
-
-        # 读取 HTTP 101 响应
-        request_line = await reader.readline()
-        if not request_line or b"101" not in request_line:
-            raise ConnectionError(
-                f"WebSocket handshake failed: {request_line.decode(errors='replace').strip()}"
+            logger.info(
+                "napcat_reverse_ws_connected",
+                peer=peer,
+                path=path,
             )
 
-        # 跳过剩余响应头
+            # 关闭旧连接（如果有）
+            if self._ws_writer:
+                with contextlib.suppress(Exception):
+                    self._ws_writer.close()
+                self._ws_reader = None
+                self._ws_writer = None
+                self._ws_connected = False
+
+            # 保存新连接
+            self._ws_reader = reader
+            self._ws_writer = writer
+            self._ws_connected = True
+            self._ws_connect_event.set()
+
+            # 进入读取循环
+            await self._ws_read_loop(reader)
+
+        except Exception as exc:
+            logger.error("napcat_reverse_ws_error", peer=peer, error=str(exc)[:200])
+        finally:
+            self._ws_connected = False
+            self._ws_reader = None
+            if self._ws_writer is writer:
+                self._ws_writer = None
+            with contextlib.suppress(Exception):
+                writer.close()
+            logger.info("napcat_reverse_ws_disconnected", peer=peer)
+
+    async def _ws_do_server_handshake(
+        self,
+        reader: asyncio.StreamReader,
+        writer: asyncio.StreamWriter,
+    ) -> str | None:
+        """WebSocket 服务端握手
+
+        接收 NapCat 发起的 HTTP Upgrade 请求，验证后返回 101。
+
+        Args:
+            reader: 读取流。
+            writer: 写入流。
+
+        Returns:
+            str | None: 握手成功返回请求路径，失败返回 None。
+        """
+
+        # 读取请求行
+        request_line = await reader.readline()
+        if not request_line:
+            return None
+
+        try:
+            method, path, version = request_line.decode("utf-8", errors="replace").strip().split(" ", 2)
+        except ValueError:
+            return None
+
+        if method.upper() != "GET":
+            writer.write(b"HTTP/1.1 405 Method Not Allowed\r\n\r\n")
+            await writer.drain()
+            return None
+
+        # 读取请求头
+        headers: dict[str, str] = {}
         while True:
             line = await reader.readline()
             if line in (b"\r\n", b"\n", b""):
                 break
+            decoded = line.decode("utf-8", errors="replace").strip()
+            if ":" in decoded:
+                key, val = decoded.split(":", 1)
+                headers[key.strip().lower()] = val.strip()
 
-        logger.debug("napcat_ws_handshake_ok")
+        # 验证 Sec-WebSocket-Key
+        ws_key = headers.get("sec-websocket-key", "")
+        if not ws_key:
+            writer.write(b"HTTP/1.1 400 Bad Request\r\n\r\n")
+            await writer.drain()
+            return None
+
+        # 验证路径（如果配置了路径）
+        expected_path = self._reverse_ws_path.rstrip("/")
+        if expected_path and path.rstrip("/") != expected_path:
+            logger.warning(
+                "napcat_reverse_ws_path_mismatch",
+                expected=expected_path,
+                got=path,
+            )
+
+        # 验证 Token
+        if self._reverse_ws_token:
+            auth = headers.get("authorization", "")
+            expected_auth = f"Bearer {self._reverse_ws_token}"
+            if auth != expected_auth:
+                writer.write(b"HTTP/1.1 401 Unauthorized\r\n\r\n")
+                await writer.drain()
+                return None
+
+        # 计算 Accept key
+        accept_key = base64.b64encode(
+            hashlib.sha1(
+                (ws_key + self._WS_GUID).encode()
+            ).digest()
+        ).decode()
+
+        # 发送 101 响应
+        response = (
+            f"HTTP/1.1 101 Switching Protocols\r\n"
+            f"Upgrade: websocket\r\n"
+            f"Connection: Upgrade\r\n"
+            f"Sec-WebSocket-Accept: {accept_key}\r\n"
+            f"\r\n"
+        )
+        writer.write(response.encode())
+        await writer.drain()
+
+        return path
 
     async def _ws_read_loop(self, reader: asyncio.StreamReader) -> None:
         """WebSocket 消息读取循环
@@ -1384,9 +1448,9 @@ class NapCatAdapter(BaseChannelAdapter):
             if opcode == 0x8:  # Close
                 logger.info("napcat_ws_closed")
                 break
-            elif opcode == 0x9:  # Ping
+            elif opcode == 0x9:  # Ping（客户端发来的 Ping，回复 Pong）
                 if self._ws_writer:
-                    await self._ws_send_frame(self._ws_writer, 0xA, payload, masked=False)
+                    await self._ws_send_frame(self._ws_writer, 0xA, payload)
             elif opcode == 0xA:  # Pong
                 pass
             elif opcode == 0x1:  # Text
@@ -1395,7 +1459,8 @@ class NapCatAdapter(BaseChannelAdapter):
     async def _ws_on_text(self, text: str) -> None:
         """处理收到的 WebSocket 文本消息
 
-        解析 JSON，区分 API 响应（含 echo）和事件推送。
+        反向 WS 模式下，NapCat 推送的事件通过此连接到达。
+        消息格式为 JSON，区分 API 响应（含 echo）和事件推送。
 
         Args:
             text: JSON 文本。
@@ -1405,75 +1470,19 @@ class NapCatAdapter(BaseChannelAdapter):
         except json.JSONDecodeError:
             return
 
-        echo = data.get("echo")
-        if echo and echo in self._pending:
-            # API 响应，交付给等待的 Future
-            fut = self._pending.pop(echo, None)
-            if fut and not fut.done():
-                fut.set_result(data)
-            return
-
-        # 事件推送
+        # 反向 WS 模式下，NapCat 不会通过此连接发送 API 响应（带 echo）
+        # 所有 API 调用走 HTTP，这里只处理事件推送
         await self._process_event(data)
 
-    async def _ws_call_api(
-        self,
-        action: str,
-        params: dict[str, Any] | None = None,
-        timeout: float = API_TIMEOUT_S,
-    ) -> dict[str, Any]:
-        """通过 WebSocket 调用 NapCat API
-
-        发送 JSON-RPC 请求，通过 echo 匹配响应。
-        如果 WS 不可用，自动降级到 HTTP API。
-
-        Args:
-            action: API 端点名称。
-            params: 请求参数。
-            timeout: 超时时间（秒）。
-
-        Returns:
-            dict: API 响应。
-        """
-        # 优先使用 WebSocket
-        if self._ws_connected and self._ws_writer:
-            async with self._echo_lock:
-                self._echo_counter += 1
-                echo = f"napcat_{self._echo_counter}"
-
-            payload = {
-                "action": action,
-                "params": params or {},
-                "echo": echo,
-            }
-
-            try:
-                fut: asyncio.Future[dict[str, Any]] = asyncio.Future()
-                self._pending[echo] = fut
-
-                payload_bytes = json.dumps(payload, ensure_ascii=False).encode("utf-8")
-                await self._ws_send_frame(
-                    self._ws_writer, 0x1, payload_bytes, masked=True,
-                )
-
-                result = await asyncio.wait_for(fut, timeout=timeout)
-                return result
-            except asyncio.TimeoutError:
-                self._pending.pop(echo, None)
-                logger.warning("napcat_ws_api_timeout", action=action)
-                # 超时后降级到 HTTP
-            except Exception as exc:
-                self._pending.pop(echo, None)
-                logger.warning("napcat_ws_api_error", action=action, error=str(exc))
-
-        # HTTP API 备选
-        return await self._http_api_call(action, params)
+    # ── WebSocket 帧编解码 ────────────────────
 
     @staticmethod
     async def _ws_read_frame(
         reader: asyncio.StreamReader,
     ) -> tuple[int, bytes] | None:
         """读取 WebSocket 帧
+
+        服务端模式下，客户端（NapCat）发送的帧必须带 mask。
 
         Args:
             reader: 读取流。
@@ -1513,34 +1522,28 @@ class NapCatAdapter(BaseChannelAdapter):
         writer: asyncio.StreamWriter,
         opcode: int,
         payload: bytes,
-        masked: bool = False,
     ) -> None:
-        """发送 WebSocket 帧
+        """发送 WebSocket 帧（服务端模式）
+
+        服务端发送的帧不需要 mask。
 
         Args:
             writer: 写入流。
             opcode: 帧操作码。
             payload: 负载数据。
-            masked: 是否加掩码（客户端发送需掩码）。
         """
         length = len(payload)
         header = bytearray()
         header.append(0x80 | opcode)  # FIN + opcode
 
         if length < 126:
-            header.append((0x80 if masked else 0x00) | length)
+            header.append(length)
         elif length < 65536:
-            header.append((0x80 if masked else 0x00) | 126)
+            header.append(126)
             header.extend(length.to_bytes(2, "big"))
         else:
-            header.append((0x80 if masked else 0x00) | 127)
+            header.append(127)
             header.extend(length.to_bytes(8, "big"))
-
-        if masked:
-            import secrets
-            mask_key = secrets.token_bytes(4)
-            header.extend(mask_key)
-            payload = bytes(b ^ mask_key[i % 4] for i, b in enumerate(payload))
 
         writer.write(bytes(header) + payload)
         await writer.drain()
@@ -1621,7 +1624,6 @@ class NapCatAdapter(BaseChannelAdapter):
         session_id = self._build_session_id(platform_user_id)
 
         # 判断消息内容类型
-        # 如果有图片/语音/视频/文件，优先使用对应类型
         content_type = ContentType.TEXT
         media_url = metadata.get("media_url")
 
@@ -1787,7 +1789,6 @@ class NapCatAdapter(BaseChannelAdapter):
                 metadata["has_media"] = True
                 metadata["has_image"] = True
                 metadata["media_url"] = metadata["media_url"] or seg_data.get("url", "")
-                # 将来可以在此处记录图片 URL 用于后续处理
 
             elif seg_type == MessageSegmentType.RECORD:
                 metadata["has_media"] = True
@@ -1809,7 +1810,6 @@ class NapCatAdapter(BaseChannelAdapter):
             elif seg_type == MessageSegmentType.FACE:
                 metadata["has_face"] = True
                 face_id = seg_data.get("id", "")
-                # QQ 表情转换为文字表示
                 text_parts.append(f"[表情:{face_id}]")
 
             elif seg_type == MessageSegmentType.AT:
@@ -1861,7 +1861,6 @@ class NapCatAdapter(BaseChannelAdapter):
                     text_parts.append("[推荐]")
 
             else:
-                # 未知类型，保留原始信息
                 logger.debug(
                     "napcat_unknown_segment",
                     seg_type=seg_type,
