@@ -112,12 +112,12 @@ CHANNELS = {
     },
     "napcat": {
         "name": "QQ (NapCat)",
-        "desc": "基于 NapCat + OneBot v11 的 QQ 机器人 (正向 WS)",
+        "desc": "基于 NapCat + OneBot v11 的 QQ 机器人 (反向 WS)",
         "file": "napcat.yaml",
         "fields": [
-            ("ws_host", "NapCat WS 地址", "127.0.0.1", False),
-            ("ws_port", "NapCat WS 端口", "3001", False),
-            ("ws_token", "NapCat WS Token (可选)", "", False),
+            ("reverse_ws_host", "反向 WS 监听地址", "0.0.0.0", False),
+            ("reverse_ws_port", "反向 WS 监听端口", "8080", False),
+            ("reverse_ws_token", "反向 WS Token (可选)", "", False),
         ],
     },
     "wechat": {

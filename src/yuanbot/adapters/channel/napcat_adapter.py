@@ -1311,10 +1311,16 @@ class NapCatAdapter(BaseChannelAdapter):
 
     async def _fetch_bot_info(self) -> None:
         """通过 HTTP 获取机器人自身信息（QQ 号）"""
-        result = await self._api_call("get_login_info")
-        data = result.get("data", {})
-        self._bot_qq = str(data.get("user_id", ""))
-        logger.info("napcat_bot_info", bot_qq=self._bot_qq)
+        try:
+            result = await self._api_call("get_login_info")
+            data = result.get("data", {})
+            self._bot_qq = str(data.get("user_id", ""))
+            if self._bot_qq:
+                logger.info("napcat_bot_info", bot_qq=self._bot_qq)
+            else:
+                logger.warning("napcat_bot_info_empty", api_result=result.get("status"))
+        except Exception as exc:
+            logger.warning("napcat_bot_info_failed", error=str(exc)[:100])
 
     # ── 媒体文件解析 ──────────────────────────
 
@@ -1510,7 +1516,7 @@ class NapCatAdapter(BaseChannelAdapter):
             reader: 读取流。
         """
         while self._running and self._ws_connected:
-            frame = await self._ws_read_frame(reader)
+            frame = await self._ws_read_frame(reader, self._ws_writer)
             if frame is None:
                 break
             opcode, payload = frame
@@ -1558,13 +1564,16 @@ class NapCatAdapter(BaseChannelAdapter):
     @staticmethod
     async def _ws_read_frame(
         reader: asyncio.StreamReader,
+        writer: asyncio.StreamWriter | None = None,
     ) -> tuple[int, bytes] | None:
         """读取 WebSocket 帧
 
         服务端模式下，客户端（NapCat）发送的帧必须带 mask。
+        如果收到 unmasked 帧，违反 RFC 6455，断开连接。
 
         Args:
             reader: 读取流。
+            writer: 可选，用于发送 Close 帧。
 
         Returns:
             (opcode, payload) 或 None（连接关闭）。
@@ -1578,6 +1587,14 @@ class NapCatAdapter(BaseChannelAdapter):
         opcode = b0 & 0x0F
         masked = (b1 & 0x80) != 0
         length = b1 & 0x7F
+
+        if not masked and opcode not in (0x8, 0x9, 0xA):
+            # 服务端收到客户端 unmasked 帧，RFC 6455 要求断开
+            logger.warning("napcat_ws_unmasked_frame", opcode=opcode)
+            if writer:
+                with contextlib.suppress(Exception):
+                    writer.close()
+            return None
 
         if length == 126:
             length_bytes = await reader.readexactly(2)
