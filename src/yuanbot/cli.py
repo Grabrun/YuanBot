@@ -429,20 +429,9 @@ def _run_doctor(args: argparse.Namespace) -> None:
     api_key = config.ai_provider.api_key
     if api_key:
         _ok(f"AI 提供商 [{provider_id}] API Key 已配置")
-        # 尝试简单连通性检查
-        try:
-            if provider_id == "openai":
-                if importlib.util.find_spec("openai"):
-                    _ok("openai 库已安装")
-                else:
-                    _warn("openai 库未安装 (pip install yuanbot[openai])")
-            elif provider_id == "anthropic":
-                if importlib.util.find_spec("anthropic"):
-                    _ok("anthropic 库已安装")
-                else:
-                    _warn("anthropic 库未安装 (pip install yuanbot[anthropic])")
-        except ImportError:
-            _warn(f"{provider_id} Python 库未安装 (pip install yuanbot[{provider_id}])")
+        # 检查 HTTP 客户端（所有适配器依赖 httpx）
+        if not importlib.util.find_spec("httpx"):
+            _warn("httpx 库未安装，请运行 pip install -e .")
     else:
         _warn(f"AI 提供商 [{provider_id}] API Key 未配置")
         all_ok = False
@@ -484,8 +473,6 @@ def _run_doctor(args: argparse.Namespace) -> None:
 
     # 6. 依赖检查
     optional_deps = {
-        "openai": "openai",
-        "anthropic": "anthropic",
         "yaml": "pyyaml",
         "dotenv": "python-dotenv",
     }
