@@ -47,7 +47,7 @@ class ProviderConfigEntry(BaseModel):
     @classmethod
     def from_yaml(cls, raw: dict[str, Any]) -> ProviderConfigEntry:
         """从 YAML 原始数据创建（处理嵌套结构）"""
-        config_data = raw.get("config", {})
+        config_data = raw.get("config", {}) or {}
         models = [ModelEntry(**m) for m in config_data.get("models", [])]
         return cls(
             provider_id=raw.get("provider_id", ""),
