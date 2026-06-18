@@ -52,7 +52,8 @@ git clone https://github.com/Grabrun/YuanBot.git
 cd YuanBot
 python3 -m venv .venv
 source .venv/bin/activate
-pip install -e ".[dev]"
+pip install -e "."
+pip install -e ".[cli,openai]"  # 可选扩展
 yuanbot start
 ```
 
@@ -61,7 +62,8 @@ git clone https://github.com/Grabrun/YuanBot.git
 cd YuanBot
 python -m venv .venv
 .venv\Scripts\activate
-pip install -e ".\[dev]"
+pip install -e "."
+pip install -e ".[cli,openai]"  # 可选扩展
 yuanbot start
 ```
 
