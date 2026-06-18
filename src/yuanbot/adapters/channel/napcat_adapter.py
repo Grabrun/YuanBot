@@ -381,7 +381,7 @@ class NapCatAdapter(BaseChannelAdapter):
         self._callback = callback
         self._running = True
 
-        # 启动 WebSocket 服务端
+        # 启动 WebSocket 服务端（start_server 会立即开始监听）
         self._ws_server = await asyncio.start_server(
             self._on_ws_connect,
             self._reverse_ws_host,
@@ -396,10 +396,6 @@ class NapCatAdapter(BaseChannelAdapter):
             path=self._reverse_ws_path,
         )
 
-        # 持续服务
-        async with self._ws_server:
-            await self._ws_server.serve_forever()
-
     async def send_message(
         self,
         target_id: str,
@@ -411,7 +407,7 @@ class NapCatAdapter(BaseChannelAdapter):
           - 私聊: "private:user_id"
           - 群聊: "group:group_id"
 
-        所有消息通过 HTTP API 发送。
+        所有消息优先通过反向 WebSocket 发送，WS 不可用时降级到 HTTP API。
 
         Args:
             target_id: 目标标识，格式为 "type:id"。
@@ -1410,9 +1406,11 @@ class NapCatAdapter(BaseChannelAdapter):
         except Exception as exc:
             logger.error("napcat_reverse_ws_error", peer=peer, error=str(exc)[:200])
         finally:
-            self._ws_connected = False
-            self._ws_reader = None
+            # 只有当前连接是活动连接时才清理全局状态
+            # 避免 NapCat 重连时旧连接的 finally 覆盖新连接状态
             if self._ws_writer is writer:
+                self._ws_connected = False
+                self._ws_reader = None
                 self._ws_writer = None
             with contextlib.suppress(Exception):
                 writer.close()
