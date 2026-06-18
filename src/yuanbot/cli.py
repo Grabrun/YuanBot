@@ -2200,9 +2200,7 @@ def _configure_channels(project_root: Path, python_path: Path) -> None:
 
         # 保存配置
         with open(config_file, "w") as f:
-            yaml.safe_dump(
-                cfg, f, allow_unicode=True, default_flow_style=False, sort_keys=False
-            )
+            yaml.safe_dump(cfg, f, allow_unicode=True, default_flow_style=False, sort_keys=False)
         _ok(f"{info['display']} 配置已保存")
 
         # 将最后配置的通道设为默认通道

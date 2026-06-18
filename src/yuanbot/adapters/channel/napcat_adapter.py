@@ -1207,7 +1207,12 @@ class NapCatAdapter(BaseChannelAdapter):
                 status=exc.response.status_code,
                 body=exc.response.text,
             )
-            return {"status": "failed", "retcode": exc.response.status_code, "data": None, "message": f"HTTP {exc.response.status_code}"}
+            return {
+                "status": "failed",
+                "retcode": exc.response.status_code,
+                "data": None,
+                "message": f"HTTP {exc.response.status_code}",
+            }
         except Exception as exc:
             logger.error("napcat_api_error", action=action, error=str(exc))
             return {"status": "failed", "retcode": -1, "data": None, "message": str(exc)}
@@ -1249,12 +1254,14 @@ class NapCatAdapter(BaseChannelAdapter):
 
                 payload_bytes = json.dumps(payload, ensure_ascii=False).encode("utf-8")
                 await self._ws_send_frame(
-                    self._ws_writer, 0x1, payload_bytes,
+                    self._ws_writer,
+                    0x1,
+                    payload_bytes,
                 )
 
                 result = await asyncio.wait_for(fut, timeout=timeout)
                 return result
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 self._pending.pop(echo, None)
                 logger.warning("napcat_ws_api_timeout", action=action)
                 # 超时后降级到 HTTP
@@ -1436,7 +1443,8 @@ class NapCatAdapter(BaseChannelAdapter):
             return None
 
         try:
-            method, path, version = request_line.decode("utf-8", errors="replace").strip().split(" ", 2)
+            decoded_line = request_line.decode("utf-8", errors="replace").strip()
+            method, path, version = decoded_line.split(" ", 2)
         except ValueError:
             return None
 
@@ -1483,9 +1491,7 @@ class NapCatAdapter(BaseChannelAdapter):
 
         # 计算 Accept key
         accept_key = base64.b64encode(
-            hashlib.sha1(
-                (ws_key + self._WS_GUID).encode()
-            ).digest()
+            hashlib.sha1((ws_key + self._WS_GUID).encode()).digest()
         ).decode()
 
         # 发送 101 响应

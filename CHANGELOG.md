@@ -2,6 +2,31 @@
 
 本项目遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.2.2] - 2026-06-18
+
+### ✨ 新增功能
+
+- **通道交互式配置**: `_run_full_install` 安装流程中增加通道配置引导，支持 9 个通道多选/全选
+- **yuanbot-cli 通道配置**: CLI 安装流程新增通道配置，微信走 QR 扫码登录
+- **yuanbot-cli PyPI 发布**: publish.yml 增加 yuanbot-cli 构建 + PyPI 自动发布
+
+### 🔄 重构
+
+- **NapCat 适配器重写**: HTTP webhook → 正向 WebSocket → 反向 WebSocket
+  - 正向 WS: YuanBot 主动连 NapCat WS Server
+  - 反向 WS: NapCat 主动连 YuanBot WS Server
+  - 事件上报 + API 调用走同一反向 WS 连接
+  - HTTP API 作为 WS 降级备选
+  - 支持 WS 服务端握手认证（路径/Token）
+  - 自动重连管理
+
+### 🐛 修复
+
+- **GitHub Actions**: publish.yml CHANGELOG 解析 awk 脚本逃逸错误，替换为 Python 实现
+- **Ruff lint**: 修复 napcat_adapter.py 中 3 处 lint 错误
+
+---
+
 ## [1.2.1] - 2026-06-14
 
 ### 🐛 修复
