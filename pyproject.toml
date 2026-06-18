@@ -26,8 +26,6 @@ dependencies = [
     "croniter>=2.0",
     "aiosqlite>=0.20",
     "prometheus-client>=0.20",
-    "openai>=1.0",
-    "anthropic>=0.30",
 ]
 
 [project.optional-dependencies]
@@ -46,17 +44,21 @@ openai = ["openai>=1.30"]
 anthropic = ["anthropic>=0.28"]
 milvus = ["pymilvus>=2.4"]
 graph = ["kuzu>=0.7"]
-cli = ["click>=8.0"]
+cli = ["rich>=13.0", "textual>=1.0"]
 jwt = ["PyJWT>=2.8"]
 onnx = ["onnxruntime>=1.17", "tokenizers>=0.19"]
 grpc = ["grpcio>=1.60", "grpcio-tools>=1.60"]
 wasm = ["wasmtime>=20.0"]
 serverless = ["mangum>=0.17"]
-all-providers = [
-    "yuanbot[openai,anthropic]",
-]
+all-providers = ["openai>=1.30", "anthropic>=0.28"]
 all = [
-    "yuanbot[openai,anthropic,milvus,graph,cli,mysql,jwt,onnx,grpc,wasm,serverless]",
+    "openai>=1.30", "anthropic>=0.28",
+    "pymilvus>=2.4", "kuzu>=0.7",
+    "rich>=13.0", "textual>=1.0",
+    "aiomysql>=0.2", "PyJWT>=2.8",
+    "onnxruntime>=1.17", "tokenizers>=0.19",
+    "grpcio>=1.60", "grpcio-tools>=1.60",
+    "wasmtime>=20.0", "mangum>=0.17",
 ]
 
 [project.scripts]
