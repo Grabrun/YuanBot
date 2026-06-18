@@ -1344,8 +1344,6 @@ class NapCatAdapter(BaseChannelAdapter):
         """
         if media_data:
             # 将字节数据编码为 Base64
-            import base64
-
             encoded = base64.b64encode(media_data).decode("ascii")
             return f"base64://{encoded}"
 

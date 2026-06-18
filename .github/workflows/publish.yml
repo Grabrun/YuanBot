@@ -138,25 +138,6 @@ jobs:
       - name: Update CHANGELOG release date if missing
         if: steps.tag-check.outputs.exists == 'false'
         run: |
-          cat > /tmp/update_changelog_date.py << 'PYEOF'
-          import re, sys
-          version = sys.argv[1]
-          today = sys.argv[2]
-
-          with open('CHANGELOG.md', 'r') as f:
-              content = f.read()
-
-          pattern = r'^## \[' + re.escape(version) + r'\]\s*-\s*(\S+)'
-          match = re.search(pattern, content, re.MULTILINE)
-          if match:
-              date = match.group(1)
-              if date == 'Unreleased':
-                  content = content.replace(
-                      f'## [{version}] - Unreleased',
-                      f'## [{version}] - {today}'
-                  )
-                  with open('CHANGELOG.md', 'w') as f:
-                      f.write(content)
-                  print(f'Updated release date for v{version} to {today}')
-          PYEOF
-          uv run python /tmp/update_changelog_date.py "${{ steps.version.outputs.version }}" "$(date -u +%Y-%m-%d)"
+          uv run python scripts/update_changelog_date.py \
+            "${{ steps.version.outputs.version }}" \
+            "$(date -u +%Y-%m-%d)"
