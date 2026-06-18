@@ -407,7 +407,7 @@ class MarketplaceClient:
 
             for yaml_file in sorted(skills_dir.glob("*.yaml")):
                 try:
-                    with open(yaml_file) as f:
+                    with open(yaml_file, encoding="utf-8") as f:
                         data = yaml.safe_load(f) or {}
                     entries.append(
                         ExtensionEntry(
@@ -430,7 +430,7 @@ class MarketplaceClient:
 
             for yaml_file in sorted(tools_dir.glob("*.yaml")):
                 try:
-                    with open(yaml_file) as f:
+                    with open(yaml_file, encoding="utf-8") as f:
                         data = yaml.safe_load(f) or {}
                     entries.append(
                         ExtensionEntry(

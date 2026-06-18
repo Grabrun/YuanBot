@@ -131,7 +131,7 @@ class ConfigLoader:
             return {}
 
         try:
-            with open(file_path) as f:
+            with open(file_path, encoding="utf-8") as f:
                 data = yaml.safe_load(f) or {}
             self._cache[relative_path] = data
             logger.debug("config_loaded", path=str(file_path))

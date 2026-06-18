@@ -1560,7 +1560,7 @@ def _register_routes(
                 content={"error": f"Config file not found: {yaml_path}"},
             )
 
-        with open(yaml_path) as f:
+        with open(yaml_path, encoding="utf-8") as f:
             new_config = yaml.safe_load(f)
 
         await pm.reload_provider(provider_id, new_config)

@@ -182,7 +182,7 @@ class ProviderManager:
 
     def _load_provider_from_yaml(self, yaml_path: Path) -> None:
         """从单个 YAML 文件加载 Provider 配置"""
-        with open(yaml_path) as f:
+        with open(yaml_path, encoding="utf-8") as f:
             raw = yaml.safe_load(f)
 
         if not raw:
