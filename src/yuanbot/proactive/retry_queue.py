@@ -11,7 +11,6 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import json
-import sqlite3
 import time
 import uuid
 from collections.abc import Callable, Coroutine
@@ -19,6 +18,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+import aiosqlite
 import structlog
 
 logger = structlog.get_logger(__name__)
@@ -120,7 +120,7 @@ class PersistentRetryQueue:
     ) -> None:
         self._db_path = Path(db_path)
         self._db_path.parent.mkdir(parents=True, exist_ok=True)
-        self._conn: sqlite3.Connection | None = None
+        self._db: aiosqlite.Connection | None = None
         self._retry_delays = retry_delays or self.DEFAULT_RETRY_DELAYS
         self._consumer_interval = consumer_interval
         self._consumer_task: asyncio.Task[None] | None = None
@@ -128,9 +128,9 @@ class PersistentRetryQueue:
 
     async def initialize(self) -> None:
         """初始化数据库表"""
-        self._conn = sqlite3.connect(str(self._db_path), check_same_thread=False)
-        self._conn.row_factory = sqlite3.Row
-        self._conn.execute("""
+        self._db = await aiosqlite.connect(str(self._db_path))
+        self._db.row_factory = aiosqlite.Row
+        await self._db.execute("""
             CREATE TABLE IF NOT EXISTS retry_queue (
                 task_id TEXT PRIMARY KEY,
                 user_id TEXT NOT NULL,
@@ -146,19 +146,19 @@ class PersistentRetryQueue:
                 status TEXT NOT NULL DEFAULT 'pending'
             )
         """)
-        self._conn.execute("""
+        await self._db.execute("""
             CREATE INDEX IF NOT EXISTS idx_retry_status_next
             ON retry_queue(status, next_retry_at)
         """)
-        self._conn.commit()
+        await self._db.commit()
         logger.info("retry_queue_initialized", db_path=str(self._db_path))
 
     async def close(self) -> None:
         """关闭数据库连接"""
         await self.stop_consumer()
-        if self._conn:
-            self._conn.close()
-            self._conn = None
+        if self._db:
+            await self._db.close()
+            self._db = None
 
     # ── 队列操作 ──────────────────────────────
 
@@ -171,7 +171,7 @@ class PersistentRetryQueue:
         Returns:
             任务 ID
         """
-        if not self._conn:
+        if not self._db:
             await self.initialize()
 
         # 计算下次重试时间
@@ -182,7 +182,7 @@ class PersistentRetryQueue:
             else:
                 task.next_retry_at = 0.0  # 立即到期
 
-        self._conn.execute(
+        await self._db.execute(
             """
             INSERT OR REPLACE INTO retry_queue
             (task_id, user_id, task_type, message, channel, metadata,
@@ -204,7 +204,7 @@ class PersistentRetryQueue:
                 task.status,
             ),
         )
-        self._conn.commit()
+        await self._db.commit()
 
         logger.info(
             "task_enqueued",
@@ -249,11 +249,11 @@ class PersistentRetryQueue:
         Returns:
             到期任务列表
         """
-        if not self._conn:
+        if not self._db:
             return []
 
         now = time.time()
-        rows = self._conn.execute(
+        cursor = await self._db.execute(
             """
             SELECT * FROM retry_queue
             WHERE status IN ('pending', 'retrying') AND next_retry_at <= ?
@@ -261,29 +261,30 @@ class PersistentRetryQueue:
             LIMIT ?
             """,
             (now, limit),
-        ).fetchall()
+        )
+        rows = await cursor.fetchall()
 
         return [self._row_to_task(row) for row in rows]
 
     async def mark_retrying(self, task_id: str) -> None:
         """标记任务为正在重试"""
-        if not self._conn:
+        if not self._db:
             return
-        self._conn.execute(
+        await self._db.execute(
             "UPDATE retry_queue SET status = 'retrying' WHERE task_id = ?",
             (task_id,),
         )
-        self._conn.commit()
+        await self._db.commit()
 
     async def mark_success(self, task_id: str) -> None:
         """标记任务发送成功，从队列中移除"""
-        if not self._conn:
+        if not self._db:
             return
-        self._conn.execute(
+        await self._db.execute(
             "UPDATE retry_queue SET status = 'completed' WHERE task_id = ?",
             (task_id,),
         )
-        self._conn.commit()
+        await self._db.commit()
         logger.info("task_completed", task_id=task_id)
 
     async def mark_failed(self, task_id: str, error: str = "") -> None:
@@ -292,12 +293,13 @@ class PersistentRetryQueue:
         如果还有重试次数，更新重试计数和下次重试时间；
         否则标记为最终失败。
         """
-        if not self._conn:
+        if not self._db:
             return
 
-        row = self._conn.execute(
+        cursor = await self._db.execute(
             "SELECT * FROM retry_queue WHERE task_id = ?", (task_id,)
-        ).fetchone()
+        )
+        row = await cursor.fetchone()
 
         if not row:
             return
@@ -326,7 +328,7 @@ class PersistentRetryQueue:
                 next_retry_at=task.next_retry_at,
             )
 
-        self._conn.execute(
+        await self._db.execute(
             """
             UPDATE retry_queue
             SET retry_count = ?, last_error = ?, status = ?, next_retry_at = ?
@@ -340,45 +342,48 @@ class PersistentRetryQueue:
                 task_id,
             ),
         )
-        self._conn.commit()
+        await self._db.commit()
 
     async def remove_task(self, task_id: str) -> bool:
         """从队列中移除任务"""
-        if not self._conn:
+        if not self._db:
             return False
-        cursor = self._conn.execute("DELETE FROM retry_queue WHERE task_id = ?", (task_id,))
-        self._conn.commit()
+        cursor = await self._db.execute("DELETE FROM retry_queue WHERE task_id = ?", (task_id,))
+        await self._db.commit()
         return cursor.rowcount > 0
 
     async def get_pending_count(self) -> int:
         """获取待处理任务数量"""
-        if not self._conn:
+        if not self._db:
             return 0
-        row = self._conn.execute(
+        cursor = await self._db.execute(
             "SELECT COUNT(*) as cnt FROM retry_queue WHERE status IN ('pending', 'retrying')"
-        ).fetchone()
+        )
+        row = await cursor.fetchone()
         return row["cnt"] if row else 0
 
     async def get_failed_count(self) -> int:
         """获取最终失败的任务数量"""
-        if not self._conn:
+        if not self._db:
             return 0
-        row = self._conn.execute(
+        cursor = await self._db.execute(
             "SELECT COUNT(*) as cnt FROM retry_queue WHERE status = 'failed'"
-        ).fetchone()
+        )
+        row = await cursor.fetchone()
         return row["cnt"] if row else 0
 
     async def get_queue_stats(self) -> dict[str, int]:
         """获取队列统计信息"""
-        if not self._conn:
+        if not self._db:
             return {"pending": 0, "retrying": 0, "completed": 0, "failed": 0, "total": 0}
 
         stats: dict[str, int] = {}
         for status in ("pending", "retrying", "completed", "failed"):
-            row = self._conn.execute(
+            cursor = await self._db.execute(
                 "SELECT COUNT(*) as cnt FROM retry_queue WHERE status = ?",
                 (status,),
-            ).fetchone()
+            )
+            row = await cursor.fetchone()
             stats[status] = row["cnt"] if row else 0
 
         stats["total"] = sum(stats.values())
@@ -393,18 +398,18 @@ class PersistentRetryQueue:
         Returns:
             清理的任务数量
         """
-        if not self._conn:
+        if not self._db:
             return 0
 
         cutoff = time.time() - max_age_seconds
-        cursor = self._conn.execute(
+        cursor = await self._db.execute(
             """
             DELETE FROM retry_queue
             WHERE status IN ('completed', 'failed') AND created_at < ?
             """,
             (cutoff,),
         )
-        self._conn.commit()
+        await self._db.commit()
         removed = cursor.rowcount
         if removed > 0:
             logger.info("retry_queue_cleanup", removed=removed)
@@ -487,7 +492,7 @@ class PersistentRetryQueue:
         delay = self._retry_delays[delay_index]
         return time.time() + delay
 
-    def _row_to_task(self, row: sqlite3.Row) -> RetryTask:
+    def _row_to_task(self, row: aiosqlite.Row) -> RetryTask:
         """将数据库行转换为 RetryTask"""
         metadata = {}
         with contextlib.suppress(json.JSONDecodeError, KeyError):
