@@ -421,10 +421,7 @@ async def download_media_file(
         解密后的明文数据，失败返回 None
     """
     # 1. 构建下载 URL
-    if full_url:
-        url = full_url
-    else:
-        url = f"{cdn_base_url}/download?encrypted_query_param={quote(encrypt_query_param)}"
+    url = full_url or f"{cdn_base_url}/download?encrypted_query_param={quote(encrypt_query_param)}"
 
     # 2. 下载
     try:

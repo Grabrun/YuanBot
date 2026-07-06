@@ -1708,10 +1708,8 @@ class WeixinAdapter(BaseChannelAdapter):
             with open(cred_path, "w") as f:
                 json.dump(data, f, indent=2)
             # 权限保护
-            try:
+            with contextlib.suppress(OSError):
                 os.chmod(cred_path, 0o600)
-            except OSError:
-                pass
             logger.info("wechat_saved_account_credentials")
         except Exception as exc:
             logger.warning("wechat_save_account_failed", error=str(exc))
