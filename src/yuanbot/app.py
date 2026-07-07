@@ -2073,7 +2073,7 @@ def _register_routes(
         installed_ids = {p["id"] for p in local_personas}
         for mp in marketplace_personas:
             mp["is_installed"] = mp["id"] in installed_ids
-            stats = _review_store.get_stats(mp["id"])
+            stats = await _review_store.get_stats(mp["id"])
             mp["rating"] = stats.average_rating
             mp["review_count"] = stats.total_reviews
 
@@ -2444,7 +2444,7 @@ def _register_routes(
         user: User = Depends(get_current_user),
     ):
         """为扩展添加或更新评论（每人每扩展限一条）"""
-        review = _review_store.add_review(
+        review = await _review_store.add_review(
             ext_id=ext_id,
             user_id=user.user_id,
             rating=req.rating,
@@ -2462,7 +2462,7 @@ def _register_routes(
         order: str = "desc",
     ):
         """列出扩展的评论"""
-        return _review_store.list_reviews(
+        return await _review_store.list_reviews(
             ext_id=ext_id,
             limit=limit,
             offset=offset,
@@ -2473,7 +2473,7 @@ def _register_routes(
     @app.get("/api/marketplace/extensions/{ext_id}/reviews/stats")
     async def review_stats(ext_id: str):
         """获取扩展评分统计"""
-        stats = _review_store.get_stats(ext_id)
+        stats = await _review_store.get_stats(ext_id)
         return stats.to_dict()
 
     @app.delete("/api/marketplace/extensions/{ext_id}/reviews/{review_id}")
@@ -2483,7 +2483,7 @@ def _register_routes(
         user: User = Depends(get_current_user),
     ):
         """删除自己的评论"""
-        deleted = _review_store.delete_review(review_id, user.user_id)
+        deleted = await _review_store.delete_review(review_id, user.user_id)
         if not deleted:
             return JSONResponse(
                 status_code=404,
@@ -2498,7 +2498,7 @@ def _register_routes(
         user: User = Depends(get_current_user),
     ):
         """标记评论为有帮助"""
-        ok = _review_store.mark_helpful(review_id, user.user_id)
+        ok = await _review_store.mark_helpful(review_id, user.user_id)
         if not ok:
             return JSONResponse(
                 status_code=409,
