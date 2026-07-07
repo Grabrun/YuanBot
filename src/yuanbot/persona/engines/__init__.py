@@ -2,4 +2,4 @@
 
 from yuanbot.persona.engines.emotion_engine import DeepEmotionAnalyzer, EmotionEngine
 
-__all__ = ["EmotionEngine", "DeepEmotionAnalyzer"]
+__all__ = ["DeepEmotionAnalyzer", "EmotionEngine"]

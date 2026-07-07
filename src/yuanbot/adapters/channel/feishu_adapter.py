@@ -74,6 +74,7 @@ class FeishuAdapter(BaseChannelAdapter):
         self._webhook_server: asyncio.AbstractServer | None = None
         self._webhook_host: str = "0.0.0.0"
         self._webhook_port: int = 9000
+        self._background_tasks: set[asyncio.Task] = set()
 
     # ── ChannelAdapter 接口实现 ────────────────
 
@@ -459,7 +460,9 @@ class FeishuAdapter(BaseChannelAdapter):
 
             # 处理事件回调
             if self._running and self._callback:
-                asyncio.create_task(self._handle_event(body))
+                task = asyncio.create_task(self._handle_event(body))
+                self._background_tasks.add(task)
+                task.add_done_callback(self._background_tasks.discard)
 
             # 返回 200 OK
             writer.write(
@@ -716,6 +719,11 @@ class FeishuAdapter(BaseChannelAdapter):
             self._webhook_server.close()
             await self._webhook_server.wait_closed()
             self._webhook_server = None
+
+        # 取消所有后台任务
+        for task in self._background_tasks:
+            task.cancel()
+        self._background_tasks.clear()
 
         if self._client:
             await self._client.aclose()

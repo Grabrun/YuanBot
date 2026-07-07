@@ -75,7 +75,7 @@ class LoginScreen(ModalScreen[dict]):
     }
     """
 
-    BINDINGS = [Binding("escape", "cancel", "取消")]
+    BINDINGS: list[Binding] = [Binding("escape", "cancel", "取消")]  # noqa: RUF012
 
     def __init__(self, client: TUIClient):
         super().__init__()
@@ -130,7 +130,7 @@ class HelpScreen(ModalScreen):
     }
     """
 
-    BINDINGS = [Binding("escape", "close", "关闭")]
+    BINDINGS: list[Binding] = [Binding("escape", "close", "关闭")]  # noqa: RUF012
 
     HELP_TEXT = """\
 # 🌸 缘·Bot TUI 帮助
@@ -298,7 +298,7 @@ class YuanBotTUI(App):
     }
     """
 
-    BINDINGS = [
+    BINDINGS: list[Binding] = [  # noqa: RUF012
         Binding("ctrl+n", "new_conversation", "新建会话", show=True),
         Binding("ctrl+tab", "next_conversation", "下一个会话", show=True),
         Binding("ctrl+shift+tab", "prev_conversation", "上一个会话", show=True),
@@ -319,6 +319,14 @@ class YuanBotTUI(App):
         self._panel_visible = True
         self._input_history: list[str] = []
         self._history_index = -1
+        self._background_tasks: set[asyncio.Task] = set()
+
+    def _run_task(self, coro):
+        """在后台运行协程，自动管理任务生命周期"""
+        task = asyncio.create_task(coro)
+        self._background_tasks.add(task)
+        task.add_done_callback(self._background_tasks.discard)
+        return task
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -567,7 +575,7 @@ class YuanBotTUI(App):
     # ── 快捷键动作 ──────────────────────────
 
     def action_new_conversation(self) -> None:
-        asyncio.create_task(self._handle_command("/new"))
+        self._run_task(self._handle_command("/new"))
 
     def action_next_conversation(self) -> None:
         if not self._conversations:
@@ -578,13 +586,13 @@ class YuanBotTUI(App):
                 idx = ids.index(self._current_conv_id)
                 next_idx = (idx + 1) % len(ids)
                 self._current_conv_id = ids[next_idx]
-                asyncio.create_task(self._load_current_messages())
+                self._run_task(self._load_current_messages())
             except ValueError:
                 self._current_conv_id = ids[0]
-                asyncio.create_task(self._load_current_messages())
+                self._run_task(self._load_current_messages())
         else:
             self._current_conv_id = self._conversations[0]["conversation_id"]
-            asyncio.create_task(self._load_current_messages())
+            self._run_task(self._load_current_messages())
 
     def action_prev_conversation(self) -> None:
         if not self._conversations:
@@ -595,10 +603,10 @@ class YuanBotTUI(App):
                 idx = ids.index(self._current_conv_id)
                 prev_idx = (idx - 1) % len(ids)
                 self._current_conv_id = ids[prev_idx]
-                asyncio.create_task(self._load_current_messages())
+                self._run_task(self._load_current_messages())
             except ValueError:
                 self._current_conv_id = ids[-1]
-                asyncio.create_task(self._load_current_messages())
+                self._run_task(self._load_current_messages())
 
     def action_toggle_panel(self) -> None:
         panel = self.query_one("#info-panel", InfoPanel)

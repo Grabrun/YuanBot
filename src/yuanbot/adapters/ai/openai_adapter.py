@@ -256,7 +256,7 @@ class OpenAIAdapter(BaseAIProvider):
         message = choice["message"]
 
         tool_calls = None
-        if "tool_calls" in message and message["tool_calls"]:
+        if message.get("tool_calls"):
             tool_calls = [
                 ToolCall(
                     id=tc["id"],

@@ -24,14 +24,14 @@ from yuanbot.auth.store import ConversationStore, UserStore
 
 __all__ = [
     "AuthManager",
-    "UserStore",
-    "ConversationStore",
-    "User",
-    "UserRole",
     "AuthToken",
     "Conversation",
     "ConversationMessage",
+    "ConversationStore",
     "LoginRequest",
     "LoginResponse",
+    "User",
+    "UserRole",
+    "UserStore",
     "init_auth_manager",
 ]

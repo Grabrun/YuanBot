@@ -22,18 +22,18 @@ from yuanbot.memory.emotion_tracker import EmotionTracker
 from yuanbot.memory.manager import MemoryManager
 
 __all__ = [
-    # 记忆类型
-    "MemoryType",
-    "MemoryNode",
-    "MemorySearchResult",
-    "UserProfile",
-    "MemoryManager",
     # 情感类型
     "EmotionCategory",
     "EmotionIntensity",
-    "EmotionState",
-    "EmotionRecord",
-    "EmotionTrend",
     "EmotionPattern",
+    "EmotionRecord",
+    "EmotionState",
     "EmotionTracker",
+    "EmotionTrend",
+    # 记忆类型
+    "MemoryManager",
+    "MemoryNode",
+    "MemorySearchResult",
+    "MemoryType",
+    "UserProfile",
 ]

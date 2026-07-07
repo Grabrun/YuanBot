@@ -6,7 +6,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any
+from types import MappingProxyType
+from typing import Any, Final
 
 import structlog
 
@@ -57,22 +58,22 @@ class DialogueDecisionEngine:
     """
 
     # 能力域 → 默认 Tool 映射
-    _DOMAIN_TOOL_MAP: dict[str, list[str]] = {
-        "emotional_care": [],
-        "daily_chat": [],
-        "creative_storytelling": [],
-        "task_management": ["reminder"],
-        "knowledge_query": ["web_search", "weather"],
-        "media_generation": [],
-    }
+    _DOMAIN_TOOL_MAP: Final[MappingProxyType[str, tuple[str, ...]]] = MappingProxyType({
+        "emotional_care": (),
+        "daily_chat": (),
+        "creative_storytelling": (),
+        "task_management": ("reminder",),
+        "knowledge_query": ("web_search", "weather"),
+        "media_generation": (),
+    })
 
     # 能力域 → 默认 Skill 映射
-    _DOMAIN_SKILL_MAP: dict[str, str] = {
+    _DOMAIN_SKILL_MAP: Final[MappingProxyType[str, str]] = MappingProxyType({
         "emotional_care": "emotional_comfort",
         "daily_chat": "daily_chat",
         "creative_storytelling": "creative_storytelling",
         "task_management": "set_reminder",
-    }
+    })
 
     def __init__(
         self,

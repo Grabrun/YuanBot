@@ -1446,7 +1446,7 @@ class NapCatAdapter(BaseChannelAdapter):
 
         try:
             decoded_line = request_line.decode("utf-8", errors="replace").strip()
-            method, path, version = decoded_line.split(" ", 2)
+            method, path, _ = decoded_line.split(" ", 2)
         except ValueError:
             return None
 

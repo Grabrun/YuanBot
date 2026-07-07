@@ -332,7 +332,7 @@ class OllamaAdapter(BaseAIProvider):
         message = data.get("message", {})
 
         tool_calls = None
-        if "tool_calls" in message and message["tool_calls"]:
+        if message.get("tool_calls"):
             tool_calls = [
                 ToolCall(
                     id=tc.get("id", ""),
@@ -374,7 +374,7 @@ class OllamaAdapter(BaseAIProvider):
         message = data.get("message", {})
 
         delta_tool_calls = None
-        if "tool_calls" in message and message["tool_calls"]:
+        if message.get("tool_calls"):
             delta_tool_calls = [
                 ToolCall(
                     id=tc.get("id", ""),

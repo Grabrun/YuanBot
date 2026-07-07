@@ -3,4 +3,4 @@
 from yuanbot.tts.base import TTSAdapter
 from yuanbot.tts.manager import TTSCacheConfig, TTSConfig, TTSManager
 
-__all__ = ["TTSAdapter", "TTSManager", "TTSConfig", "TTSCacheConfig"]
+__all__ = ["TTSAdapter", "TTSCacheConfig", "TTSConfig", "TTSManager"]

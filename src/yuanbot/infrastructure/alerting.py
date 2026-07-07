@@ -216,6 +216,7 @@ class AlertManager:
 
         # AI 提供商失败跟踪（按 provider_id 分组）
         self._ai_failure_counts: dict[str, int] = {}
+        self._background_tasks: set[asyncio.Task] = set()
 
         # 注册默认规则
         self._register_default_rules()
@@ -583,7 +584,9 @@ class AlertManager:
 
         # Webhook 投递（异步）
         if self._webhook.has_targets:
-            asyncio.create_task(self._deliver_webhook(alert))
+            task = asyncio.create_task(self._deliver_webhook(alert))
+            self._background_tasks.add(task)
+            task.add_done_callback(self._background_tasks.discard)
 
         return alert
 

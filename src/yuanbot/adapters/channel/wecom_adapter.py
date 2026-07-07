@@ -63,6 +63,7 @@ class WeComAdapter(BaseChannelAdapter):
         self._access_token: str = ""
         self._token_expires_at: float = 0.0
         self._callback: Callable[[UserMessage], Awaitable[BotResponse]] | None = None
+        self._background_tasks: set[asyncio.Task] = set()
 
     @property
     def platform_name(self) -> str:
@@ -117,7 +118,9 @@ class WeComAdapter(BaseChannelAdapter):
         self._callback = callback
         logger.info("wecom_listening")
         # 启动 token 自动刷新
-        asyncio.create_task(self._token_refresh_loop())
+        task = asyncio.create_task(self._token_refresh_loop())
+        self._background_tasks.add(task)
+        task.add_done_callback(self._background_tasks.discard)
 
     async def handle_callback(
         self,
@@ -307,6 +310,10 @@ class WeComAdapter(BaseChannelAdapter):
 
     async def close(self) -> None:
         """关闭适配器"""
+        # 取消后台任务
+        for task in self._background_tasks:
+            task.cancel()
+        self._background_tasks.clear()
         if self._session:
             await self._session.aclose()
             self._session = None

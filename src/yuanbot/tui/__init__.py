@@ -10,4 +10,4 @@
 from yuanbot.tui.app import YuanBotTUI, run_tui
 from yuanbot.tui.client import TUIClient
 
-__all__ = ["YuanBotTUI", "TUIClient", "run_tui"]
+__all__ = ["TUIClient", "YuanBotTUI", "run_tui"]
