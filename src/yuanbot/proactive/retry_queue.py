@@ -296,9 +296,7 @@ class PersistentRetryQueue:
         if not self._db:
             return
 
-        cursor = await self._db.execute(
-            "SELECT * FROM retry_queue WHERE task_id = ?", (task_id,)
-        )
+        cursor = await self._db.execute("SELECT * FROM retry_queue WHERE task_id = ?", (task_id,))
         row = await cursor.fetchone()
 
         if not row:
