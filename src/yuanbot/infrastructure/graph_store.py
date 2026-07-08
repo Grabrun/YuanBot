@@ -475,7 +475,7 @@ class GraphStore:
                 new_edge_count = len(path)  # len(path) - 1 + 1
                 if neighbor not in visited or visited[neighbor] >= new_edge_count:
                     visited[neighbor] = new_edge_count
-                    queue.append((neighbor, path + [neighbor]))
+                    queue.append((neighbor, [*path, neighbor]))
 
         return found_paths
 
@@ -757,8 +757,8 @@ class GraphStore:
                                 "entity_id": nid,
                                 "entity_type": n_type,
                                 "properties": neighbor.get("properties", {}),
-                                "path": path + [nid],
-                                "relation_chain": rel_chain + [rel_type],
+                                "path": [*path, nid],
+                                "relation_chain": [*rel_chain, rel_type],
                                 "depth": new_depth,
                             }
                         )
@@ -766,7 +766,7 @@ class GraphStore:
                     # 继续遍历（避免循环）
                     if nid not in visited or visited[nid] > new_depth:
                         visited[nid] = new_depth
-                        queue.append((nid, path + [nid], rel_chain + [rel_type]))
+                        queue.append((nid, [*path, nid], [*rel_chain, rel_type]))
 
         return results
 
