@@ -160,17 +160,14 @@ class QQAdapter(BaseChannelAdapter):
 
         if content.content_type == ContentType.TEXT:
             return await self._send_text(scene, openid, content.text or "")
-        elif content.content_type in (
+        if content.content_type in (
             ContentType.IMAGE,
             ContentType.VOICE,
             ContentType.VIDEO,
             ContentType.FILE,
         ):
             return await self._send_media(scene, openid, content)
-        else:
-            return SendResult(
-                success=False, error=f"Unsupported content type: {content.content_type}"
-            )
+        return SendResult(success=False, error=f"Unsupported content type: {content.content_type}")
 
     def get_platform_user_id(self, raw_event: Any) -> str:
         """从原始事件中提取用户 ID"""

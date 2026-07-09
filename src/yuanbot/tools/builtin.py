@@ -37,10 +37,9 @@ async def search_executor(params: dict[str, Any]) -> dict[str, Any]:
     try:
         if backend == "bing":
             return await _search_bing(query, max_results)
-        elif backend == "serpapi":
+        if backend == "serpapi":
             return await _search_serpapi(query, max_results)
-        else:
-            return await _search_duckduckgo(query, max_results)
+        return await _search_duckduckgo(query, max_results)
     except Exception as exc:
         logger.error("search_failed", backend=backend, error=str(exc))
         return {"success": False, "error": str(exc)}
@@ -164,8 +163,7 @@ async def weather_executor(params: dict[str, Any]) -> dict[str, Any]:
     try:
         if backend == "openweathermap":
             return await _weather_openweathermap(city)
-        else:
-            return await _weather_qweather(city)
+        return await _weather_qweather(city)
     except Exception as exc:
         logger.error("weather_failed", city=city, error=str(exc))
         return {"success": False, "error": str(exc)}

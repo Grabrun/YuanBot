@@ -461,16 +461,15 @@ class SandboxClient:
                 return ToolResponseData(
                     invocation_id=request.invocation_id,
                     success=True,
-                    output_json=stdout_text if stdout_text else "{}",
+                    output_json=stdout_text or "{}",
                     status_code=StatusCode.OK,
                 )
-            else:
-                return ToolResponseData(
-                    invocation_id=request.invocation_id,
-                    success=False,
-                    error=stderr_text or stdout_text or f"Exit code: {proc.returncode}",
-                    status_code=StatusCode.EXECUTION_ERROR,
-                )
+            return ToolResponseData(
+                invocation_id=request.invocation_id,
+                success=False,
+                error=stderr_text or stdout_text or f"Exit code: {proc.returncode}",
+                status_code=StatusCode.EXECUTION_ERROR,
+            )
 
         except FileNotFoundError:
             return ToolResponseData(
@@ -652,13 +651,12 @@ class SubprocessToolExecutor(ToolExecutor):
                     output_json=json.dumps({"output": stdout_text}, ensure_ascii=False),
                     status_code=StatusCode.OK,
                 )
-            else:
-                return ToolResponseData(
-                    invocation_id=request.invocation_id,
-                    success=False,
-                    error=stderr_text or stdout_text,
-                    status_code=StatusCode.EXECUTION_ERROR,
-                )
+            return ToolResponseData(
+                invocation_id=request.invocation_id,
+                success=False,
+                error=stderr_text or stdout_text,
+                status_code=StatusCode.EXECUTION_ERROR,
+            )
 
         except Exception as e:
             return ToolResponseData(

@@ -128,10 +128,12 @@ class ContextBuilder:
         if isinstance(emotion, str):
             return f"[当前情感分析]\n用户当前情绪: {emotion}"
 
-        parts = ["[当前情感分析]"]
-        parts.append(f"用户当前情绪: {emotion.emotion.value}")
-        parts.append(f"情感强度: {emotion.intensity:.2f}")
-        parts.append(f"情感效价: {emotion.valence}")
+        parts = [
+            "[当前情感分析]",
+            f"用户当前情绪: {emotion.emotion.value}",
+            f"情感强度: {emotion.intensity:.2f}",
+            f"情感效价: {emotion.valence}",
+        ]
 
         if emotion.needs_immediate_comfort:
             parts.append("⚠️ 用户需要立即安慰和关怀")

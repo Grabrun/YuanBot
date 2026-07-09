@@ -102,7 +102,7 @@ class CacheStore:
 
         if self._redis:
             return await self._get_redis(key)
-        elif self._memory_cache:
+        if self._memory_cache:
             return self._memory_cache.get(key)
         return None
 
@@ -144,7 +144,7 @@ class CacheStore:
 
         if self._redis:
             return bool(await self._redis.exists(key))
-        elif self._memory_cache:
+        if self._memory_cache:
             return self._memory_cache.exists(key)
         return False
 
@@ -155,7 +155,7 @@ class CacheStore:
 
         if self._redis:
             return [k async for k in self._redis.scan_iter(match=pattern)]
-        elif self._memory_cache:
+        if self._memory_cache:
             return self._memory_cache.keys(pattern)
         return []
 

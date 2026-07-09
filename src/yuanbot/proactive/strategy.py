@@ -710,16 +710,14 @@ class ProactiveStrategy:
 
         if start <= end:
             return start <= now <= end
-        else:
-            return now >= start or now <= end
+        return now >= start or now <= end
 
     @staticmethod
     def _is_in_quiet_hours(current_hour: int, start_hour: int, end_hour: int) -> bool:
         """判断当前小时是否在免打扰时段内"""
         if start_hour <= end_hour:
             return start_hour <= current_hour < end_hour
-        else:
-            return current_hour >= start_hour or current_hour < end_hour
+        return current_hour >= start_hour or current_hour < end_hour
 
     @staticmethod
     def _is_in_greeting_window(wake_time_str: str, sleep_time_str: str) -> bool:
@@ -749,9 +747,8 @@ class ProactiveStrategy:
             if wake_minutes <= sleep_minutes:
                 # 正常作息 (e.g., 07:00 - 23:00)
                 return wake_minutes <= current_minutes < min(greeting_end, sleep_minutes)
-            else:
-                # 跨午夜作息 (e.g., 23:00 - 07:00)
-                return wake_minutes <= current_minutes < wake_minutes + 120
+            # 跨午夜作息 (e.g., 23:00 - 07:00)
+            return wake_minutes <= current_minutes < wake_minutes + 120
         except (ValueError, IndexError):
             # 解析失败时不限制
             return True
@@ -780,8 +777,7 @@ class ProactiveStrategy:
             hour = datetime.now().hour
             if hour < 12:
                 return _FALLBACK_MESSAGES["greeting_morning"]
-            elif hour < 18:
+            if hour < 18:
                 return _FALLBACK_MESSAGES["greeting_afternoon"]
-            else:
-                return _FALLBACK_MESSAGES["greeting_evening"]
+            return _FALLBACK_MESSAGES["greeting_evening"]
         return str(_FALLBACK_MESSAGES.get(task_type, _FALLBACK_MESSAGES["default"]))

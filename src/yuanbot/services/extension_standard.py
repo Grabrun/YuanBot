@@ -66,7 +66,7 @@ def compare_versions(v1: str, v2: str) -> int:
     padded2 = parsed2 + (0,) * (max_len - len(parsed2))
     if padded1 < padded2:
         return -1
-    elif padded1 > padded2:
+    if padded1 > padded2:
         return 1
     return 0
 
@@ -483,8 +483,8 @@ def create_scaffold(
         _create_persona_scaffold(ext_dir, extension_id)
 
     # 创建 README
-    with open(ext_dir / "README.md", "w", encoding="utf-8") as f:
-        f.write(f"# {manifest.name}\n\n{manifest.description}\n\n## Installation\n\nTODO\n")
+    readme_content = f"# {manifest.name}\n\n{manifest.description}\n\n## Installation\n\nTODO\n"
+    Path(ext_dir / "README.md").write_text(readme_content, encoding="utf-8")
 
     logger.info("scaffold_created", path=str(ext_dir), type=extension_type)
     return ext_dir
@@ -493,8 +493,8 @@ def create_scaffold(
 def _create_ai_provider_scaffold(ext_dir: Path, provider_id: str) -> None:
     """创建 AI 提供商适配器脚手架"""
     class_name = provider_id.replace("_", " ").title().replace(" ", "") + "Adapter"
-    with open(ext_dir / "adapter.py", "w", encoding="utf-8") as f:
-        f.write(f'''"""YuanBot AI Provider: {provider_id}"""
+    Path(ext_dir / "adapter.py").write_text(
+        f'''"""YuanBot AI Provider: {provider_id}"""
 
 from yuanbot.core.interfaces import AIProviderAdapter
 from yuanbot.core.types import ChatResponse, ChatChunk, Message, ToolDefinition
@@ -529,14 +529,16 @@ class {class_name}(AIProviderAdapter):
     @property
     def provider_id(self):
         return "{provider_id}"
-''')
+''',
+        encoding="utf-8",
+    )
 
 
 def _create_channel_scaffold(ext_dir: Path, platform: str) -> None:
     """创建消息通道适配器脚手架"""
     class_name = platform.replace("_", " ").title().replace(" ", "") + "Adapter"
-    with open(ext_dir / "adapter.py", "w", encoding="utf-8") as f:
-        f.write(f'''"""YuanBot Channel: {platform}"""
+    Path(ext_dir / "adapter.py").write_text(
+        f'''"""YuanBot Channel: {platform}"""
 
 from yuanbot.core.interfaces import ChannelAdapter
 from yuanbot.core.types import ChannelConfig, UserMessage, MessageContent, SendResult, ContentType
@@ -567,7 +569,9 @@ class {class_name}(ChannelAdapter):
     @property
     def supported_content_types(self):
         return [ContentType.TEXT]
-''')
+''',
+        encoding="utf-8",
+    )
 
 
 def _create_skill_scaffold(ext_dir: Path, skill_id: str) -> None:
@@ -610,8 +614,8 @@ def _create_tool_scaffold(ext_dir: Path, tool_id: str) -> None:
     with open(ext_dir / "schema.json", "w", encoding="utf-8") as f:
         json.dump(schema, f, indent=2, ensure_ascii=False)
 
-    with open(ext_dir / "executor.py", "w", encoding="utf-8") as f:
-        f.write(f'''"""YuanBot Tool: {tool_id}"""
+    Path(ext_dir / "executor.py").write_text(
+        f'''"""YuanBot Tool: {tool_id}"""
 
 from typing import Any
 
@@ -627,7 +631,9 @@ async def execute(params: dict[str, Any]) -> dict[str, Any]:
     """
     # TODO: 实现工具逻辑
     return {{"result": "TODO", "params": params}}
-''')
+''',
+        encoding="utf-8",
+    )
 
 
 def _create_persona_scaffold(ext_dir: Path, persona_id: str) -> None:

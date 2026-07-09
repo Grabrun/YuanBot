@@ -10,6 +10,7 @@ from __future__ import annotations
 import os
 import re
 from dataclasses import dataclass, field
+from itertools import starmap
 from pathlib import Path
 from typing import Any
 
@@ -506,7 +507,7 @@ class ProviderManager:
         Returns:
             包含 provider 信息的字典列表
         """
-        result = [
+        return [
             {
                 "provider_id": config.provider_id,
                 "name": config.name,
@@ -520,7 +521,6 @@ class ProviderManager:
             }
             for config in self._providers.values()
         ]
-        return result
 
     async def close_all(self) -> None:
         """关闭所有适配器"""
@@ -534,6 +534,6 @@ class ProviderManager:
                 logger.error("adapter_close_error", provider_id=pid, error=str(e))
 
         await asyncio.gather(
-            *(_close_one(pid, adapter) for pid, adapter in self._adapters.items()),
+            *starmap(_close_one, self._adapters.items()),
         )
         self._adapters.clear()

@@ -316,20 +316,20 @@ class YuanGateway:
             secret_token = config.get("config", {}).get("webhook", {}).get("secret_token", "")
             return self._authenticator.verify_telegram(secret_token, headers or {})
 
-        elif platform == "discord":
+        if platform == "discord":
             public_key = config.get("config", {}).get("public_key", "")
             signature = kwargs.get("signature", "")
             timestamp = kwargs.get("timestamp", "")
             return self._authenticator.verify_discord(public_key, signature, timestamp, body or "")
 
-        elif platform == "wecom":
+        if platform == "wecom":
             token = config.get("config", {}).get("token", "")
             signature = kwargs.get("signature", "")
             timestamp = kwargs.get("timestamp", "")
             nonce = kwargs.get("nonce", "")
             return self._authenticator.verify_wecom(token, signature, timestamp, nonce)
 
-        elif platform == "webchat":
+        if platform == "webchat":
             auth_required = config.get("config", {}).get("auth_required", False)
             configured_token = config.get("config", {}).get("auth_token")
             request_token = kwargs.get("auth_token")

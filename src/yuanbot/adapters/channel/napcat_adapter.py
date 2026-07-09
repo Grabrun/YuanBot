@@ -427,28 +427,28 @@ class NapCatAdapter(BaseChannelAdapter):
 
         if content.content_type == ContentType.TEXT:
             return await self.send_text(target_type, target_value, content.text or "")
-        elif content.content_type == ContentType.IMAGE:
+        if content.content_type == ContentType.IMAGE:
             return await self.send_image(
                 target_type,
                 target_value,
                 content.media_url or "",
                 media_data=content.media_data,
             )
-        elif content.content_type == ContentType.VOICE:
+        if content.content_type == ContentType.VOICE:
             return await self.send_voice(
                 target_type,
                 target_value,
                 content.media_url or "",
                 media_data=content.media_data,
             )
-        elif content.content_type == ContentType.VIDEO:
+        if content.content_type == ContentType.VIDEO:
             return await self.send_video(
                 target_type,
                 target_value,
                 content.media_url or "",
                 media_data=content.media_data,
             )
-        elif content.content_type == ContentType.FILE:
+        if content.content_type == ContentType.FILE:
             return await self.send_file(
                 target_type,
                 target_value,
@@ -456,11 +456,10 @@ class NapCatAdapter(BaseChannelAdapter):
                 filename=content.metadata.get("filename"),
                 media_data=content.media_data,
             )
-        else:
-            return SendResult(
-                success=False,
-                error=f"Unsupported content type: {content.content_type}",
-            )
+        return SendResult(
+            success=False,
+            error=f"Unsupported content type: {content.content_type}",
+        )
 
     def get_platform_user_id(self, raw_event: Any) -> str:
         """从原始事件中提取平台用户 ID
@@ -1191,8 +1190,7 @@ class NapCatAdapter(BaseChannelAdapter):
                 timeout=API_TIMEOUT_S,
             )
             resp.raise_for_status()
-            data = resp.json()
-            return data
+            return resp.json()
         except httpx.TimeoutException:
             logger.error("napcat_api_timeout", action=action)
             return {"status": "failed", "retcode": -1, "data": None, "message": "Request timeout"}
@@ -1255,8 +1253,7 @@ class NapCatAdapter(BaseChannelAdapter):
                     payload_bytes,
                 )
 
-                result = await asyncio.wait_for(fut, timeout=timeout)
-                return result
+                return await asyncio.wait_for(fut, timeout=timeout)
             except TimeoutError:
                 self._pending.pop(echo, None)
                 logger.warning("napcat_ws_api_timeout", action=action)
@@ -1524,7 +1521,7 @@ class NapCatAdapter(BaseChannelAdapter):
             if opcode == 0x8:  # Close
                 logger.info("napcat_ws_closed")
                 break
-            elif opcode == 0x9:  # Ping（客户端发来的 Ping，回复 Pong）
+            if opcode == 0x9:  # Ping（客户端发来的 Ping，回复 Pong）
                 if self._ws_writer:
                     await self._ws_send_frame(self._ws_writer, 0xA, payload)
             elif opcode == 0xA:  # Pong

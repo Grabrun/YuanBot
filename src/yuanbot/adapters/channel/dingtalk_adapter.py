@@ -173,11 +173,10 @@ class DingTalkAdapter(BaseChannelAdapter):
                     content.text or "",
                 )
             return await self._send_text(target_type, target_value, content.text or "")
-        else:
-            return SendResult(
-                success=False,
-                error=f"Unsupported content type: {content.content_type}",
-            )
+        return SendResult(
+            success=False,
+            error=f"Unsupported content type: {content.content_type}",
+        )
 
     def get_platform_user_id(self, raw_event: Any) -> str:
         """从原始事件中提取用户 ID
@@ -512,7 +511,7 @@ class DingTalkAdapter(BaseChannelAdapter):
         """
         if target_type == "session":
             return f"{SEND_BY_SESSION_URL}?access_token={self._access_token}"
-        elif target_type == "group":
+        if target_type == "group":
             return f"{SEND_BY_GROUP_URL}?access_token={self._access_token}"
         return None
 

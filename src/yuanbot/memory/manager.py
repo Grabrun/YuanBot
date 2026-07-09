@@ -24,6 +24,7 @@ import heapq
 import itertools
 import json
 import math
+import operator
 from collections import defaultdict
 from datetime import datetime
 from typing import Any
@@ -473,7 +474,7 @@ class MemoryManager:
             except Exception:
                 continue
 
-        important_dates.sort(key=lambda x: x["days_until"])
+        important_dates.sort(key=operator.itemgetter("days_until"))
         return important_dates
 
     @staticmethod
@@ -890,8 +891,7 @@ class MemoryManager:
                     category="habit",
                 )
                 stats["upgraded"] += 1
-                for node in nodes:
-                    removed_ids.add(node.id)
+                removed_ids.update(node.id for node in nodes)
 
         if removed_ids:
             original_count = len(self._episodic_memories.get(user_id, []))
@@ -1501,13 +1501,12 @@ class MemoryManager:
         hour = datetime.now().hour
         if hour < 6:
             return "凌晨"
-        elif hour < 12:
+        if hour < 12:
             return "上午"
-        elif hour < 14:
+        if hour < 14:
             return "中午"
-        elif hour < 18:
+        if hour < 18:
             return "下午"
-        elif hour < 22:
+        if hour < 22:
             return "晚上"
-        else:
-            return "深夜"
+        return "深夜"

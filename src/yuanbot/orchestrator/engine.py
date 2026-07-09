@@ -231,7 +231,7 @@ class OrchestratorEngine:
                 content_type=ContentType.TEXT,
                 text=response_text,
             ),
-            proactive_followups=proactive_tasks if proactive_tasks else None,
+            proactive_followups=proactive_tasks or None,
         )
 
         logger.info(

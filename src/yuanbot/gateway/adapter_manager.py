@@ -119,17 +119,16 @@ class AdapterManager:
             from yuanbot.adapters.channel.telegram_adapter import TelegramAdapter
 
             return TelegramAdapter()
-        elif platform == "web":
+        if platform == "web":
             from yuanbot.adapters.channel.web_adapter import WebAdapter
 
             return WebAdapter()
-        elif platform == "discord":
+        if platform == "discord":
             from yuanbot.adapters.channel.discord_adapter import DiscordAdapter
 
             return DiscordAdapter()
-        elif platform == "wecom":
+        if platform == "wecom":
             from yuanbot.adapters.channel.wecom_adapter import WeComAdapter
 
             return WeComAdapter()
-        else:
-            raise ValueError(f"Unknown channel platform: {platform}")
+        raise ValueError(f"Unknown channel platform: {platform}")

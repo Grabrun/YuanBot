@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import json
+import operator
 import uuid
 from datetime import datetime
 from pathlib import Path
@@ -534,7 +535,7 @@ class ConversationStore:
             )
 
         # 按时间倒序排列
-        results.sort(key=lambda r: r["timestamp"], reverse=True)
+        results.sort(key=operator.itemgetter("timestamp"), reverse=True)
         return results[offset : offset + limit]
 
     def export_conversation_markdown(
@@ -557,24 +558,29 @@ class ConversationStore:
             return None
 
         messages = self._messages.get(conversation_id, [])
-        lines: list[str] = []
-        lines.append(f"# {conv.title}")
-        lines.append("")
-        lines.append(f"创建时间: {conv.created_at.strftime('%Y-%m-%d %H:%M:%S')}")
-        lines.append(f"消息数: {len(messages)}")
-        lines.append("")
-        lines.append("---")
-        lines.append("")
+        lines: list[str] = [
+            f"# {conv.title}",
+            "",
+            f"创建时间: {conv.created_at.strftime('%Y-%m-%d %H:%M:%S')}",
+            f"消息数: {len(messages)}",
+            "",
+            "---",
+            "",
+        ]
 
         for msg in messages:
             role_label = "👤 用户" if msg.role == "user" else "🤖 助手"
             ts = msg.timestamp.strftime("%Y-%m-%d %H:%M:%S")
-            lines.append(f"**{role_label}** ({ts})")
-            lines.append("")
-            lines.append(msg.content)
-            lines.append("")
-            lines.append("---")
-            lines.append("")
+            lines.extend(
+                [
+                    f"**{role_label}** ({ts})",
+                    "",
+                    msg.content,
+                    "",
+                    "---",
+                    "",
+                ]
+            )
 
         return "\n".join(lines)
 

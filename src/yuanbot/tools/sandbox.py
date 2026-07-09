@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import pathlib
 import uuid
 from typing import Any
 
@@ -126,12 +127,11 @@ class DockerSandboxExecutor:
                     output=output,
                     execution_time_ms=0,
                 )
-            else:
-                return ToolResult(
-                    tool_id=tool_id,
-                    success=False,
-                    error=stderr_text or stdout_text or f"Exit code: {proc.returncode}",
-                )
+            return ToolResult(
+                tool_id=tool_id,
+                success=False,
+                error=stderr_text or stdout_text or f"Exit code: {proc.returncode}",
+            )
 
         except Exception as e:
             logger.error("docker_sandbox_error", tool_id=tool_id, error=str(e))
@@ -326,8 +326,7 @@ class WasmSandboxExecutor:
         self._cache_misses += 1
 
         # 读取 WASM 二进制
-        with open(wasm_path, "rb") as f:
-            wasm_bytes = f.read()
+        wasm_bytes = pathlib.Path(wasm_path).read_bytes()
 
         # 编译模块
         module = self._Module(self._engine, wasm_bytes)
@@ -385,13 +384,12 @@ class WasmSandboxExecutor:
                 timeout=timeout,
                 entry_point=entry_point,
             )
-        else:
-            return await self._execute_subprocess(
-                tool_id=tool_id,
-                wasm_path=wasm_path,
-                params=params,
-                timeout=timeout,
-            )
+        return await self._execute_subprocess(
+            tool_id=tool_id,
+            wasm_path=wasm_path,
+            params=params,
+            timeout=timeout,
+        )
 
     async def _execute_native(
         self,
@@ -574,12 +572,11 @@ class WasmSandboxExecutor:
                 result_bytes.append(byte)
 
             return result_bytes.decode("utf-8", errors="replace")
-        else:
-            # 无 memory 导出，尝试无参调用
-            result = entry_func(store)
-            if isinstance(result, (int, float, str)):
-                return str(result)
-            return json.dumps({"result": result})
+        # 无 memory 导出，尝试无参调用
+        result = entry_func(store)
+        if isinstance(result, (int, float, str)):
+            return str(result)
+        return json.dumps({"result": result})
 
     async def _execute_subprocess(
         self,
@@ -628,13 +625,12 @@ class WasmSandboxExecutor:
                     success=True,
                     output=output,
                 )
-            else:
-                stderr_text = stderr.decode("utf-8", errors="replace").strip()
-                return ToolResult(
-                    tool_id=tool_id,
-                    success=False,
-                    error=stderr_text or f"Exit code: {proc.returncode}",
-                )
+            stderr_text = stderr.decode("utf-8", errors="replace").strip()
+            return ToolResult(
+                tool_id=tool_id,
+                success=False,
+                error=stderr_text or f"Exit code: {proc.returncode}",
+            )
 
         except TimeoutError:
             return ToolResult(

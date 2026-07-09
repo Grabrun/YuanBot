@@ -385,7 +385,7 @@ class DiscordAdapter(BaseChannelAdapter):
             yuanbot_user_id=self._resolve_yuanbot_user_id(platform_user_id),
             session_id=self._build_session_id(platform_user_id),
             content_type=content_type,
-            text=text if text else None,
+            text=text or None,
             media_url=media_url,
             metadata={
                 "channel_id": str(message.get("channel_id", "")),

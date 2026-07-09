@@ -113,14 +113,13 @@ class PiperTTSAdapter(TTSAdapter):
 
         try:
             # Piper 合成在同步线程中运行，使用 asyncio.to_thread 避免阻塞
-            audio_bytes = await asyncio.to_thread(
+            return await asyncio.to_thread(
                 self._synthesize_sync,
                 text,
                 voice,
                 length_scale,
                 output_format,
             )
-            return audio_bytes
         except Exception as e:
             logger.error("piper_synthesize_failed", error=str(e))
             raise

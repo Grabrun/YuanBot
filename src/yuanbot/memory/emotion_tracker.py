@@ -295,7 +295,7 @@ class EmotionTracker:
         """确定情感效价"""
         if emotion in _POSITIVE_EMOTIONS:
             return "positive"
-        elif emotion in _NEGATIVE_EMOTIONS:
+        if emotion in _NEGATIVE_EMOTIONS:
             return "negative"
         return "neutral"
 
@@ -304,7 +304,7 @@ class EmotionTracker:
         """确定情感唤醒度"""
         if emotion in _HIGH_AROUSAL_EMOTIONS:
             return "high" if intensity > 0.5 else "medium"
-        elif emotion in _LOW_AROUSAL_EMOTIONS:
+        if emotion in _LOW_AROUSAL_EMOTIONS:
             return "low" if intensity > 0.5 else "medium"
         return "medium"
 
@@ -313,7 +313,7 @@ class EmotionTracker:
         """确定情感主导度"""
         if emotion in _HIGH_DOMINANCE_EMOTIONS:
             return "high"
-        elif emotion in _LOW_DOMINANCE_EMOTIONS:
+        if emotion in _LOW_DOMINANCE_EMOTIONS:
             return "low"
         return "medium"
 

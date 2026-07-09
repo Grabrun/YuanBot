@@ -20,6 +20,7 @@ import contextlib
 import json
 import os
 import random
+import string
 import time
 import uuid
 from collections.abc import Awaitable, Callable
@@ -358,17 +359,14 @@ class WeixinAdapter(BaseChannelAdapter):
 
         if content.content_type == ContentType.TEXT:
             return await self._send_text(target_id, content.text or "", context_token)
-        elif content.content_type in (
+        if content.content_type in (
             ContentType.IMAGE,
             ContentType.VOICE,
             ContentType.VIDEO,
             ContentType.FILE,
         ):
             return await self._send_media(target_id, content, context_token)
-        else:
-            return SendResult(
-                success=False, error=f"Unsupported content type: {content.content_type}"
-            )
+        return SendResult(success=False, error=f"Unsupported content type: {content.content_type}")
 
     def get_platform_user_id(self, raw_event: Any) -> str:
         """从原始事件中提取用户 ID"""
@@ -387,8 +385,7 @@ class WeixinAdapter(BaseChannelAdapter):
         if not self._client:
             self._client = httpx.AsyncClient(timeout=httpx.Timeout(API_TIMEOUT_S))
 
-        qr_data = await self._fetch_qrcode()
-        return qr_data
+        return await self._fetch_qrcode()
 
     async def poll_login_status(self, qrcode: str, verify_code: str = "") -> dict[str, Any]:
         """轮询二维码状态（单次轮询）
@@ -459,7 +456,7 @@ class WeixinAdapter(BaseChannelAdapter):
                 # 等待中
                 continue
 
-            elif status == "need_verifycode":
+            if status == "need_verifycode":
                 # 需要配对码，标记后继续轮询（首次空字符串，之后由外部设置）
                 if not pending_verify_code:
                     return {
@@ -470,20 +467,20 @@ class WeixinAdapter(BaseChannelAdapter):
                     }
                 continue
 
-            elif status == "scaned_but_redirect":
+            if status == "scaned_but_redirect":
                 redirect_host = status_data.get("redirect_host", "")
                 if redirect_host:
                     current_base_url = f"https://{redirect_host}"
                     logger.info("wechat_qr_redirect", new_base_url=current_base_url)
                 continue
 
-            elif status == "binded_redirect":
+            if status == "binded_redirect":
                 return {
                     "status": "binded_redirect",
                     "message": "已绑定到此实例，无需重复登录",
                 }
 
-            elif status == "expired":
+            if status == "expired":
                 qrcode = ""  # 触发刷新
                 qr_refresh_count += 1
                 if qr_refresh_count > QR_MAX_REFRESH_COUNT:
@@ -494,7 +491,7 @@ class WeixinAdapter(BaseChannelAdapter):
                 logger.info("wechat_qr_expired_refresh", attempt=qr_refresh_count)
                 continue
 
-            elif status == "verify_code_blocked":
+            if status == "verify_code_blocked":
                 pending_verify_code = ""
                 qrcode = ""  # 触发刷新
                 qr_refresh_count += 1
@@ -506,7 +503,7 @@ class WeixinAdapter(BaseChannelAdapter):
                 logger.info("wechat_qr_verify_code_blocked_refresh", attempt=qr_refresh_count)
                 continue
 
-            elif status == "confirmed":
+            if status == "confirmed":
                 # 登录成功
                 token = status_data.get("token", "")
                 user_id = status_data.get("user_id", "")
@@ -540,7 +537,7 @@ class WeixinAdapter(BaseChannelAdapter):
                     "base_url": base_url,
                 }
 
-            elif status == "error":
+            if status == "error":
                 return {"status": "error", "error": status_data.get("error", "未知错误")}
 
         return {"status": "error", "error": "登录超时，请重试"}
@@ -833,7 +830,7 @@ class WeixinAdapter(BaseChannelAdapter):
             session_id=session_id,
             content_type=content_type,
             text=text,
-            media_url=media_path if media_path else None,
+            media_url=media_path or None,
             metadata={
                 "message_id": raw_msg.get("message_id"),
                 "context_token": raw_msg.get("context_token", ""),
@@ -1333,7 +1330,7 @@ class WeixinAdapter(BaseChannelAdapter):
         if len(decoded) == 32:
             try:
                 hex_str = decoded.decode("ascii")
-                if all(c in "0123456789abcdefABCDEF" for c in hex_str):
+                if all(c in string.hexdigits for c in hex_str):
                     return bytes.fromhex(hex_str)
             except (ValueError, UnicodeDecodeError):
                 pass

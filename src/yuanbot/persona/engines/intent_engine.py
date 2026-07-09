@@ -9,6 +9,7 @@
 
 from __future__ import annotations
 
+import operator
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -178,7 +179,7 @@ class IntentEngine:
             return IntentResult(primary="unknown", confidence=0.3)
 
         # 按分数排序
-        sorted_intents = sorted(scores.items(), key=lambda x: x[1], reverse=True)
+        sorted_intents = sorted(scores.items(), key=operator.itemgetter(1), reverse=True)
 
         primary = sorted_intents[0][0]
         confidence = min(sorted_intents[0][1], 1.0)

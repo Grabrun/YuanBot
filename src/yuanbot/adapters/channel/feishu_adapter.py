@@ -177,11 +177,10 @@ class FeishuAdapter(BaseChannelAdapter):
 
         if content.content_type == ContentType.TEXT:
             return await self._send_text(target_id, content.text or "")
-        else:
-            return SendResult(
-                success=False,
-                error=f"Unsupported content type: {content.content_type}",
-            )
+        return SendResult(
+            success=False,
+            error=f"Unsupported content type: {content.content_type}",
+        )
 
     async def reply_message(
         self,

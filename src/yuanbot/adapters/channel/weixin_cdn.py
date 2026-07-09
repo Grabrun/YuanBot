@@ -453,8 +453,7 @@ async def download_media_file(
     # 4. 解密
     if aes_key:
         try:
-            plaintext = aes_ecb_decrypt(ciphertext, aes_key)
-            return plaintext
+            return aes_ecb_decrypt(ciphertext, aes_key)
         except Exception as exc:
             logger.error("aes_decrypt_error", error=str(exc))
             return None
@@ -470,12 +469,11 @@ def mime_to_media_type(mime: str) -> int:
     """MIME 类型 → 上传媒体类型"""
     if mime.startswith("image/"):
         return UploadMediaType.IMAGE
-    elif mime.startswith("video/"):
+    if mime.startswith("video/"):
         return UploadMediaType.VIDEO
-    elif mime.startswith("audio/"):
+    if mime.startswith("audio/"):
         return UploadMediaType.VOICE
-    else:
-        return UploadMediaType.FILE
+    return UploadMediaType.FILE
 
 
 def extension_to_mime(ext: str) -> str:

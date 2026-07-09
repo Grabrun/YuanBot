@@ -1,7 +1,7 @@
 # YuanBot 设计符合度报告
 
-> 生成时间: 2026-07-09 00:00 CST
-> 项目版本: v1.2.2 | 测试: 1453/1453 ✅ | Ruff: All checks passed ✅ | RUF005 集合拼接优化: ✅
+> 生成时间: 2026-07-09 10:00 CST
+> 项目版本: v1.3.0 | 测试: 1453/1453 ✅ | Ruff: RET+SIM lint rules enabled ✅ | RET504/SIM/RUF005/FURB 优化全部完成 ✅
 
 ---
 
@@ -228,6 +228,15 @@
 | TTS 缓存命中率 L1 > 80% | ✅ |
 | CircuitBreaker 熔断 (5次失败/30s恢复) | ✅ |
 | 图遍历集合拼接优化 (RUF005: [*list, item] 替代 list + [item]) | ✅ |
+| RET504 消除 12 处不必要的中间变量赋值 | ✅ |
+| FURB110 三元表达式→or 运算符简化 (8处) | ✅ |
+| FURB118 lambda → operator.itemgetter (5处) | ✅ |
+| FURB103/101 open().write/read → Path.write_text/read_bytes (5处) | ✅ |
+| FURB113 repeated append → extend/list literal (3处) | ✅ |
+| FURB140 generator → itertools.starmap (1处) | ✅ |
+| FURB142 for+set.add → set.update (1处) | ✅ |
+| FURB156 硬编码 hex 字符集 → string.hexdigits (1处) | ✅ |
+| Ruff lint 启用 RET + SIM 规则集 | ✅ |
 
 ---
 
@@ -240,6 +249,8 @@
 5. **测试覆盖**: 1453 个测试覆盖所有 10 大系统核心功能
 6. **无 N+1 查询**: SQLite/MySQL 存储使用参数化查询，无 N+1 模式
 7. **无未实现功能**: 所有设计文档中标注的功能均已实现
+8. **新增 lint 规则 RET + SIM**: 消除 12 处 RET504 不必要的中间变量赋值，SIM 规则无违规
+9. **FURB 优化 24 处**: 三元表达式简化、Path 读写替换 open()、operator.itemgetter 替代 lambda、set.update 及 itertools.starmap 等
 
 ---
 

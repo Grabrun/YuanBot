@@ -2036,10 +2036,9 @@ def _register_routes(
                 app.state.orchestrator._persona = pm.active_persona
                 return {"status": "ok", "reloaded": persona_id}
             return {"status": "error", "message": f"Persona '{persona_id}' not found"}
-        else:
-            pm.load_personas()
-            app.state.orchestrator._persona = pm.active_persona
-            return {"status": "ok", "reloaded": "all", "count": len(pm.list_personas())}
+        pm.load_personas()
+        app.state.orchestrator._persona = pm.active_persona
+        return {"status": "ok", "reloaded": "all", "count": len(pm.list_personas())}
 
     # ── 人格商店 API ─────────────────────────────
 
@@ -2269,13 +2268,12 @@ def _register_routes(
             limit: 返回数量
             offset: 分页偏移
         """
-        result = await _marketplace_client.search(
+        return await _marketplace_client.search(
             query=q,
             ext_type=type,
             limit=limit,
             offset=offset,
         )
-        return result
 
     @app.get("/api/marketplace/extensions")
     async def marketplace_list(
@@ -2285,13 +2283,12 @@ def _register_routes(
         sort: str = "downloads",
     ):
         """列出市场扩展"""
-        result = await _marketplace_client.list_extensions(
+        return await _marketplace_client.list_extensions(
             ext_type=type,
             limit=limit,
             offset=offset,
             sort_by=sort,
         )
-        return result
 
     @app.get("/api/marketplace/extensions/{ext_id}")
     async def marketplace_extension_detail(ext_id: str):

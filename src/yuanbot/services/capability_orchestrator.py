@@ -187,7 +187,7 @@ class CapabilityOrchestrator:
             # 调用 LLM
             response = await self._ai.generate(
                 messages=current_messages,
-                tools=tool_definitions if tool_definitions else None,
+                tools=tool_definitions or None,
                 system_prompt=system_prompt,
             )
 

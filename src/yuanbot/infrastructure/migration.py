@@ -201,13 +201,12 @@ class DatabaseMigrator:
             conn = self._get_sqlite_connection()
             cursor = conn.execute(f"PRAGMA table_info([{table_name}])")
             return [row[1] for row in cursor.fetchall()]
-        else:
-            conn = self._get_mysql_connection()
-            cursor = conn.cursor()
-            cursor.execute(f"DESCRIBE `{table_name}`")
-            columns = [row[0] for row in cursor.fetchall()]
-            cursor.close()
-            return columns
+        conn = self._get_mysql_connection()
+        cursor = conn.cursor()
+        cursor.execute(f"DESCRIBE `{table_name}`")
+        columns = [row[0] for row in cursor.fetchall()]
+        cursor.close()
+        return columns
 
     def _migrate_table(
         self,

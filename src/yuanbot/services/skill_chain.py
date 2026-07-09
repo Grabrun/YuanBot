@@ -391,7 +391,7 @@ class SkillChainManager:
             )
             steps.append(step)
 
-        chain = SkillChain(
+        return SkillChain(
             chain_id=config["chain_id"],
             name=config.get("name", config["chain_id"]),
             description=config.get("description", ""),
@@ -403,5 +403,3 @@ class SkillChainManager:
             priority=config.get("priority", 0),
             enabled=config.get("enabled", True),
         )
-
-        return chain

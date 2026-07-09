@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import contextlib
 import math
+import operator
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -169,7 +170,7 @@ class VectorStore:
 
         if self._milvus_client:
             return await self._search_milvus(query_vector, top_k, threshold)
-        elif self._memory_store:
+        if self._memory_store:
             return self._memory_store.search_similar(query_vector, top_k, threshold)
         return []
 
@@ -306,7 +307,7 @@ class InMemoryVectorStore:
                 )
 
         # 按分数降序排序
-        results.sort(key=lambda x: x["score"], reverse=True)
+        results.sort(key=operator.itemgetter("score"), reverse=True)
         return results[:top_k]
 
     def delete_vector(self, id: str) -> None:

@@ -128,11 +128,10 @@ class ToolManager:
         """在线程池中本地执行工具（模拟受限沙盒）"""
         try:
             loop = asyncio.get_running_loop()
-            result = await asyncio.wait_for(
+            return await asyncio.wait_for(
                 loop.run_in_executor(None, self._sync_execute, tool_id, params),
                 timeout=timeout,
             )
-            return result
         except TimeoutError:
             return ToolResult(
                 tool_id=tool_id,

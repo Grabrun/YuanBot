@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import operator
 import re
 from collections import OrderedDict
 from collections.abc import AsyncIterator
@@ -165,7 +166,7 @@ class TTSCache:
             if user_dir.is_dir():
                 _collect(user_dir)
 
-        all_entries.sort(key=lambda e: e[2])  # sort by atime
+        all_entries.sort(key=operator.itemgetter(2))  # sort by atime
         total = sum(e[1] for e in all_entries)
         while total > max_bytes and all_entries:
             path, size, _ = all_entries.pop(0)

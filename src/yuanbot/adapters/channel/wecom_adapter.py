@@ -169,12 +169,12 @@ class WeComAdapter(BaseChannelAdapter):
 
             # 构建标准化消息
             content_type = _MSG_TYPE_MAP.get(msg_type, ContentType.TEXT)
-            text = content if content else None
+            text = content or None
             media_url = None
 
             if msg_type == "image":
                 pic_url = msg_root.findtext("PicUrl", "")
-                media_url = pic_url if pic_url else None
+                media_url = pic_url or None
             elif msg_type == "voice":
                 media_url = msg_root.findtext("MediaId", "")
 
@@ -412,9 +412,7 @@ class WeComAdapter(BaseChannelAdapter):
 
             # 解析明文: random(16) + msg_len(4) + msg + corp_id
             msg_len = int.from_bytes(plain[16:20], byteorder="big")
-            message = plain[20 : 20 + msg_len].decode("utf-8")
-
-            return message
+            return plain[20 : 20 + msg_len].decode("utf-8")
 
         except ImportError as err:
             raise RuntimeError(

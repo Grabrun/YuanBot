@@ -144,10 +144,7 @@ class AzureTTSAdapter(TTSAdapter):
                 "User-Agent": "YuanBot",
             }
 
-            audio_bytes = await asyncio.to_thread(
-                self._http_post, url, ssml.encode("utf-8"), headers
-            )
-            return audio_bytes
+            return await asyncio.to_thread(self._http_post, url, ssml.encode("utf-8"), headers)
 
         except Exception as e:
             logger.error("azure_tts_synthesize_failed", error=str(e))

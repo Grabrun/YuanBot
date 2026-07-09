@@ -483,7 +483,7 @@ class EventEngine:
                 if hasattr(self._weather_tool, "invoke"):
                     result = await self._weather_tool.invoke({"city": location})
                     return result.output if result.success else None
-                elif callable(self._weather_tool):
+                if callable(self._weather_tool):
                     return await self._weather_tool(location)
             except Exception:
                 return None
