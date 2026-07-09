@@ -916,8 +916,8 @@ class WeixinAdapter(BaseChannelAdapter):
             file_data, file_name, mime_type = await self._load_media_data(content.media_url)
         elif content.text:
             path = Path(content.text)
-            if path.exists():
-                file_data = path.read_bytes()
+            if await asyncio.to_thread(path.exists):
+                file_data = await asyncio.to_thread(path.read_bytes)
                 file_name = path.name
                 from yuanbot.adapters.channel.weixin_cdn import extension_to_mime
 
@@ -1590,7 +1590,7 @@ class WeixinAdapter(BaseChannelAdapter):
             )
             self._state_dir = os.path.join(workspace_dir, ".yuanbot", "weixin")
 
-        os.makedirs(self._state_dir, exist_ok=True)
+        await asyncio.to_thread(os.makedirs, self._state_dir, exist_ok=True)
         self._state_dir_initialized = True
         logger.debug("wechat_state_dir_initialized", path=self._state_dir)
 
@@ -1622,10 +1622,9 @@ class WeixinAdapter(BaseChannelAdapter):
         # 1. 恢复 sync_buf
         try:
             sync_path = self._sync_buf_path
-            if os.path.exists(sync_path):
-                with open(sync_path) as f:
-                    data = json.load(f)
-                persisted_buf = data.get("get_updates_buf", "")
+            if await asyncio.to_thread(os.path.exists, sync_path):
+                data = await asyncio.to_thread(self._read_json_file, sync_path)
+                persisted_buf = data.get("get_updates_buf", "") if data else ""
                 if persisted_buf:
                     self._sync_buf = persisted_buf
                     logger.info("wechat_restored_sync_buf")
@@ -1635,9 +1634,8 @@ class WeixinAdapter(BaseChannelAdapter):
         # 2. 恢复 context_tokens
         try:
             tokens_path = self._context_tokens_path
-            if os.path.exists(tokens_path):
-                with open(tokens_path) as f:
-                    data = json.load(f)
+            if await asyncio.to_thread(os.path.exists, tokens_path):
+                data = await asyncio.to_thread(self._read_json_file, tokens_path)
                 if isinstance(data, dict):
                     self._context_tokens.update(data)
                     logger.info(
@@ -1650,9 +1648,8 @@ class WeixinAdapter(BaseChannelAdapter):
         # 3. 恢复账号凭据
         try:
             cred_path = self._account_credentials_path
-            if os.path.exists(cred_path):
-                with open(cred_path) as f:
-                    data = json.load(f)
+            if await asyncio.to_thread(os.path.exists, cred_path):
+                data = await asyncio.to_thread(self._read_json_file, cred_path)
                 if data.get("token") and not self._token:
                     self._token = data["token"]
                     self._base_url = data.get("base_url", self._base_url)
@@ -1662,6 +1659,23 @@ class WeixinAdapter(BaseChannelAdapter):
         except Exception as exc:
             logger.warning("wechat_restore_account_failed", error=str(exc))
 
+    @staticmethod
+    def _read_json_file(filepath: str) -> dict | None:
+        """同步读取 JSON 文件（用于 asyncio.to_thread 调用）"""
+        try:
+            with open(filepath) as f:
+                return json.load(f)
+        except (json.JSONDecodeError, OSError) as exc:
+            logger.warning("wechat_read_json_failed", path=filepath, error=str(exc))
+            return None
+
+    @staticmethod
+    def _write_json_file(filepath: str, data: Any) -> None:
+        """同步写入 JSON 文件（用于 asyncio.to_thread 调用）"""
+        os.makedirs(os.path.dirname(filepath), exist_ok=True)
+        with open(filepath, "w") as f:
+            json.dump(data, f)
+
     async def _save_sync_buf(self) -> None:
         """持久化 get_updates_buf"""
         if not self._state_dir_initialized:
@@ -1669,9 +1683,11 @@ class WeixinAdapter(BaseChannelAdapter):
 
         try:
             sync_path = self._sync_buf_path
-            os.makedirs(os.path.dirname(sync_path), exist_ok=True)
-            with open(sync_path, "w") as f:
-                json.dump({"get_updates_buf": self._sync_buf}, f)
+            await asyncio.to_thread(
+                self._write_json_file,
+                sync_path,
+                {"get_updates_buf": self._sync_buf},
+            )
         except Exception as exc:
             logger.warning("wechat_save_sync_buf_failed", error=str(exc))
 
@@ -1682,9 +1698,11 @@ class WeixinAdapter(BaseChannelAdapter):
 
         try:
             tokens_path = self._context_tokens_path
-            os.makedirs(os.path.dirname(tokens_path), exist_ok=True)
-            with open(tokens_path, "w") as f:
-                json.dump(self._context_tokens, f)
+            await asyncio.to_thread(
+                self._write_json_file,
+                tokens_path,
+                self._context_tokens,
+            )
         except Exception as exc:
             logger.warning("wechat_save_context_tokens_failed", error=str(exc))
 
@@ -1695,18 +1713,15 @@ class WeixinAdapter(BaseChannelAdapter):
 
         try:
             cred_path = self._account_credentials_path
-            os.makedirs(os.path.dirname(cred_path), exist_ok=True)
             data = {
                 "token": self._token or "",
                 "base_url": self._base_url,
                 "bot_id": self._bot_id or "",
                 "user_id": self._ilink_user_id or "",
             }
-            with open(cred_path, "w") as f:
-                json.dump(data, f, indent=2)
+            await asyncio.to_thread(self._write_json_file, cred_path, data)
             # 权限保护
-            with contextlib.suppress(OSError):
-                os.chmod(cred_path, 0o600)
+            await asyncio.to_thread(os.chmod, cred_path, 0o600)
             logger.info("wechat_saved_account_credentials")
         except Exception as exc:
             logger.warning("wechat_save_account_failed", error=str(exc))

@@ -1215,7 +1215,7 @@ class NapCatAdapter(BaseChannelAdapter):
         self,
         action: str,
         params: dict[str, Any] | None = None,
-        timeout: float = API_TIMEOUT_S,
+        ws_timeout: float = API_TIMEOUT_S,
     ) -> dict[str, Any]:
         """通过反向 WebSocket 连接调用 NapCat API
 
@@ -1225,7 +1225,7 @@ class NapCatAdapter(BaseChannelAdapter):
         Args:
             action: API 端点名称。
             params: 请求参数。
-            timeout: 超时时间（秒）。
+            ws_timeout: 超时时间（秒）。
 
         Returns:
             dict: API 响应。
@@ -1253,7 +1253,7 @@ class NapCatAdapter(BaseChannelAdapter):
                     payload_bytes,
                 )
 
-                return await asyncio.wait_for(fut, timeout=timeout)
+                return await asyncio.wait_for(fut, timeout=ws_timeout)
             except TimeoutError:
                 self._pending.pop(echo, None)
                 logger.warning("napcat_ws_api_timeout", action=action)

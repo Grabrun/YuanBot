@@ -46,7 +46,7 @@ class DockerSandboxExecutor:
         tool_id: str,
         image: str,
         params: dict[str, Any],
-        timeout: int | None = None,
+        exec_timeout: int | None = None,
         auth_token: str | None = None,
     ) -> ToolResult:
         """在 Docker 容器中执行工具
@@ -55,21 +55,21 @@ class DockerSandboxExecutor:
             tool_id: 工具 ID
             image: Docker 镜像名称
             params: 工具参数
-            timeout: 超时时间（秒）
+            exec_timeout: 超时时间（秒）
             auth_token: 权限令牌
 
         Returns:
             ToolResult: 执行结果
         """
         invocation_id = str(uuid.uuid4())[:8]
-        timeout = timeout or self._default_timeout
+        exec_timeout = exec_timeout or self._default_timeout
 
         logger.info(
             "docker_sandbox_execute",
             tool_id=tool_id,
             image=image,
             invocation_id=invocation_id,
-            timeout=timeout,
+            timeout=exec_timeout,
         )
 
         try:
@@ -79,7 +79,7 @@ class DockerSandboxExecutor:
                 tool_id=tool_id,
                 params=params,
                 invocation_id=invocation_id,
-                timeout=timeout,
+                timeout=exec_timeout,
                 auth_token=auth_token,
             )
 
@@ -95,7 +95,7 @@ class DockerSandboxExecutor:
             try:
                 stdout, stderr = await asyncio.wait_for(
                     proc.communicate(),
-                    timeout=timeout,
+                    timeout=exec_timeout,
                 )
             except TimeoutError:
                 # 超时，强制终止容器
@@ -104,8 +104,8 @@ class DockerSandboxExecutor:
                 return ToolResult(
                     tool_id=tool_id,
                     success=False,
-                    error=f"Tool execution timed out after {timeout}s",
-                    execution_time_ms=timeout * 1000,
+                    error=f"Tool execution timed out after {exec_timeout}s",
+                    execution_time_ms=exec_timeout * 1000,
                 )
             finally:
                 self._active_containers.pop(invocation_id, None)
@@ -347,7 +347,7 @@ class WasmSandboxExecutor:
         tool_id: str,
         wasm_path: str,
         params: dict[str, Any],
-        timeout: int | None = None,
+        exec_timeout: int | None = None,
         entry_point: str = "_start",
     ) -> ToolResult:
         """在 WASM 沙盒中执行工具
@@ -359,20 +359,20 @@ class WasmSandboxExecutor:
             tool_id: 工具 ID
             wasm_path: WASM 模块文件路径（.wasm 或 .wat）
             params: 工具参数，将序列化为 JSON 传入
-            timeout: 超时时间（秒）
+            exec_timeout: 超时时间（秒）
             entry_point: WASM 导出的入口函数名
 
         Returns:
             ToolResult: 执行结果
         """
         self._total_executions += 1
-        timeout = timeout or self._default_timeout
+        exec_timeout = exec_timeout or self._default_timeout
 
         logger.info(
             "wasm_sandbox_execute",
             tool_id=tool_id,
             wasm_path=wasm_path,
-            timeout=timeout,
+            timeout=exec_timeout,
             native=self._HAS_WASMTIME,
         )
 
@@ -381,14 +381,14 @@ class WasmSandboxExecutor:
                 tool_id=tool_id,
                 wasm_path=wasm_path,
                 params=params,
-                timeout=timeout,
+                exec_timeout=exec_timeout,
                 entry_point=entry_point,
             )
         return await self._execute_subprocess(
             tool_id=tool_id,
             wasm_path=wasm_path,
             params=params,
-            timeout=timeout,
+            exec_timeout=exec_timeout,
         )
 
     async def _execute_native(
@@ -396,7 +396,7 @@ class WasmSandboxExecutor:
         tool_id: str,
         wasm_path: str,
         params: dict[str, Any],
-        timeout: int,
+        exec_timeout: int,
         entry_point: str,
     ) -> ToolResult:
         """使用 wasmtime Python bindings 执行"""
@@ -483,7 +483,7 @@ class WasmSandboxExecutor:
             return ToolResult(
                 tool_id=tool_id,
                 success=False,
-                error=f"WASM execution timed out after {timeout}s",
+                error=f"WASM execution timed out after {exec_timeout}s",
                 execution_time_ms=elapsed_ms,
             )
         except FileNotFoundError:
@@ -583,7 +583,7 @@ class WasmSandboxExecutor:
         tool_id: str,
         wasm_path: str,
         params: dict[str, Any],
-        timeout: int,
+        exec_timeout: int,
     ) -> ToolResult:
         """回退：使用 wasmtime CLI subprocess 执行
 
@@ -609,7 +609,7 @@ class WasmSandboxExecutor:
 
             stdout, stderr = await asyncio.wait_for(
                 proc.communicate(),
-                timeout=timeout,
+                timeout=exec_timeout,
             )
 
             stdout_text = stdout.decode("utf-8", errors="replace").strip()
@@ -636,7 +636,7 @@ class WasmSandboxExecutor:
             return ToolResult(
                 tool_id=tool_id,
                 success=False,
-                error=f"WASM execution timed out after {timeout}s",
+                error=f"WASM execution timed out after {exec_timeout}s",
             )
         except FileNotFoundError:
             return ToolResult(

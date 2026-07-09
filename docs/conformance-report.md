@@ -237,6 +237,8 @@
 | FURB142 for+set.add → set.update (1处) | ✅ |
 | FURB156 硬编码 hex 字符集 → string.hexdigits (1处) | ✅ |
 | Ruff lint 启用 RET + SIM 规则集 | ✅ |
+| ASYNC109 消除 async 函数中 timeout 参数名遮蔽 (7处) | ✅ |
+| ASYNC230/240 优化热路径阻塞文件 IO → asyncio.to_thread (6处) | ✅ |
 
 ---
 
@@ -251,6 +253,8 @@
 7. **无未实现功能**: 所有设计文档中标注的功能均已实现
 8. **新增 lint 规则 RET + SIM**: 消除 12 处 RET504 不必要的中间变量赋值，SIM 规则无违规
 9. **FURB 优化 24 处**: 三元表达式简化、Path 读写替换 open()、operator.itemgetter 替代 lambda、set.update 及 itertools.starmap 等
+10. **ASYNC109 修复 7 处**: napcat_adapter、grpc_sandbox、sandbox、manager 中的 async 函数重命名 `timeout` 参数为 `exec_timeout`/`ws_timeout`，避免遮蔽 `asyncio.timeout`
+11. **ASYNC230/240 修复 6 处**: wechat_adapter.py 中热路径文件 IO（媒体加载、状态持久化）改为 `asyncio.to_thread()` 异步执行
 
 ---
 

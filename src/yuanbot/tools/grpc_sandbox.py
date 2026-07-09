@@ -349,7 +349,7 @@ class SandboxClient:
         self,
         tool_id: str,
         params: dict[str, Any] | None = None,
-        timeout: int | None = None,
+        exec_timeout: int | None = None,
     ) -> ToolResponseData:
         """执行工具
 
@@ -358,7 +358,7 @@ class SandboxClient:
         Args:
             tool_id: 工具标识
             params: 工具参数
-            timeout: 超时时间（秒）
+            exec_timeout: 超时时间（秒）
 
         Returns:
             ToolResponseData: 执行结果
@@ -366,7 +366,7 @@ class SandboxClient:
         request = ToolRequestData(
             tool_id=tool_id,
             params_json=json.dumps(params or {}, ensure_ascii=False),
-            timeout_seconds=timeout or self._timeout,
+            timeout_seconds=exec_timeout or self._timeout,
         )
 
         # 尝试 gRPC 调用

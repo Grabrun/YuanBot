@@ -123,20 +123,20 @@ class ToolManager:
         self,
         tool_id: str,
         params: dict,
-        timeout: int,
+        exec_timeout: int,
     ) -> ToolResult:
         """在线程池中本地执行工具（模拟受限沙盒）"""
         try:
             loop = asyncio.get_running_loop()
             return await asyncio.wait_for(
                 loop.run_in_executor(None, self._sync_execute, tool_id, params),
-                timeout=timeout,
+                timeout=exec_timeout,
             )
         except TimeoutError:
             return ToolResult(
                 tool_id=tool_id,
                 success=False,
-                error=f"Tool '{tool_id}' execution timed out after {timeout}s",
+                error=f"Tool '{tool_id}' execution timed out after {exec_timeout}s",
             )
         except Exception as exc:
             logger.error("tool_execution_error", tool_id=tool_id, error=str(exc))

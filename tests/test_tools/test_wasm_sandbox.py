@@ -411,7 +411,7 @@ class TestErrorHandling:
             tool_id="loop_test",
             wasm_path=infinite_loop_wasm_path,
             params={},
-            timeout=5,
+            exec_timeout=5,
         )
         # 应该因为 fuel 耗尽而失败
         assert result.success is False
@@ -431,7 +431,7 @@ class TestErrorHandling:
                 tool_id="timeout_test",
                 wasm_path=echo_wasm_path,
                 params={},
-                timeout=0,  # 0 秒超时
+                exec_timeout=0,  # 0 秒超时
             )
             # 要么超时，要么 runtime 不存在
             assert result.success is False
@@ -533,7 +533,7 @@ class TestSubprocessFallback:
             tool_id="test",
             wasm_path=echo_wasm_path,
             params={"key": "value"},
-            timeout=5,
+            exec_timeout=5,
         )
         # 应该失败（wasmtime CLI 可能不存在或参数格式不对）
         # 这取决于环境中是否有 wasmtime CLI
@@ -548,7 +548,7 @@ class TestSubprocessFallback:
             tool_id="test",
             wasm_path="/nonexistent/module.wasm",
             params={},
-            timeout=5,
+            exec_timeout=5,
         )
         assert result.success is False
 
