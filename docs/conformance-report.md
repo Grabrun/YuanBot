@@ -1,7 +1,7 @@
 # YuanBot 设计符合度报告
 
-> 生成时间: 2026-07-10 10:00 CST
-> 项目版本: v1.3.0 | 测试: 1453/1453 ✅ | ASYNC230/240 全部清除 ✅ | Ruff: RET+SIM lint rules enabled ✅
+> 生成时间: 2026-07-10 16:00 CST
+> 项目版本: v1.3.0 | 测试: 1453/1453 ✅ | ASYNC230/240 全部清除 ✅ | Ruff: RET+SIM lint rules ✅ | PTH201+noqa cleanup ✅
 
 ---
 
@@ -261,6 +261,24 @@
     - `skills/manager.py`: 1处 load_skills 循环文件 IO 批处理 (Path.exists+open 移至线程)
     - `tools/manager.py`: 1处 load_tools 循环文件 IO 批处理 (同 skills)
     - 累计消除全部 17 处 ASYNC230/240 违规，零残留
+
+---
+
+## 本次检查 (2026-07-10 16:00 CST)
+
+### 清理 RUF100 无用 noqa 指令
+- `tui/app.py`: 移除 3 处 `# noqa: RUF012`（RUF012 未启用，noqa 无效）
+
+### 修复 PTH201 路径构造
+- `infrastructure/backup.py`: `Path(".")` → `Path()` （移除显式当前目录参数）
+
+### 性能瓶颈复查
+- ASYNC 全线零违规 ✅
+- FURB 零违规 ✅
+- PERF 零违规 ✅
+- 无 N+1 查询模式 ✅
+- 无同步阻塞在 async 路径 ✅
+- 所有独立 IO 操作已使用 `asyncio.gather` 并行化 ✅
 
 ---
 

@@ -75,7 +75,7 @@ class LoginScreen(ModalScreen[dict]):
     }
     """
 
-    BINDINGS: list[Binding] = [Binding("escape", "cancel", "取消")]  # noqa: RUF012
+    BINDINGS: list[Binding] = [Binding("escape", "cancel", "取消")]
 
     def __init__(self, client: TUIClient):
         super().__init__()
@@ -130,7 +130,7 @@ class HelpScreen(ModalScreen):
     }
     """
 
-    BINDINGS: list[Binding] = [Binding("escape", "close", "关闭")]  # noqa: RUF012
+    BINDINGS: list[Binding] = [Binding("escape", "close", "关闭")]
 
     HELP_TEXT = """\
 # 🌸 缘·Bot TUI 帮助
@@ -298,7 +298,7 @@ class YuanBotTUI(App):
     }
     """
 
-    BINDINGS: list[Binding] = [  # noqa: RUF012
+    BINDINGS: list[Binding] = [
         Binding("ctrl+n", "new_conversation", "新建会话", show=True),
         Binding("ctrl+tab", "next_conversation", "下一个会话", show=True),
         Binding("ctrl+shift+tab", "prev_conversation", "上一个会话", show=True),

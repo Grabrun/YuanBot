@@ -45,7 +45,7 @@ class BackupManager:
         base_dir: Path | str | None = None,
     ) -> None:
         self._backup_dir = Path(backup_dir) if backup_dir else DEFAULT_BACKUP_DIR
-        self._base_dir = Path(base_dir) if base_dir else Path(".")
+        self._base_dir = Path(base_dir) if base_dir else Path()
 
     @property
     def backup_dir(self) -> Path:
