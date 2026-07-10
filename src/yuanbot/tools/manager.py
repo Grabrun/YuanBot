@@ -27,49 +27,52 @@ class ToolManager:
 
     async def load_tools(self) -> None:
         """扫描目录加载所有 *.yaml Tool 配置"""
-        if not self._tools_dir.exists():
-            logger.warning("tools_dir_not_found", path=str(self._tools_dir))
-            return
+        def _load():
+            if not self._tools_dir.exists():
+                logger.warning("tools_dir_not_found", path=str(self._tools_dir))
+                return
 
-        for yaml_file in sorted(self._tools_dir.glob("*.yaml")):
-            try:
-                with open(yaml_file, encoding="utf-8") as f:
-                    config = yaml.safe_load(f)
-            except (yaml.YAMLError, OSError) as exc:
-                logger.error(
-                    "tool_load_failed",
-                    file=str(yaml_file),
-                    error=str(exc),
+            for yaml_file in sorted(self._tools_dir.glob("*.yaml")):
+                try:
+                    with open(yaml_file, encoding="utf-8") as f:
+                        config = yaml.safe_load(f)
+                except (yaml.YAMLError, OSError) as exc:
+                    logger.error(
+                        "tool_load_failed",
+                        file=str(yaml_file),
+                        error=str(exc),
+                    )
+                    continue
+
+                if not isinstance(config, dict):
+                    logger.warning("tool_invalid_format", file=str(yaml_file))
+                    continue
+
+                # 检查 enabled 字段（默认为 True）
+                if not config.get("enabled", True):
+                    logger.info("tool_disabled", file=str(yaml_file))
+                    continue
+
+                tool_id = config.get("tool_id")
+                if not tool_id:
+                    logger.warning("tool_missing_id", file=str(yaml_file))
+                    continue
+
+                self._tool_configs[tool_id] = config
+
+                # 解析 schema（OpenAI Function Calling 格式）
+                schema = config.get("schema")
+                if isinstance(schema, dict):
+                    self._tool_schemas[tool_id] = schema
+
+                logger.info(
+                    "tool_loaded",
+                    tool_id=tool_id,
+                    name=config.get("name", ""),
+                    category=config.get("category", ""),
                 )
-                continue
 
-            if not isinstance(config, dict):
-                logger.warning("tool_invalid_format", file=str(yaml_file))
-                continue
-
-            # 检查 enabled 字段（默认为 True）
-            if not config.get("enabled", True):
-                logger.info("tool_disabled", file=str(yaml_file))
-                continue
-
-            tool_id = config.get("tool_id")
-            if not tool_id:
-                logger.warning("tool_missing_id", file=str(yaml_file))
-                continue
-
-            self._tool_configs[tool_id] = config
-
-            # 解析 schema（OpenAI Function Calling 格式）
-            schema = config.get("schema")
-            if isinstance(schema, dict):
-                self._tool_schemas[tool_id] = schema
-
-            logger.info(
-                "tool_loaded",
-                tool_id=tool_id,
-                name=config.get("name", ""),
-                category=config.get("category", ""),
-            )
+        await asyncio.to_thread(_load)
 
     def get_tools_for_intent(self, intent: str) -> list[dict]:
         """根据意图获取可用的 Tool Schema 列表（OpenAI Function Calling 格式）"""

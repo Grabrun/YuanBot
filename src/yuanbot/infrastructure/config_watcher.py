@@ -178,8 +178,9 @@ class ConfigWatcher:
 
         # 重新加载文件
         try:
-            with open(file_path, encoding="utf-8") as f:
-                new_config = yaml.safe_load(f) or {}
+            new_config = await asyncio.to_thread(
+                lambda: yaml.safe_load(file_path.read_text(encoding="utf-8")) or {}
+            )
         except Exception as e:
             logger.error("config_reload_failed", path=str(file_path), error=str(e))
             return

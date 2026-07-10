@@ -13,6 +13,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import time
 import uuid
@@ -249,7 +250,7 @@ class MarketplaceClient:
             return None
 
         dest = Path(dest_dir)
-        dest.mkdir(parents=True, exist_ok=True)
+        await asyncio.to_thread(dest.mkdir, parents=True, exist_ok=True)
 
         try:
             import httpx

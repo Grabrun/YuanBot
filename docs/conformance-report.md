@@ -1,7 +1,7 @@
 # YuanBot 设计符合度报告
 
-> 生成时间: 2026-07-10 00:00 CST
-> 项目版本: v1.3.0 | 测试: 1453/1453 ✅ | Ruff: RET+SIM lint rules enabled ✅ | RET504/SIM/RUF005/FURB 优化全部完成 ✅
+> 生成时间: 2026-07-10 10:00 CST
+> 项目版本: v1.3.0 | 测试: 1453/1453 ✅ | ASYNC230/240 全部清除 ✅ | Ruff: RET+SIM lint rules enabled ✅
 
 ---
 
@@ -238,7 +238,7 @@
 | FURB156 硬编码 hex 字符集 → string.hexdigits (1处) | ✅ |
 | Ruff lint 启用 RET + SIM 规则集 | ✅ |
 | ASYNC109 消除 async 函数中 timeout 参数名遮蔽 (7处) | ✅ |
-| ASYNC230/240 优化热路径阻塞文件 IO → asyncio.to_thread (6处) | ✅ |
+| ASYNC230/240 消除全部同步阻塞 IO → asyncio.to_thread (新增11处, 累计17处) | ✅ |
 
 ---
 
@@ -254,7 +254,13 @@
 8. **新增 lint 规则 RET + SIM**: 消除 12 处 RET504 不必要的中间变量赋值，SIM 规则无违规
 9. **FURB 优化 24 处**: 三元表达式简化、Path 读写替换 open()、operator.itemgetter 替代 lambda、set.update 及 itertools.starmap 等
 10. **ASYNC109 修复 7 处**: napcat_adapter、grpc_sandbox、sandbox、manager 中的 async 函数重命名 `timeout` 参数为 `exec_timeout`/`ws_timeout`，避免遮蔽 `asyncio.timeout`
-11. **ASYNC230/240 修复 6 处**: wechat_adapter.py 中热路径文件 IO（媒体加载、状态持久化）改为 `asyncio.to_thread()` 异步执行
+11. **ASYNC230/240 第2轮修复 11 处**: 
+    - `app.py`: 8处同步阻塞(Path.exists/iterdir/is_dir/mkdir/open→`asyncio.to_thread`) + 重构为 `_scan_extension_dirs`/`_ensure_extensions_dir`/`_path_exists` 辅助函数
+    - `config_watcher.py`: 1处 open()+yaml.safe_load 异步化
+    - `marketplace.py`: 1处 Path.mkdir 异步化
+    - `skills/manager.py`: 1处 load_skills 循环文件 IO 批处理 (Path.exists+open 移至线程)
+    - `tools/manager.py`: 1处 load_tools 循环文件 IO 批处理 (同 skills)
+    - 累计消除全部 17 处 ASYNC230/240 违规，零残留
 
 ---
 

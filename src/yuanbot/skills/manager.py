@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from pathlib import Path
 
 import structlog
@@ -24,47 +25,50 @@ class SkillManager:
 
     async def load_skills(self) -> None:
         """扫描目录加载所有 *.yaml Skill 配置"""
-        if not self._skills_dir.exists():
-            logger.warning("skills_dir_not_found", path=str(self._skills_dir))
-            return
+        def _load():
+            if not self._skills_dir.exists():
+                logger.warning("skills_dir_not_found", path=str(self._skills_dir))
+                return
 
-        for yaml_file in sorted(self._skills_dir.glob("*.yaml")):
-            try:
-                with open(yaml_file, encoding="utf-8") as f:
-                    config = yaml.safe_load(f)
-            except (yaml.YAMLError, OSError) as exc:
-                logger.error(
-                    "skill_load_failed",
-                    file=str(yaml_file),
-                    error=str(exc),
+            for yaml_file in sorted(self._skills_dir.glob("*.yaml")):
+                try:
+                    with open(yaml_file, encoding="utf-8") as f:
+                        config = yaml.safe_load(f)
+                except (yaml.YAMLError, OSError) as exc:
+                    logger.error(
+                        "skill_load_failed",
+                        file=str(yaml_file),
+                        error=str(exc),
+                    )
+                    continue
+
+                if not isinstance(config, dict):
+                    logger.warning("skill_invalid_format", file=str(yaml_file))
+                    continue
+
+                # 检查 enabled 字段（默认为 True）
+                if not config.get("enabled", True):
+                    logger.info("skill_disabled", file=str(yaml_file))
+                    continue
+
+                skill_id = config.get("skill_id")
+                if not skill_id:
+                    logger.warning("skill_missing_id", file=str(yaml_file))
+                    continue
+
+                self._skill_configs[skill_id] = config
+                prompt = config.get("prompt_template", "")
+                if prompt:
+                    self._skill_definitions[skill_id] = prompt
+
+                logger.info(
+                    "skill_loaded",
+                    skill_id=skill_id,
+                    name=config.get("name", ""),
+                    category=config.get("category", ""),
                 )
-                continue
 
-            if not isinstance(config, dict):
-                logger.warning("skill_invalid_format", file=str(yaml_file))
-                continue
-
-            # 检查 enabled 字段（默认为 True）
-            if not config.get("enabled", True):
-                logger.info("skill_disabled", file=str(yaml_file))
-                continue
-
-            skill_id = config.get("skill_id")
-            if not skill_id:
-                logger.warning("skill_missing_id", file=str(yaml_file))
-                continue
-
-            self._skill_configs[skill_id] = config
-            prompt = config.get("prompt_template", "")
-            if prompt:
-                self._skill_definitions[skill_id] = prompt
-
-            logger.info(
-                "skill_loaded",
-                skill_id=skill_id,
-                name=config.get("name", ""),
-                category=config.get("category", ""),
-            )
+        await asyncio.to_thread(_load)
 
     def get_skills_for_context(
         self,

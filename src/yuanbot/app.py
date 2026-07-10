@@ -8,6 +8,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import os
 from contextlib import asynccontextmanager, suppress
 from datetime import datetime
@@ -342,7 +343,7 @@ def create_app(config: YuanBotConfig) -> FastAPI:
         # 加载自定义触发器插件
         trigger_mgr = app.state.trigger_manager
         plugins_dir = Path("configs/Plugins/proactive_triggers")
-        if plugins_dir.exists():
+        if await asyncio.to_thread(plugins_dir.exists):
             loaded = await trigger_mgr.load_plugins(plugins_dir)
             if loaded:
                 print(f"  ✅ 已加载 {loaded} 个自定义触发器插件")
@@ -1560,8 +1561,9 @@ def _register_routes(
                 content={"error": f"Config file not found: {yaml_path}"},
             )
 
-        with open(yaml_path, encoding="utf-8") as f:
-            new_config = yaml.safe_load(f)
+        new_config = await asyncio.to_thread(
+            lambda: yaml.safe_load(yaml_path.read_text(encoding="utf-8"))
+        )
 
         await pm.reload_provider(provider_id, new_config)
         return {"status": "ok", "message": f"Provider '{provider_id}' reloaded"}
@@ -1742,33 +1744,42 @@ def _register_routes(
 
     _extensions_dir = Path(os.environ.get("YUANBOT_EXTENSIONS_DIR", "data/extensions"))
 
+    async def _scan_extension_dirs() -> list[dict]:
+        """扫描扩展目录，在线程中执行 IO 操作"""
+        def _scan():
+            if not _extensions_dir.exists():
+                return []
+            result = []
+            for ext_dir in sorted(_extensions_dir.iterdir()):
+                if not ext_dir.is_dir():
+                    continue
+                manifest_path = ext_dir / "manifest.json"
+                if manifest_path.exists():
+                    try:
+                        manifest = ExtensionManifest.from_file(manifest_path)
+                        result.append(manifest.to_dict())
+                    except Exception as e:
+                        result.append(
+                            {"id": ext_dir.name, "error": f"Failed to load manifest: {e}"}
+                        )
+            return result
+        return await asyncio.to_thread(_scan)
+
     @app.get("/api/extensions")
     async def list_extensions():
         """列出已安装的扩展"""
-        if not _extensions_dir.exists():
-            return {"extensions": [], "count": 0}
-
-        extensions = []
-        for ext_dir in sorted(_extensions_dir.iterdir()):
-            if not ext_dir.is_dir():
-                continue
-            manifest_path = ext_dir / "manifest.json"
-            if manifest_path.exists():
-                try:
-                    manifest = ExtensionManifest.from_file(manifest_path)
-                    extensions.append(manifest.to_dict())
-                except Exception as e:
-                    extensions.append(
-                        {"id": ext_dir.name, "error": f"Failed to load manifest: {e}"}
-                    )
-
+        extensions = await _scan_extension_dirs()
         return {"extensions": extensions, "count": len(extensions)}
+
+    async def _extension_dir_exists(ext_id_or_path: Path) -> bool:
+        """异步检查扩展目录是否存在"""
+        return await asyncio.to_thread(ext_id_or_path.exists)
 
     @app.get("/api/extensions/{ext_id}")
     async def get_extension(ext_id: str):
         """获取扩展详情"""
         ext_dir = _extensions_dir / ext_id
-        if not ext_dir.exists():
+        if not await _extension_dir_exists(ext_dir):
             from fastapi.responses import JSONResponse
 
             return JSONResponse(
@@ -1777,7 +1788,7 @@ def _register_routes(
             )
 
         manifest_path = ext_dir / "manifest.json"
-        if not manifest_path.exists():
+        if not await _extension_dir_exists(manifest_path):
             from fastapi.responses import JSONResponse
 
             return JSONResponse(
@@ -1787,6 +1798,15 @@ def _register_routes(
 
         manifest = ExtensionManifest.from_file(manifest_path)
         return manifest.to_dict()
+
+    async def _ensure_extensions_dir(subdir: Path | None = None) -> None:
+        """异步确保扩展目录存在"""
+        target = subdir if subdir is not None else _extensions_dir
+        await asyncio.to_thread(target.mkdir, parents=True, exist_ok=True)
+
+    async def _path_exists(path: Path) -> bool:
+        """异步检查路径是否存在"""
+        return await asyncio.to_thread(path.exists)
 
     @app.post("/api/extensions/install")
     async def install_extension(request: dict[str, Any]):
@@ -1808,14 +1828,14 @@ def _register_routes(
                 content={"error": "Must provide either 'url' or 'path'"},
             )
 
-        _extensions_dir.mkdir(parents=True, exist_ok=True)
+        await _ensure_extensions_dir()
         tmp_dir = _extensions_dir / ".tmp_install"
 
         try:
             if source_url:
                 import httpx
 
-                tmp_dir.mkdir(parents=True, exist_ok=True)
+                await _ensure_extensions_dir(tmp_dir)
                 zip_path = tmp_dir / "extension.zip"
                 async with httpx.AsyncClient(timeout=60) as client:
                     resp = await client.get(source_url)
@@ -1825,13 +1845,15 @@ def _register_routes(
                 with zipfile.ZipFile(zip_path) as zf:
                     zf.extractall(tmp_dir)
 
-                manifest_found = False
-                for item in tmp_dir.iterdir():
-                    if item.is_dir() and (item / "manifest.json").exists():
-                        source_dir = item
-                        manifest_found = True
-                        break
-                if not manifest_found and (tmp_dir / "manifest.json").exists():
+                def _find_source_in_tmp():
+                    for item in tmp_dir.iterdir():
+                        if item.is_dir() and (item / "manifest.json").exists():
+                            return item
+                    return None
+
+                source_dir = await asyncio.to_thread(_find_source_in_tmp)
+                manifest_found = source_dir is not None
+                if not manifest_found and await _path_exists(tmp_dir / "manifest.json"):
                     source_dir = tmp_dir
                     manifest_found = True
 
@@ -1842,7 +1864,7 @@ def _register_routes(
                     )
             else:
                 source_dir = Path(source_path)
-                if not source_dir.exists():
+                if not await _path_exists(source_dir):
                     return JSONResponse(
                         status_code=400,
                         content={"error": f"Path does not exist: {source_path}"},
@@ -1867,14 +1889,21 @@ def _register_routes(
 
             # 版本兼容性检查
             installed: dict[str, str] = {}
-            if _extensions_dir.exists():
+
+            def _scan_installed():
+                result: dict[str, str] = {}
+                if not _extensions_dir.exists():
+                    return result
                 for ext_dir in _extensions_dir.iterdir():
                     if ext_dir.is_dir() and (ext_dir / "manifest.json").exists():
                         try:
                             m = ExtensionManifest.from_file(ext_dir / "manifest.json")
-                            installed[m.id] = m.version
+                            result[m.id] = m.version
                         except Exception:
                             pass
+                return result
+
+            installed = await asyncio.to_thread(_scan_installed)
 
             dep_errors = VersionManager.check_dependencies(manifest, installed)
             if dep_errors and not force:
@@ -2101,7 +2130,7 @@ def _register_routes(
             )
 
         personas_dir = Path("configs/Personas")
-        personas_dir.mkdir(parents=True, exist_ok=True)
+        await asyncio.to_thread(personas_dir.mkdir, parents=True, exist_ok=True)
 
         try:
             import httpx
@@ -2320,30 +2349,32 @@ def _register_routes(
         """获取已安装扩展列表
 
         扫描 data/extensions 目录，返回每个已安装扩展的 ID 和 manifest 信息。"""
-        if not _extensions_dir.exists():
-            return {"installed": [], "count": 0}
+        def _scan_installed():
+            if not _extensions_dir.exists():
+                return []
+            result = []
+            for ext_dir in sorted(_extensions_dir.iterdir()):
+                if not ext_dir.is_dir():
+                    continue
+                manifest_path = ext_dir / "manifest.json"
+                if manifest_path.exists():
+                    try:
+                        manifest = ExtensionManifest.from_file(manifest_path)
+                        result.append(
+                            {
+                                "id": manifest.id,
+                                "name": manifest.name,
+                                "version": manifest.version,
+                                "type": manifest.type if hasattr(manifest, "type") else "",
+                            }
+                        )
+                    except Exception:
+                        result.append({"id": ext_dir.name, "version": "unknown", "type": ""})
+                else:
+                    result.append({"id": ext_dir.name, "version": "unknown", "type": ""})
+            return result
 
-        installed = []
-        for ext_dir in sorted(_extensions_dir.iterdir()):
-            if not ext_dir.is_dir():
-                continue
-            manifest_path = ext_dir / "manifest.json"
-            if manifest_path.exists():
-                try:
-                    manifest = ExtensionManifest.from_file(manifest_path)
-                    installed.append(
-                        {
-                            "id": manifest.id,
-                            "name": manifest.name,
-                            "version": manifest.version,
-                            "type": manifest.type if hasattr(manifest, "type") else "",
-                        }
-                    )
-                except Exception:
-                    installed.append({"id": ext_dir.name, "version": "unknown", "type": ""})
-            else:
-                installed.append({"id": ext_dir.name, "version": "unknown", "type": ""})
-
+        installed = await asyncio.to_thread(_scan_installed)
         return {"installed": installed, "count": len(installed)}
 
     @app.post("/api/marketplace/extensions/{ext_id}/install")
@@ -2356,9 +2387,9 @@ def _register_routes(
         # 检查是否已安装
         ext_dir = _extensions_dir / ext_id
         force = (request or {}).get("force", False)
-        if ext_dir.exists() and not force:
+        if await _path_exists(ext_dir) and not force:
             manifest_path = ext_dir / "manifest.json"
-            if manifest_path.exists():
+            if await _path_exists(manifest_path):
                 try:
                     existing = ExtensionManifest.from_file(manifest_path)
                     return JSONResponse(
@@ -2374,7 +2405,7 @@ def _register_routes(
                 except Exception:
                     pass
 
-        _extensions_dir.mkdir(parents=True, exist_ok=True)
+        await _ensure_extensions_dir()
 
         # 使用 MarketplaceClient 下载
         result_path = await _marketplace_client.download_extension(
@@ -2412,13 +2443,13 @@ def _register_routes(
         from fastapi.responses import JSONResponse
 
         ext_dir = _extensions_dir / ext_id
-        if not ext_dir.exists():
+        if not await _path_exists(ext_dir):
             return JSONResponse(
                 status_code=404,
                 content={"error": f"Extension '{ext_id}' is not installed"},
             )
 
-        shutil.rmtree(ext_dir)
+        await asyncio.to_thread(shutil.rmtree, ext_dir)
         return {"status": "uninstalled", "extension_id": ext_id}
 
     # ── 扩展评分与评论 API ──────────────────────────

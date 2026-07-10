@@ -1583,12 +1583,14 @@ class WeixinAdapter(BaseChannelAdapter):
             return
 
         if not self._state_dir:
-            # 默认使用 WORKSPACE/.yuanbot/weixin 目录
-            workspace_dir = os.environ.get(
-                "YUANBOT_WORKSPACE",
-                os.path.join(os.path.expanduser("~"), ".openclaw", "workspace"),
-            )
-            self._state_dir = os.path.join(workspace_dir, ".yuanbot", "weixin")
+            def _resolve_path():
+                workspace_dir = os.environ.get(
+                    "YUANBOT_WORKSPACE",
+                    os.path.join(os.path.expanduser("~"), ".openclaw", "workspace"),
+                )
+                return os.path.join(workspace_dir, ".yuanbot", "weixin")
+
+            self._state_dir = await asyncio.to_thread(_resolve_path)
 
         await asyncio.to_thread(os.makedirs, self._state_dir, exist_ok=True)
         self._state_dir_initialized = True
