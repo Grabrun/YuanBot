@@ -11,6 +11,7 @@ Ollama API:
 
 from __future__ import annotations
 
+import asyncio
 import json
 from collections.abc import AsyncIterator
 from typing import Any
@@ -134,8 +135,6 @@ class OllamaAdapter(BaseAIProvider):
                 return self._parse_chat_response(data)
             except httpx.HTTPError as e:
                 if attempt < _MAX_RETRIES - 1:
-                    import asyncio
-
                     logger.warning(
                         "ollama_request_failed",
                         error=str(e),
@@ -183,8 +182,6 @@ class OllamaAdapter(BaseAIProvider):
                 return
             except httpx.HTTPError as e:
                 if attempt < _MAX_RETRIES - 1:
-                    import asyncio
-
                     logger.warning(
                         "ollama_stream_request_failed",
                         error=str(e),
@@ -220,8 +217,6 @@ class OllamaAdapter(BaseAIProvider):
                 return data["embedding"]
             except httpx.HTTPError as e:
                 if attempt < _MAX_RETRIES - 1:
-                    import asyncio
-
                     logger.warning(
                         "ollama_embedding_failed",
                         error=str(e),

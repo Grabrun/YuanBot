@@ -1,7 +1,7 @@
 # YuanBot 设计符合度报告
 
-> 生成时间: 2026-07-10 16:00 CST
-> 项目版本: v1.3.0 | 测试: 1453/1453 ✅ | ASYNC230/240 全部清除 ✅ | Ruff: RET+SIM lint rules ✅ | PTH201+noqa cleanup ✅
+> 生成时间: 2026-07-11 00:00 CST
+> 项目版本: v1.3.1 | 测试: 1453/1453 ✅ | FURB+ASYNC lint rules 锁定 ✅ | PLC0415 修复 ✅ | 100% 符合度持续维护 ✅
 
 ---
 
@@ -237,6 +237,7 @@
 | FURB142 for+set.add → set.update (1处) | ✅ |
 | FURB156 硬编码 hex 字符集 → string.hexdigits (1处) | ✅ |
 | Ruff lint 启用 RET + SIM 规则集 | ✅ |
+| FURB + ASYNC 规则加入活跃 lint select (2026-07-11) | ✅ |
 | ASYNC109 消除 async 函数中 timeout 参数名遮蔽 (7处) | ✅ |
 | ASYNC230/240 消除全部同步阻塞 IO → asyncio.to_thread (新增11处, 累计17处) | ✅ |
 
@@ -261,6 +262,24 @@
     - `skills/manager.py`: 1处 load_skills 循环文件 IO 批处理 (Path.exists+open 移至线程)
     - `tools/manager.py`: 1处 load_tools 循环文件 IO 批处理 (同 skills)
     - 累计消除全部 17 处 ASYNC230/240 违规，零残留
+
+---
+
+## 本次检查 (2026-07-11 00:00 CST)
+
+### 锁定 FURB + ASYNC Ruff 规则
+- 将 `FURB` 和 `ASYNC` 加入 `pyproject.toml` 的 ruff lint select 列表
+- 全量检查零违规，确认之前修复的 FURB 24 处 + ASYNC 17 处无回归
+- 防止未来代码引入新的 FURB/ASYNC 违规
+
+### 修复 PLC0415 内联导入
+- `ollama_adapter.py`: 将 3 处 retry 循环内的 `import asyncio` 提至文件顶层
+- 修复路径：`get_embedding`、`chat_completion`、`stream_chat_completion` 中的内联导入
+
+### 全量测试验证
+- 1453/1453 全部通过 ✅
+- Ruff lint 零违规（含新增的 FURB + ASYNC 规则）✅
+- Git 工作区干净，无未跟踪文件
 
 ---
 
