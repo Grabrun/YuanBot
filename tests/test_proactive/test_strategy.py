@@ -231,6 +231,8 @@ class TestProactiveStrategyGenerateMessage:
         mock_memory.get_fact_memories = AsyncMock(return_value=[])
         mock_memory.get_emotion_trend = AsyncMock(return_value=None)
 
+        mock_memory.get_user_proactive_settings = AsyncMock(return_value={})
+
         strategy = ProactiveStrategy(memory_manager=mock_memory)
         msg = await strategy.generate_message("user1", "greeting")
         assert msg  # 应生成消息
@@ -239,6 +241,7 @@ class TestProactiveStrategyGenerateMessage:
     async def test_generate_ai_error_fallback(self):
         mock_ai = AsyncMock()
         mock_ai.chat_completion = AsyncMock(side_effect=Exception("API error"))
+        del mock_ai.generate  # 强制走 chat_completion 路径
 
         strategy = ProactiveStrategy(ai_service=mock_ai)
         msg = await strategy.generate_message("user1", "greeting")
@@ -247,6 +250,7 @@ class TestProactiveStrategyGenerateMessage:
     @pytest.mark.asyncio
     async def test_generate_ai_empty_response_fallback(self):
         mock_ai = AsyncMock()
+        del mock_ai.generate  # 强制走 chat_completion 路径
         mock_response = AsyncMock()
         mock_response.content = None
         mock_ai.chat_completion = AsyncMock(return_value=mock_response)
@@ -481,7 +485,10 @@ class TestUserFeedbackDownregulation:
 
     def test_negative_feedback_detected_chinese(self, strategy: ProactiveStrategy) -> None:
         """检测中文负面反馈关键词"""
-        keywords = ["别发了", "不要发了", "别再发了", "别烦我", "别打扰我", "安静", "闭嘴", "别说了", "不想听", "别主动"]
+        keywords = [
+            "别发了", "不要发了", "别再发了", "别烦我",
+            "别打扰我", "安静", "闭嘴", "别说了", "不想听", "别主动",
+        ]
         for kw in keywords:
             assert strategy.handle_user_feedback("user1", kw) is True, f"Failed to detect: {kw}"
 
@@ -494,7 +501,8 @@ class TestUserFeedbackDownregulation:
     def test_negative_feedback_with_context(self, strategy: ProactiveStrategy) -> None:
         """带上下文的负面反馈也能检测"""
         assert strategy.handle_user_feedback("user1", "求你了别发了好吗") is True
-        assert strategy.handle_user_feedback("user1", "请不要再发消息了") is False  # 不在关键词列表中
+        # 不在关键词列表中
+        assert strategy.handle_user_feedback("user1", "请不要再发消息了") is False
 
     def test_normal_message_not_detected(self, strategy: ProactiveStrategy) -> None:
         """普通消息不触发降频"""

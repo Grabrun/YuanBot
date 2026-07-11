@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+import os
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -93,8 +94,6 @@ class TestAesEcb:
         """MD5 计算"""
         assert compute_md5(b"hello") == "5d41402abc4b2a76b9719d911017c592"
 
-
-import os
 
 # ── 适配器单元测试 ────────────────────────────
 
@@ -275,6 +274,9 @@ class TestWeixinAdapterIntegration:
     async def test_shutdown(self, adapter):
         adapter._client = AsyncMock()
         adapter._client.aclose = AsyncMock()
+        mock_resp = MagicMock()
+        mock_resp.raise_for_status = MagicMock()
+        adapter._client.post = AsyncMock(return_value=mock_resp)
         adapter._running = True
 
         await adapter.shutdown()

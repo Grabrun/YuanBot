@@ -1746,6 +1746,7 @@ def _register_routes(
 
     async def _scan_extension_dirs() -> list[dict]:
         """扫描扩展目录，在线程中执行 IO 操作"""
+
         def _scan():
             if not _extensions_dir.exists():
                 return []
@@ -1763,6 +1764,7 @@ def _register_routes(
                             {"id": ext_dir.name, "error": f"Failed to load manifest: {e}"}
                         )
             return result
+
         return await asyncio.to_thread(_scan)
 
     @app.get("/api/extensions")
@@ -2349,6 +2351,7 @@ def _register_routes(
         """获取已安装扩展列表
 
         扫描 data/extensions 目录，返回每个已安装扩展的 ID 和 manifest 信息。"""
+
         def _scan_installed():
             if not _extensions_dir.exists():
                 return []

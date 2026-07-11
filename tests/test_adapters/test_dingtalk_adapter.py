@@ -177,6 +177,7 @@ class TestDingTalkAdapterIntegration:
     @pytest.mark.asyncio
     async def test_send_text_success(self, adapter):
         adapter._access_token = "test_token"
+        adapter._token_expires_at = time.time() + 3600
         adapter._client = AsyncMock()
 
         mock_resp = MagicMock()
@@ -190,6 +191,7 @@ class TestDingTalkAdapterIntegration:
     @pytest.mark.asyncio
     async def test_send_text_failure(self, adapter):
         adapter._access_token = "test_token"
+        adapter._token_expires_at = time.time() + 3600
         adapter._client = AsyncMock()
 
         mock_resp = MagicMock()
@@ -204,6 +206,7 @@ class TestDingTalkAdapterIntegration:
     @pytest.mark.asyncio
     async def test_send_markdown_success(self, adapter):
         adapter._access_token = "test_token"
+        adapter._token_expires_at = time.time() + 3600
         adapter._client = AsyncMock()
 
         mock_resp = MagicMock()
@@ -251,6 +254,7 @@ class TestDingTalkAdapterIntegration:
     async def test_send_message_text(self, adapter):
         adapter._client = AsyncMock()
         adapter._access_token = "token"
+        adapter._token_expires_at = time.time() + 3600
 
         mock_resp = MagicMock()
         mock_resp.json.return_value = {"errcode": 0, "errmsg": "ok"}
@@ -265,6 +269,7 @@ class TestDingTalkAdapterIntegration:
     async def test_send_message_markdown(self, adapter):
         adapter._client = AsyncMock()
         adapter._access_token = "token"
+        adapter._token_expires_at = time.time() + 3600
 
         mock_resp = MagicMock()
         mock_resp.json.return_value = {"errcode": 0, "errmsg": "ok"}
@@ -473,6 +478,9 @@ class TestDingTalkAdapterIntegration:
     async def test_shutdown(self, adapter):
         adapter._client = AsyncMock()
         adapter._client.aclose = AsyncMock()
+        mock_resp = MagicMock()
+        mock_resp.raise_for_status = MagicMock()
+        adapter._client.post = AsyncMock(return_value=mock_resp)
         adapter._running = True
 
         await adapter.shutdown()

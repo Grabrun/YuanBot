@@ -25,6 +25,7 @@ class SkillManager:
 
     async def load_skills(self) -> None:
         """扫描目录加载所有 *.yaml Skill 配置"""
+
         def _load():
             if not self._skills_dir.exists():
                 logger.warning("skills_dir_not_found", path=str(self._skills_dir))

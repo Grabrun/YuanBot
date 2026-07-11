@@ -1583,6 +1583,7 @@ class WeixinAdapter(BaseChannelAdapter):
             return
 
         if not self._state_dir:
+
             def _resolve_path():
                 workspace_dir = os.environ.get(
                     "YUANBOT_WORKSPACE",

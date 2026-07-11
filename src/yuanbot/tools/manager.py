@@ -27,6 +27,7 @@ class ToolManager:
 
     async def load_tools(self) -> None:
         """扫描目录加载所有 *.yaml Tool 配置"""
+
         def _load():
             if not self._tools_dir.exists():
                 logger.warning("tools_dir_not_found", path=str(self._tools_dir))

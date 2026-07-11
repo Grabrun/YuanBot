@@ -1,7 +1,7 @@
 # YuanBot 设计符合度报告
 
-> 生成时间: 2026-07-11 00:00 CST
-> 项目版本: v1.3.1 | 测试: 1453/1453 ✅ | FURB+ASYNC lint rules 锁定 ✅ | PLC0415 修复 ✅ | 100% 符合度持续维护 ✅
+> 生成时间: 2026-07-11 10:00 CST
+> 项目版本: v1.3.1 | 测试: 1453/1453 ✅ | FURB+ASYNC lint rules 锁定 ✅ | PLC0415 修复 ✅ | 100% 符合度持续维护 ✅ | 测试警告清理 ✅ | Ruff 格式对齐 ✅
 
 ---
 
@@ -280,6 +280,23 @@
 - 1453/1453 全部通过 ✅
 - Ruff lint 零违规（含新增的 FURB + ASYNC 规则）✅
 - Git 工作区干净，无未跟踪文件
+
+---
+
+## 本次检查 (2026-07-11 10:00 CST)
+
+### 清除 RuntimeWarning 测试警告（16处 → 0处）
+- `test_wechat_adapter.py::test_shutdown`: 添加 `_client.post` mock response，消除 `resp.raise_for_status()` 产生的 AsyncMock 未 await 警告
+- `test_dingtalk_adapter.py`: 3 处 `_send_*` 测试添加 `_token_expires_at` 绕过 token 刷新，消除 `_refresh_token` 内 `raise_for_status` 警告；`test_shutdown` 添加 `post` mock
+- `test_strategy.py::test_generate_ai_error_fallback` / `test_generate_ai_empty_response_fallback`: `del mock_ai.generate` 强制走 `chat_completion` 路径，消除 AsyncMock 属性探测偏差
+- `test_strategy.py::test_generate_with_memory_context`: 显式 mock `get_user_proactive_settings`，避免默认 AsyncMock 返回值产生未 await 协程
+
+### 修复 Ruff 格式对齐（4文件）
+- `src/yuanbot/app.py`、`wechat_adapter.py`、`skills/manager.py`、`tools/manager.py`: 执行 `ruff format` 对齐格式
+
+### 修复测试文件 lint 违规（3处）
+- `test_wechat_adapter.py`: 将 `import os` 提到文件顶部，消除 E402
+- `test_strategy.py`: 拆分过长关键字列表 + 重构内联注释，消除 E501（2处）
 
 ---
 
