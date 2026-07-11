@@ -1,7 +1,7 @@
 # YuanBot 设计符合度报告
 
-> 生成时间: 2026-07-11 16:00 CST
-> 项目版本: v1.3.1 | 测试: 1453/1453 ✅ | FURB+ASYNC lint rules 锁定 ✅ | PLC0415 修复 ✅ | 100% 符合度持续维护 ✅ | 测试警告清理 ✅ | Ruff 格式对齐 ✅
+> 生成时间: 2026-07-12 00:00 CST
+> 项目版本: v1.3.1 | 测试: 1453/1453 ✅ | FURB+ASYNC lint rules 锁定 ✅ | PLC0415 修复 ✅ | 100% 符合度持续维护 ✅ | 测试警告清理 ✅ | Ruff 格式对齐 ✅ | S110 可观测性提升 ✅
 
 ---
 
@@ -336,6 +336,24 @@
 - 无 N+1 查询模式 ✅
 - 无同步阻塞在 async 路径 ✅
 - 所有独立 IO 操作已使用 `asyncio.gather` 并行化 ✅
+
+---
+
+## 本次检查 (2026-07-12 00:00 CST)
+
+### 消除 S110 try-except-pass 沉默吞异常（16处）
+- `app.py`: 修复 7 处 S110 — WebSocket 消息保存、状态广播、扩展 manifest 扫描、市场搜索、安装检查中增加 `logger.warning/debug`
+- `cli.py`: 修复 1 处 — bot 配置保存失败增加 `logger.warning`
+- `memory/manager.py`: 修复 2 处 — 批量删除失败增加 `logger.warning`
+- `proactive/strategy.py`: 修复 4 处 — Redis 降级、用户活跃检查、阶段奖励计算增加 `logger.debug/warning`
+- `marketplace.py`: 修复 2 处 — 索引缓存加载失败增加 `logger.debug/warning`
+- 剩余 8 处为刻意优雅降级（WS 关闭清理、hex 探测、日志配置前、可选组件注册、新 DB 表不存在、容器关闭清理）
+
+### 全量测试验证
+- 1453/1453 全部通过 ✅
+- Ruff lint 零违规 ✅
+- Ruff format 111 文件对齐 ✅
+- Git 已提交 ✅
 
 ---
 

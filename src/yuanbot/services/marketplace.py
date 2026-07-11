@@ -345,7 +345,7 @@ class MarketplaceClient:
                     self._index_loaded_at = now
                     return self._index
                 except Exception:
-                    pass
+                    logger.debug("index_cache_parse_failed", cache_file=str(cache_file))
 
         # 从远端拉取
         if await self._fetch_index():
@@ -358,7 +358,7 @@ class MarketplaceClient:
                 self._index = [ExtensionEntry.from_dict(e) for e in data]
                 return self._index
             except Exception:
-                pass
+                logger.warning("stale_index_cache_parse_failed", cache_file=str(cache_file))
 
         return []
 

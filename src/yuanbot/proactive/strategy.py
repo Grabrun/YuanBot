@@ -103,7 +103,7 @@ class DedupLock:
             try:
                 return self._redis.exists(key) > 0
             except Exception:
-                pass
+                logger.debug("redis_exists_failed_falling_back_to_memory", key=key)
 
         # 内存模式
         expire = self._memory_locks.get(key)
@@ -128,7 +128,7 @@ class DedupLock:
                 result = self._redis.set(key, "1", nx=True, ex=self._ttl)
                 return result is not None
             except Exception:
-                pass
+                logger.debug("redis_acquire_failed_falling_back_to_memory", key=key)
 
         # 内存模式
         if key in self._memory_locks and _time.time() < self._memory_locks[key]:
@@ -395,7 +395,7 @@ class ProactiveStrategy:
                         logger.debug("user_inactive_too_long", user_id=user_id)
                         return False
             except Exception:
-                pass
+                logger.warning("user_activity_check_failed", user_id=user_id, exc_info=True)
 
         # 通过所有检查，获取锁并计数
         self._dedup.acquire(task_type, user_id)
@@ -604,7 +604,7 @@ class ProactiveStrategy:
                 }.get(stage, 0)
                 base_priority = max(1, min(10, base_priority + stage_bonus))
             except Exception:
-                pass
+                logger.debug("stage_bonus_calculation_failed", user_id=user_id, exc_info=True)
 
         return base_priority
 

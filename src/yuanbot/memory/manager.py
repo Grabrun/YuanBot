@@ -857,7 +857,7 @@ class MemoryManager:
                     await self._db.sqlite.batch_delete_episodic_metadata(forgotten_ids)
                     await self._db.vector.batch_delete_vectors(forgotten_ids)
                 except Exception:
-                    pass
+                    logger.warning("forgotten_batch_delete_failed", user_id=user_id, exc_info=True)
 
             getattr(self, f"_{memory_type_key}_memories")[user_id] = survived
 
@@ -906,7 +906,9 @@ class MemoryManager:
                     await self._db.sqlite.batch_delete_episodic_metadata(list(removed_ids))
                     await self._db.vector.batch_delete_vectors(list(removed_ids))
                 except Exception:
-                    pass
+                    logger.warning(
+                        "consolidation_batch_delete_failed", user_id=user_id, exc_info=True
+                    )
 
         logger.info("memory_consolidation", user_id=user_id, **stats)
         return stats

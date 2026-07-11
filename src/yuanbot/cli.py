@@ -2202,7 +2202,8 @@ def _configure_channels(project_root: Path, python_path: Path) -> None:
                         bot_cfg, f, allow_unicode=True, default_flow_style=False, sort_keys=False
                     )
             except Exception:
-                pass
+                _logger = structlog.get_logger("cli")
+                _logger.warning("bot_config_save_failed", platform=platform, exc_info=True)
 
     print()
     _ok("通道配置完成！(◕‿◕✿)")

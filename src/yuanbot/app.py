@@ -550,7 +550,7 @@ def create_app(config: YuanBotConfig) -> FastAPI:
                                     content=text,
                                 )
                         except Exception:
-                            pass
+                            logger.warning("failed_to_save_user_message", exc_info=True)
 
                     # 通知开始生成
                     await ws.send_text(
@@ -607,7 +607,7 @@ def create_app(config: YuanBotConfig) -> FastAPI:
                                         content=reply_text,
                                     )
                             except Exception:
-                                pass
+                                logger.warning("failed_to_save_ai_reply", exc_info=True)
 
                         await ws.send_text(
                             json.dumps(
@@ -811,7 +811,7 @@ def create_app(config: YuanBotConfig) -> FastAPI:
                     }
                 await ws.send_text(json.dumps(status))
         except Exception:
-            pass
+            logger.debug("ws_status_send_failed", exc_info=True)
 
     return app
 
@@ -1902,7 +1902,11 @@ def _register_routes(
                             m = ExtensionManifest.from_file(ext_dir / "manifest.json")
                             result[m.id] = m.version
                         except Exception:
-                            pass
+                            import structlog
+
+                            structlog.get_logger("app").debug(
+                                "manifest_parse_failed", ext=str(ext_dir)
+                            )
                 return result
 
             installed = await asyncio.to_thread(_scan_installed)
@@ -2084,6 +2088,9 @@ def _register_routes(
     @app.get("/api/personas")
     async def list_all_personas():
         """列出本地已安装人设 + 市场可用人设"""
+        import structlog
+
+        logger = structlog.get_logger("app")
         pm = app.state.persona_manager
         local_personas = pm.list_personas()
 
@@ -2097,7 +2104,7 @@ def _register_routes(
             )
             marketplace_personas = result.get("extensions", [])
         except Exception:
-            pass
+            logger.warning("marketplace_persona_search_failed", exc_info=True)
 
         # 获取评分统计
         installed_ids = {p["id"] for p in local_personas}
@@ -2391,6 +2398,9 @@ def _register_routes(
         ext_dir = _extensions_dir / ext_id
         force = (request or {}).get("force", False)
         if await _path_exists(ext_dir) and not force:
+            import structlog
+
+            logger = structlog.get_logger("app")
             manifest_path = ext_dir / "manifest.json"
             if await _path_exists(manifest_path):
                 try:
@@ -2406,7 +2416,7 @@ def _register_routes(
                         },
                     )
                 except Exception:
-                    pass
+                    logger.debug("already_installed_manifest_parse_failed", ext_id=ext_id)
 
         await _ensure_extensions_dir()
 
@@ -2430,7 +2440,7 @@ def _register_routes(
                 manifest = ExtensionManifest.from_file(manifest_path)
                 manifest_info = manifest.to_dict()
             except Exception:
-                pass
+                logger.warning("installed_manifest_parse_failed", ext_id=ext_id, exc_info=True)
 
         return {
             "status": "installed",
