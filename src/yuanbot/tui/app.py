@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import asyncio
 from datetime import datetime
+from typing import ClassVar
 
 from rich.markup import escape
 from textual import on
@@ -75,7 +76,7 @@ class LoginScreen(ModalScreen[dict]):
     }
     """
 
-    BINDINGS: list[Binding] = [Binding("escape", "cancel", "取消")]  # noqa: RUF012
+    BINDINGS: ClassVar[list[Binding]] = [Binding("escape", "cancel", "取消")]
 
     def __init__(self, client: TUIClient):
         super().__init__()
@@ -130,7 +131,7 @@ class HelpScreen(ModalScreen):
     }
     """
 
-    BINDINGS: list[Binding] = [Binding("escape", "close", "关闭")]  # noqa: RUF012
+    BINDINGS: ClassVar[list[Binding]] = [Binding("escape", "close", "关闭")]
 
     HELP_TEXT = """\
 # 🌸 缘·Bot TUI 帮助
@@ -298,7 +299,7 @@ class YuanBotTUI(App):
     }
     """
 
-    BINDINGS: list[Binding] = [  # noqa: RUF012
+    BINDINGS: ClassVar[list[Binding]] = [
         Binding("ctrl+n", "new_conversation", "新建会话", show=True),
         Binding("ctrl+tab", "next_conversation", "下一个会话", show=True),
         Binding("ctrl+shift+tab", "prev_conversation", "上一个会话", show=True),
