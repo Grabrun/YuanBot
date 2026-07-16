@@ -13,6 +13,7 @@ from __future__ import annotations
 import contextlib
 import json
 from datetime import datetime
+from pathlib import Path
 from typing import Any
 
 import structlog
@@ -329,6 +330,6 @@ class PrivacyManager:
 
     def export_to_json(self, data: dict[str, Any], file_path: str) -> None:
         """将导出数据写入 JSON 文件"""
-        with open(file_path, "w", encoding="utf-8") as f:
+        with Path(file_path).open("w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
         logger.info("data_exported_to_file", path=file_path)

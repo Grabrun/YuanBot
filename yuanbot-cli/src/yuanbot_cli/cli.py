@@ -339,11 +339,11 @@ def _run_install(args: argparse.Namespace) -> None:
         if provider_path.exists():
             import yaml  # type: ignore[import-untyped]
 
-            with open(provider_path, encoding="utf-8") as f:
+            with provider_path.open(encoding="utf-8") as f:
                 cfg = yaml.safe_load(f) or {}
             cfg.setdefault("config", {})["api_key"] = api_key
             cfg["enabled"] = True
-            with open(provider_path, "w", encoding="utf-8") as f:
+            with provider_path.open("w", encoding="utf-8") as f:
                 yaml.safe_dump(cfg, f, allow_unicode=True, default_flow_style=False)
             _ok(f"API Key 已配置到 {p['file']}")
 
@@ -352,11 +352,11 @@ def _run_install(args: argparse.Namespace) -> None:
         if bot_path.exists():
             import yaml
 
-            with open(bot_path, encoding="utf-8") as f:
+            with bot_path.open(encoding="utf-8") as f:
                 bot_cfg = yaml.safe_load(f) or {}
             bot_cfg.setdefault("ai", {})["default_provider"] = provider_id
             bot_cfg["ai"]["default_model"] = p["model"]
-            with open(bot_path, "w", encoding="utf-8") as f:
+            with bot_path.open("w", encoding="utf-8") as f:
                 yaml.safe_dump(bot_cfg, f, allow_unicode=True, default_flow_style=False)
             _ok(f"默认提供商设为 {p['name']}")
 
@@ -397,11 +397,7 @@ def _run_install(args: argparse.Namespace) -> None:
 
 def _run_update(args: argparse.Namespace) -> None:
     """更新已有 YuanBot 到最新版本"""
-    target_dir: Path
-    if args.dir:
-        target_dir = Path(args.dir).resolve()
-    else:
-        target_dir = Path.cwd()
+    target_dir = Path(args.dir).resolve() if args.dir else Path.cwd()
 
     print()
     print(f"  {_c('🌸 正在更新 YuanBot', _CYAN + _BOLD)}")
@@ -573,7 +569,7 @@ def _configure_channel_basic(
         return
 
     try:
-        with open(config_file, encoding="utf-8") as f:
+        with config_file.open(encoding="utf-8") as f:
             cfg = yaml.safe_load(f) or {}
     except Exception:
         cfg = {}
@@ -593,7 +589,7 @@ def _configure_channel_basic(
         elif not current and default_val and not required:
             cfg["config"][field_key] = default_val
 
-    with open(config_file, "w", encoding="utf-8") as f:
+    with config_file.open("w", encoding="utf-8") as f:
         yaml.safe_dump(cfg, f, allow_unicode=True, default_flow_style=False)
     _ok(f"{info['name']} 配置已保存")
 
@@ -703,7 +699,7 @@ def _setup_wechat_qrcode(target_dir: Path, channels_dir: Path) -> None:
         # 3. 保存配置
         import yaml
 
-        with open(wechat_path, encoding="utf-8") as f:
+        with wechat_path.open(encoding="utf-8") as f:
             cfg = yaml.safe_load(f) or {}
 
         cfg["enabled"] = True
@@ -712,7 +708,7 @@ def _setup_wechat_qrcode(target_dir: Path, channels_dir: Path) -> None:
         cfg["config"]["bot_id"] = ilink_bot_id
         cfg["config"]["base_url"] = base_url
 
-        with open(wechat_path, "w", encoding="utf-8") as f:
+        with wechat_path.open("w", encoding="utf-8") as f:
             yaml.safe_dump(cfg, f, allow_unicode=True, default_flow_style=False)
 
         _ok("微信通道配置已保存")

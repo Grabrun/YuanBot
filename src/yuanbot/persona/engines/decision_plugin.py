@@ -187,7 +187,7 @@ class DecisionPluginManager:
     def _load_config(self, config_file: Path) -> DecisionPluginConfig | None:
         """加载插件配置文件"""
         try:
-            with open(config_file) as f:
+            with config_file.open() as f:
                 data = yaml.safe_load(f)
             if not data or not isinstance(data, dict):
                 logger.warning("invalid_plugin_config", file=str(config_file))

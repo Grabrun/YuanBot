@@ -135,7 +135,7 @@ class BackupManager:
 
         # 同时保存独立的元数据文件（方便列出备份时快速读取）
         meta_path = self._backup_dir / f"{backup_name}_meta.json"
-        with open(meta_path, "w", encoding="utf-8") as f:
+        with meta_path.open("w", encoding="utf-8") as f:
             json.dump(meta, f, indent=2, ensure_ascii=False)
 
         result = {
@@ -172,7 +172,7 @@ class BackupManager:
         # 方式 1: 读取 meta.json 文件
         for meta_file in sorted(self._backup_dir.glob("*_meta.json"), reverse=True):
             try:
-                with open(meta_file, encoding="utf-8") as f:
+                with meta_file.open(encoding="utf-8") as f:
                     meta = json.load(f)
                 archive_name = meta.get("name", meta_file.stem.replace("_meta", ""))
                 archive_path = self._backup_dir / f"{archive_name}.tar.gz"
@@ -212,7 +212,7 @@ class BackupManager:
         # 先查 meta
         meta_path = self._backup_dir / f"{backup_name}_meta.json"
         if meta_path.exists():
-            with open(meta_path, encoding="utf-8") as f:
+            with meta_path.open(encoding="utf-8") as f:
                 return json.load(f)
 
         # 再查归档
@@ -304,7 +304,7 @@ class BackupManager:
                     try:
                         src_file = tar.extractfile(member)
                         if src_file:
-                            with open(target_path, "wb") as f:
+                            with target_path.open("wb") as f:
                                 shutil.copyfileobj(src_file, f)
                             restored_files.append(name)
                     except Exception as e:

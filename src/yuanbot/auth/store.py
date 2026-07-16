@@ -54,7 +54,7 @@ class UserStore:
         if not self._users_file.exists():
             return
         try:
-            with open(self._users_file) as f:
+            with self._users_file.open() as f:
                 data = json.load(f)
             for item in data:
                 user = User(**item)
@@ -69,7 +69,7 @@ class UserStore:
         """持久化用户数据到文件"""
         try:
             data = [u.model_dump(mode="json") for u in self._users.values()]
-            with open(self._users_file, "w") as f:
+            with self._users_file.open("w") as f:
                 json.dump(data, f, ensure_ascii=False, indent=2, default=str)
         except Exception as e:
             logger.error("user_store_save_error", error=str(e))
@@ -292,7 +292,7 @@ class ConversationStore:
         if not self._conversations_file.exists():
             return
         try:
-            with open(self._conversations_file) as f:
+            with self._conversations_file.open() as f:
                 data = json.load(f)
             for item in data:
                 conv = Conversation(**item)
@@ -312,7 +312,7 @@ class ConversationStore:
             self._messages[conversation_id] = []
             return
         try:
-            with open(msg_file) as f:
+            with msg_file.open() as f:
                 data = json.load(f)
             self._messages[conversation_id] = [ConversationMessage(**m) for m in data]
         except Exception:
@@ -322,7 +322,7 @@ class ConversationStore:
         """保存会话列表"""
         try:
             data = [c.model_dump(mode="json") for c in self._conversations.values()]
-            with open(self._conversations_file, "w") as f:
+            with self._conversations_file.open("w") as f:
                 json.dump(data, f, ensure_ascii=False, indent=2, default=str)
         except Exception as e:
             logger.error("conversation_save_error", error=str(e))
@@ -333,7 +333,7 @@ class ConversationStore:
         msg_file = self._data_dir / f"messages_{conversation_id}.json"
         try:
             data = [m.model_dump(mode="json") for m in messages]
-            with open(msg_file, "w") as f:
+            with msg_file.open("w") as f:
                 json.dump(data, f, ensure_ascii=False, indent=2, default=str)
         except Exception as e:
             logger.error("messages_save_error", conversation_id=conversation_id, error=str(e))

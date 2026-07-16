@@ -50,7 +50,7 @@ class ServerlessHandler:
         # 加载配置
         config_file = Path(self._config_path)
         if config_file.exists():
-            with open(config_file) as f:
+            with config_file.open() as f:
                 raw_config = yaml.safe_load(f) or {}
         else:
             raw_config = {}

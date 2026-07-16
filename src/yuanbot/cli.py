@@ -904,7 +904,7 @@ def _run_provider_set(args: argparse.Namespace) -> None:
 
     import yaml
 
-    with open(bot_yaml_path, encoding="utf-8") as f:
+    with bot_yaml_path.open(encoding="utf-8") as f:
         bot_config = yaml.safe_load(f) or {}
 
     if "ai" not in bot_config:
@@ -917,7 +917,7 @@ def _run_provider_set(args: argparse.Namespace) -> None:
         bot_config["ai"]["embedding_provider"] = args.provider_id
         _ok(f"嵌入专用提供商已设置为: {args.provider_id}")
 
-    with open(bot_yaml_path, "w", encoding="utf-8") as f:
+    with bot_yaml_path.open("w", encoding="utf-8") as f:
         safe_dump(bot_config, f, allow_unicode=True, default_flow_style=False)
 
     _info("配置已写入 configs/bot.yaml，重启后生效")
@@ -981,7 +981,7 @@ def _run_provider_create(args: argparse.Namespace) -> None:
 
     # 写入文件
     provider_file.parent.mkdir(parents=True, exist_ok=True)
-    with open(provider_file, "w") as f:
+    with provider_file.open("w") as f:
         safe_dump(config, f, allow_unicode=True, default_flow_style=False)
 
     _ok(f"Provider 配置已创建: {provider_file}")
@@ -1413,7 +1413,7 @@ def _run_list_channels(args: argparse.Namespace) -> None:
 
     for yaml_file in sorted(channels_dir.glob("*.yaml")):
         try:
-            with open(yaml_file, encoding="utf-8") as f:
+            with yaml_file.open(encoding="utf-8") as f:
                 config = yaml.safe_load(f) or {}
             platform = config.get("platform", yaml_file.stem)
             enabled = config.get("enabled", True)
@@ -1443,7 +1443,7 @@ def _run_list_plugins(args: argparse.Namespace) -> None:
         print(f"  {_c('🎯 Skills:', _BOLD)}")
         for yaml_file in sorted(skills_dir.glob("*.yaml")):
             try:
-                with open(yaml_file, encoding="utf-8") as f:
+                with yaml_file.open(encoding="utf-8") as f:
                     config = yaml.safe_load(f) or {}
                 name = config.get("name", yaml_file.stem)
                 category = config.get("category", "-")
@@ -1461,7 +1461,7 @@ def _run_list_plugins(args: argparse.Namespace) -> None:
         print(f"\n  {_c('🔧 Tools:', _BOLD)}")
         for yaml_file in sorted(tools_dir.glob("*.yaml")):
             try:
-                with open(yaml_file, encoding="utf-8") as f:
+                with yaml_file.open(encoding="utf-8") as f:
                     config = yaml.safe_load(f) or {}
                 name = config.get("name", yaml_file.stem)
                 category = config.get("category", "-")
@@ -1928,12 +1928,12 @@ def _run_full_install(args: argparse.Namespace) -> None:
         if provider_file.exists():
             import yaml
 
-            with open(provider_file, encoding="utf-8") as f:
+            with provider_file.open(encoding="utf-8") as f:
                 cfg = yaml.safe_load(f) or {}
             cfg.setdefault("config", {})["api_key"] = api_key
             if provider == provider:
                 cfg["enabled"] = True
-            with open(provider_file, "w") as f:
+            with provider_file.open("w") as f:
                 yaml.safe_dump(
                     cfg, f, allow_unicode=True, default_flow_style=False, sort_keys=False
                 )
@@ -1944,10 +1944,10 @@ def _run_full_install(args: argparse.Namespace) -> None:
         if bot_yaml.exists():
             import yaml
 
-            with open(bot_yaml, encoding="utf-8") as f:
+            with bot_yaml.open(encoding="utf-8") as f:
                 bot_cfg = yaml.safe_load(f) or {}
             bot_cfg.setdefault("ai", {})["default_provider"] = provider
-            with open(bot_yaml, "w", encoding="utf-8") as f:
+            with bot_yaml.open("w", encoding="utf-8") as f:
                 yaml.safe_dump(
                     bot_cfg, f, allow_unicode=True, default_flow_style=False, sort_keys=False
                 )
@@ -2152,7 +2152,7 @@ def _configure_channels(project_root: Path, python_path: Path) -> None:
         # 读取现有配置
         config_file = channels_dir / f"{platform}.yaml"
         try:
-            with open(config_file, encoding="utf-8") as f:
+            with config_file.open(encoding="utf-8") as f:
                 cfg = yaml.safe_load(f) or {}
         except Exception:
             cfg = {}
@@ -2186,7 +2186,7 @@ def _configure_channels(project_root: Path, python_path: Path) -> None:
             # 如果已经有值且用户回车，保留原值
 
         # 保存配置
-        with open(config_file, "w") as f:
+        with config_file.open("w") as f:
             yaml.safe_dump(cfg, f, allow_unicode=True, default_flow_style=False, sort_keys=False)
         _ok(f"{info['display']} 配置已保存")
 
@@ -2194,10 +2194,10 @@ def _configure_channels(project_root: Path, python_path: Path) -> None:
         bot_yaml = project_root / "configs" / "bot.yaml"
         if bot_yaml.exists():
             try:
-                with open(bot_yaml, encoding="utf-8") as f:
+                with bot_yaml.open(encoding="utf-8") as f:
                     bot_cfg = yaml.safe_load(f) or {}
                 bot_cfg.setdefault("channels", {})["default_channel"] = platform
-                with open(bot_yaml, "w", encoding="utf-8") as f:
+                with bot_yaml.open("w", encoding="utf-8") as f:
                     yaml.safe_dump(
                         bot_cfg, f, allow_unicode=True, default_flow_style=False, sort_keys=False
                     )

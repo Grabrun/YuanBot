@@ -250,7 +250,7 @@ class ExtensionManifest:
     @classmethod
     def from_file(cls, path: str | Path) -> ExtensionManifest:
         """从 manifest.json 文件加载"""
-        with open(path, encoding="utf-8") as f:
+        with Path(path).open(encoding="utf-8") as f:
             data = json.load(f)
         return cls.from_dict(data)
 
@@ -467,7 +467,7 @@ def create_scaffold(
         description=f"YuanBot {EXTENSION_TYPES[extension_type]}: {extension_id}",
         author="community",
     )
-    with open(ext_dir / "manifest.json", "w", encoding="utf-8") as f:
+    with (ext_dir / "manifest.json").open("w", encoding="utf-8") as f:
         json.dump(manifest.to_dict(), f, indent=2, ensure_ascii=False)
 
     # 创建类型特定文件
@@ -588,7 +588,7 @@ def _create_skill_scaffold(ext_dir: Path, skill_id: str) -> None:
         "token_cost_estimate": 200,
         "prompt_template": f"[技能：{skill_id}]\nTODO: 定义技能提示词",
     }
-    with open(ext_dir / "definition.yaml", "w", encoding="utf-8") as f:
+    with (ext_dir / "definition.yaml").open("w", encoding="utf-8") as f:
         yaml.dump(skill_config, f, allow_unicode=True, default_flow_style=False)
 
 
@@ -611,7 +611,7 @@ def _create_tool_scaffold(ext_dir: Path, tool_id: str) -> None:
             },
         },
     }
-    with open(ext_dir / "schema.json", "w", encoding="utf-8") as f:
+    with (ext_dir / "schema.json").open("w", encoding="utf-8") as f:
         json.dump(schema, f, indent=2, ensure_ascii=False)
 
     Path(ext_dir / "executor.py").write_text(
@@ -660,5 +660,5 @@ def _create_persona_scaffold(ext_dir: Path, persona_id: str) -> None:
             "empathy": 0.8,
         },
     }
-    with open(ext_dir / "persona.yaml", "w", encoding="utf-8") as f:
+    with (ext_dir / "persona.yaml").open("w", encoding="utf-8") as f:
         yaml.dump(persona_config, f, allow_unicode=True, default_flow_style=False)

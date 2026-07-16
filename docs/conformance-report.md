@@ -1,7 +1,7 @@
 # YuanBot 设计符合度报告
 
-> 生成时间: 2026-07-16 00:00 CST
-> 项目版本: v1.3.1 | 测试: 1453/1453 ✅ | FURB+ASYNC lint rules 锁定 ✅ | PLC0415 修复 ✅ | 100% 符合度持续维护 ✅ | Ruff 格式对齐 ✅ | S110 可观测性提升 ✅ | RUF012 + ClassVar 修复 ✅
+> 生成时间: 2026-07-16 10:00 CST
+> 项目版本: v1.3.2 | 测试: 1453/1453 ✅ | FURB+ASYNC lint rules 锁定 ✅ | PTH 规则锁定 ✅ | PLC0415 修复 ✅ | 100% 符合度持续维护 ✅ | Ruff 格式对齐 ✅ | S110 可观测性提升 ✅ | RUF012 + ClassVar 修复 ✅
 
 ---
 
@@ -649,9 +649,40 @@
 - TC003 3 处 `AsyncIterator` 类型导入属于运行时注解求值，不宜移入 TYPE_CHECKING ✅
 
 ### 结论
-自上次检查（16:00 CST）以来无新功能代码变更。项目持续保持 **100% 设计符合度**（10/10 系统全部实现），测试全绿，lint 零违规，无性能瓶颈。本次修复了 3 处 RUF012 noqa → ClassVar 语法改进。
+自上次检查（00:00 CST）以来无新功能代码变更。项目持续保持 **100% 设计符合度**（10/10 系统全部实现），测试全绿，lint 零违规，无性能瓶颈。本次修复了 3 处 RUF012 noqa → ClassVar 语法改进。
 
 ---
+
+## 本次检查 (2026-07-16 10:00 CST)
+
+### 新增 PTH 规则（Pathlib 路径规范）
+- 将 `PTH` 加入 `pyproject.toml` 的 ruff lint select 列表
+- 修复 51 处 PTH123（`open()` → `Path.open()`）：cliauth 6 处、cli 14 处、extension_standard 5 处、backup 4 处、marketplace 2 处、persona/manager 2 处、config_loader 1 处、decision_plugin 1 处、providers/manager 1 处、skills/manager 1 处、tools/manager 1 处、privacy 1 处、config 1 处、serverless 1 处
+- 修复 4 处 PTH118（`os.path.join()` → `Path /` 运算符）：wechat_adapter 4 处
+- 修复 1 处 PTH111（`os.path.expanduser()` → `Path.home()`）：wechat_adapter
+- 修复 1 处 PTH103（`os.makedirs()` → `Path.mkdir(parents=True)`）：wechat_adapter
+- 修复 1 处 PTH120（`os.path.dirname()` → `Path.parent`）：wechat_adapter
+- 修复 8 处 PTH123（`yuanbot-cli` 子包）：yuanbot_cli/cli.py 全部 open() 调用
+- 修复 1 处 SIM108（if-else → 三元运算符）：yuanbot_cli/cli.py _run_update
+
+### 全量测试验证
+- 1453/1453 全部通过，耗时 37.71s ✅
+- Ruff lint 零违规（含新增 PTH 规则集）✅
+- Ruff format 112 文件已对齐 ✅
+- Git 工作区待提交
+
+### 性能瓶颈复查
+- PTH 全部零违规 ✅
+- PERF 规则零违规 ✅
+- ASYNC 规则零违规（累计 17 处同步阻塞已全部异步化）✅
+- FURB 规则零违规（累计 24 处已优化）✅
+- 无 N+1 查询模式 ✅
+- 无同步阻塞在 async 路径 ✅
+- TTS 缓存、CircuitBreaker、FTS5 搜索等性能优化持续生效 ✅
+- 无新增 PLC0415 违规（280 处延迟导入均为有意为之，数量未变）✅
+- 无新增 S110 沉默吞异常（8 处刻意优雅降级保持不变）✅
+- RUF012 零违规（3 处 Textual BINDINGS 已豁免）✅
+- 6 处脚手架 TODO 占位符不变 ✅
 
 ## 结论
 

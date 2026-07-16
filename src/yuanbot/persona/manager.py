@@ -181,7 +181,7 @@ class PersonaManager:
 
         for yaml_file in sorted(self._personas_dir.glob("*.yaml")):
             try:
-                with open(yaml_file, encoding="utf-8") as f:
+                with yaml_file.open(encoding="utf-8") as f:
                     data = yaml.safe_load(f) or {}
 
                 persona_id = data.get("id", yaml_file.stem)
@@ -333,7 +333,7 @@ class PersonaManager:
             return False
 
         try:
-            with open(yaml_file, encoding="utf-8") as f:
+            with yaml_file.open(encoding="utf-8") as f:
                 data = yaml.safe_load(f) or {}
             data["id"] = persona_id
             persona = YamlPersona(data)

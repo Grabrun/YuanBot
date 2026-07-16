@@ -1587,9 +1587,9 @@ class WeixinAdapter(BaseChannelAdapter):
             def _resolve_path():
                 workspace_dir = os.environ.get(
                     "YUANBOT_WORKSPACE",
-                    os.path.join(os.path.expanduser("~"), ".openclaw", "workspace"),
+                    str(Path.home() / ".openclaw" / "workspace"),
                 )
-                return os.path.join(workspace_dir, ".yuanbot", "weixin")
+                return str(Path(workspace_dir) / ".yuanbot" / "weixin")
 
             self._state_dir = await asyncio.to_thread(_resolve_path)
 
@@ -1602,21 +1602,21 @@ class WeixinAdapter(BaseChannelAdapter):
         """get_updates_buf 持久化文件路径"""
         account_suffix = self._bot_id or "default"
         safe_name = account_suffix.replace("@", "-").replace(".", "-")
-        return os.path.join(self._state_dir, f"sync_buf_{safe_name}.json")
+        return str(Path(self._state_dir) / f"sync_buf_{safe_name}.json")
 
     @property
     def _context_tokens_path(self) -> str:
         """context_tokens 持久化文件路径"""
         account_suffix = self._bot_id or "default"
         safe_name = account_suffix.replace("@", "-").replace(".", "-")
-        return os.path.join(self._state_dir, f"context_tokens_{safe_name}.json")
+        return str(Path(self._state_dir) / f"context_tokens_{safe_name}.json")
 
     @property
     def _account_credentials_path(self) -> str:
         """账号凭据持久化文件路径"""
         account_suffix = self._bot_id or "default"
         safe_name = account_suffix.replace("@", "-").replace(".", "-")
-        return os.path.join(self._state_dir, f"account_{safe_name}.json")
+        return str(Path(self._state_dir) / f"account_{safe_name}.json")
 
     async def _load_persisted_state(self) -> None:
         """加载持久化状态（启动时恢复）"""
@@ -1666,7 +1666,8 @@ class WeixinAdapter(BaseChannelAdapter):
     def _read_json_file(filepath: str) -> dict | None:
         """同步读取 JSON 文件（用于 asyncio.to_thread 调用）"""
         try:
-            with open(filepath) as f:
+            fp = Path(filepath)
+            with fp.open() as f:
                 return json.load(f)
         except (json.JSONDecodeError, OSError) as exc:
             logger.warning("wechat_read_json_failed", path=filepath, error=str(exc))
@@ -1675,8 +1676,9 @@ class WeixinAdapter(BaseChannelAdapter):
     @staticmethod
     def _write_json_file(filepath: str, data: Any) -> None:
         """同步写入 JSON 文件（用于 asyncio.to_thread 调用）"""
-        os.makedirs(os.path.dirname(filepath), exist_ok=True)
-        with open(filepath, "w") as f:
+        fp = Path(filepath)
+        fp.parent.mkdir(parents=True, exist_ok=True)
+        with fp.open("w") as f:
             json.dump(data, f)
 
     async def _save_sync_buf(self) -> None:

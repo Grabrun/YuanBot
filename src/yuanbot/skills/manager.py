@@ -33,7 +33,7 @@ class SkillManager:
 
             for yaml_file in sorted(self._skills_dir.glob("*.yaml")):
                 try:
-                    with open(yaml_file, encoding="utf-8") as f:
+                    with yaml_file.open(encoding="utf-8") as f:
                         config = yaml.safe_load(f)
                 except (yaml.YAMLError, OSError) as exc:
                     logger.error(
