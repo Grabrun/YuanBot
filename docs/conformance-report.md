@@ -1,7 +1,7 @@
 # YuanBot 设计符合度报告
 
-> 生成时间: 2026-07-16 10:00 CST
-> 项目版本: v1.3.2 | 测试: 1453/1453 ✅ | FURB+ASYNC lint rules 锁定 ✅ | PTH 规则锁定 ✅ | PLC0415 修复 ✅ | 100% 符合度持续维护 ✅ | Ruff 格式对齐 ✅ | S110 可观测性提升 ✅ | RUF012 + ClassVar 修复 ✅
+> 生成时间: 2026-07-17 00:00 CST
+> 项目版本: v1.3.2 | 测试: 1453/1453 ✅ | G + PIE lint rules 锁定 ✅ | PIE810/G201/PIE790 修复 ✅ | 100% 符合度持续维护 ✅ | Ruff 格式对齐 ✅
 
 ---
 
@@ -707,8 +707,48 @@
 - PTH 零违规（60 处已全部修复锁定）✅
 - 6 处脚手架 TODO 占位符不变 ✅
 
+---
+
+## 本次检查 (2026-07-17 00:00 CST)
+
+### 修复 PIE810 startswith 元组优化（1处）
+- `src/yuanbot/adapters/channel/wechat_adapter.py`: 合并两次 `startswith("http://") or startswith("https://")` 为 `startswith(("http://", "https://"))`
+- 减少方法调用开销，代码更简洁
+
+### 修复 G201 logging.exception 替换（2处）
+- `src/yuanbot/app.py`: 2 处 `.error(... , exc_info=True)` 替换为 `.exception(...)`
+- `logger.exception` 自动包含 traceback，调试信息更完整
+
+### 修复 PIE790 冗余 pass（1处）
+- `src/yuanbot/tools/sandbox.py`: 移除不必要的 `pass` 语句
+
+### 新增 G + PIE Ruff 规则锁定
+- 将 `G`（日志规范）和 `PIE`（代码简洁度）加入 `pyproject.toml` 的 ruff lint select 列表
+- 全量检查零违规，确认以上修复无回归
+- 防止未来代码引入新的 G/PIE 违规
+
+### 全量测试验证
+- 1453/1453 全部通过，耗时 38.08s，无退化 ✅
+- Ruff lint 零违规（含新增 G + PIE 规则）✅
+- Ruff format 115 文件已对齐 ✅
+- Git 已提交 ✅
+
+### 性能瓶颈复查
+- G 规则零违规（2 处已修复锁定）✅
+- PIE 规则零违规（2 处已修复锁定）✅
+- PTH 零违规（60 处已全部修复锁定）✅
+- PERF 规则零违规 ✅
+- ASYNC 规则零违规（累计 17 处同步阻塞已全部异步化）✅
+- FURB 规则零违规（累计 24 处已优化）✅
+- 无 N+1 查询模式 ✅
+- 无同步阻塞在 async 路径 ✅
+- TTS 缓存、CircuitBreaker、FTS5 搜索等性能优化持续生效 ✅
+- 无新增 PLC0415 违规（280 处延迟导入均为有意为之，数量未变）✅
+- 无新增 S110 沉默吞异常（8 处刻意优雅降级保持不变）✅
+- 6 处脚手架 TODO 占位符不变 ✅
+
 ### 结论
-自上次检查（10:00 CST）以来无新代码变更。项目持续保持 **100% 设计符合度**（10/10 系统全部实现），测试全绿，lint 零违规，无性能瓶颈。
+自上次检查（16:00 CST）以来有微小但高质量的代码改进。项目持续保持 **100% 设计符合度**（10/10 系统全部实现），测试全绿，lint 零违规，无性能瓶颈。新增 G + PIE 规则进一步强化代码规范。
 
 ---
 

@@ -517,7 +517,6 @@ class WasmSandboxExecutor:
         子类可重写此方法注入自定义宿主函数。
         """
         # 默认不定义额外的宿主函数
-        pass
 
     def _call_entry_point(
         self,

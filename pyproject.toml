@@ -100,7 +100,7 @@ line-length = 100
 exclude = ["src/yuanbot/tools/proto/*", "tests/*", "scripts/*"]
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "N", "W", "UP", "PERF", "PTH", "RET", "RUF012", "SIM", "FURB", "ASYNC"]
+select = ["E", "F", "G", "I", "N", "W", "UP", "PERF", "PIE", "PTH", "RET", "RUF012", "SIM", "FURB", "ASYNC"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

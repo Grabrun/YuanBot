@@ -311,7 +311,7 @@ def create_app(config: YuanBotConfig) -> FastAPI:
                     await wechat_adapter.listen(on_message)
                     _logger.info("wechat_adapter_started")
             except Exception as e:
-                _logger.error("wechat_adapter_start_failed", error=str(e), exc_info=True)
+                _logger.exception("wechat_adapter_start_failed", error=str(e))
 
         # 启动 NapCat QQ 通道适配器
         if napcat_adapter is not None:
@@ -334,7 +334,7 @@ def create_app(config: YuanBotConfig) -> FastAPI:
                     await napcat_adapter.listen(on_message)
                     _logger.info("napcat_adapter_started")
             except Exception as e:
-                _logger.error("napcat_adapter_start_failed", error=str(e), exc_info=True)
+                _logger.exception("napcat_adapter_start_failed", error=str(e))
 
         # 启动主动陪伴系统
         await proactive_scheduler.start()

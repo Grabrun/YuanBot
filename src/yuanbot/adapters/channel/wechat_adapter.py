@@ -963,7 +963,7 @@ class WeixinAdapter(BaseChannelAdapter):
         """
         from yuanbot.adapters.channel.weixin_cdn import extension_to_mime
 
-        if media_url.startswith("http://") or media_url.startswith("https://"):
+        if media_url.startswith(("http://", "https://")):
             try:
                 async with httpx.AsyncClient(timeout=30) as client:
                     resp = await client.get(media_url)
