@@ -104,7 +104,6 @@ class AzureTTSAdapter(TTSAdapter):
 
     async def _get_access_token(self) -> str:
         """获取 Azure Speech 访问令牌"""
-        import urllib.parse
         import urllib.request
 
         url = f"https://{self._region}.api.cognitive.microsoft.com/sts/v1.0/issuetoken"
